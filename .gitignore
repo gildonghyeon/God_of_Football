@@ -1,0 +1,23 @@
+# Unity 자동 생성 폴더
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# 빌드 결과
+/[Bb]uild/
+/[Bb]uilds/
+
+# 개발 도구 자동 생성 파일
+/.vs/
+.gradle/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+
+# 운영체제 파일
+.DS_Store
+Thumbs.db
