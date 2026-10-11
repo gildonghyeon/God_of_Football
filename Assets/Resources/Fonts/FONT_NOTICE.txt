@@ -1,0 +1,3 @@
+Galmuri11.ttf - Galmuri pixel font by Lee Minseo (quiple).
+Source: https://github.com/quiple/galmuri
+License: SIL Open Font License 1.1 (please confirm on the project page before publishing the game).
