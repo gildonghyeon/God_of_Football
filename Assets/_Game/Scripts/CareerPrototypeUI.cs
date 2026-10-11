@@ -12,20 +12,29 @@ namespace MyFootballCareer
     {
         Font font;
         CareerSettings settings;
+        TrainingSettings trainingSettings;
         Action<string, Position, Trait> onCreate;
         Action onSave;
-        RectTransform safeRoot, content;
-        Text status;
+        Action<string> onSelectTraining;
+        Action onStopTraining;
+        RectTransform safeRoot, content, barFill;
+        Text status, trainingText;
+        Text[] statTexts = new Text[5];
         InputField nameInput;
+        GameObject overlay;
         Position position;
         Trait trait;
         Rect lastSafe;
         int lastWidth, lastHeight;
-        public void Initialize(Font customFont, CareerSettings config,
-            Action<string, Position, Trait> create, Action save)
+
+        public void Initialize(Font customFont, CareerSettings config, TrainingSettings training,
+            Action<string, Position, Trait> create, Action save,
+            Action<string> selectTraining, Action stopTraining)
         {
             font = customFont != null ? customFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            settings = config; onCreate = create; onSave = save;
+            settings = config; trainingSettings = training;
+            onCreate = create; onSave = save;
+            onSelectTraining = selectTraining; onStopTraining = stopTraining;
             var canvasGO = new GameObject("CareerCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasGO.transform.SetParent(transform, false);
             canvasGO.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
@@ -56,7 +65,7 @@ namespace MyFootballCareer
             content.anchorMin = new Vector2(0,1); content.anchorMax = new Vector2(1,1);
             content.pivot = new Vector2(.5f,1); content.sizeDelta = Vector2.zero;
             var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(32,32,32,32); layout.spacing = 14;
+            layout.padding = new RectOffset(32,32,24,32); layout.spacing = 10;
             layout.childControlWidth = true; layout.childControlHeight = true;
             layout.childForceExpandWidth = true; layout.childForceExpandHeight = false;
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -90,9 +99,9 @@ namespace MyFootballCareer
         }
         Text Label(string value, int size = 26, float height = 48)
         { var t = TextNode(value, content, size); Height(t.gameObject, height); return t; }
-        Button Button(string value, Action action)
+        Button Button(string value, Action action, Transform parent = null)
         {
-            var r = Rect("Button", content); Height(r.gameObject, 80);
+            var r = Rect("Button", parent != null ? parent : content); Height(r.gameObject, 72);
             r.gameObject.AddComponent<Image>().color = new Color(.13f,.3f,.34f,1);
             var button = r.gameObject.AddComponent<Button>();
             var text = TextNode(value, r, 26); Stretch(text.rectTransform); text.alignment = TextAnchor.MiddleCenter;
@@ -102,6 +111,8 @@ namespace MyFootballCareer
         {
             foreach (Transform child in content) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
             content.anchoredPosition = Vector2.zero; status = null;
+            Array.Clear(statTexts, 0, statTexts.Length);
+            trainingText = null; barFill = null;
         }
         public void ShowCreation()
         {
@@ -133,15 +144,83 @@ namespace MyFootballCareer
         }
         public void ShowPlayer(PlayerData p, string message)
         {
-            Clear(); Label("PLAYER PROFILE", 36, 64);
-            Label(p.playerName, 34, 64); Label("Position: " + p.position); Label("Trait: " + p.trait);
-            Stat("Shooting", p.shooting); Stat("Passing", p.passing); Stat("Dribbling", p.dribbling);
-            Stat("Defending", p.defending); Stat("Stamina", p.stamina);
+            Clear(); Label("PLAYER PROFILE", 32, 48);
+            Label(p.playerName, 30, 48); Label("Position: " + p.position + "   Trait: " + p.trait, 24, 40);
+            for (int i = 0; i < statTexts.Length; i++) statTexts[i] = Label("", 24, 38);
+            UpdateStats(p);
+
+            Label("TRAINING", 28, 44);
+            trainingText = Label("", 24, 110);
+            var bar = Rect("ProgressBar", content); Height(bar.gameObject, 24);
+            bar.gameObject.AddComponent<Image>().color = new Color(.14f,.17f,.22f,1);
+            barFill = Rect("Fill", bar);
+            barFill.gameObject.AddComponent<Image>().color = new Color(.3f,.8f,.4f,1);
+            SetFill(0f);
+
+            foreach (var def in trainingSettings.trainings)
+            {
+                if (def == null) continue;
+                string id = def.id;
+                Button(def.displayName + "   +" + def.growthPerHour.ToString("0.#") + "/h", () => onSelectTraining(id));
+            }
+            Button("STOP TRAINING", () => onStopTraining());
             Button("SAVE", onSave);
-            Label("Training and matches: not implemented yet.", 23, 80);
+            Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h\nMatches: not implemented yet.", 23, 80);
             status = Label(message, 23, 110);
         }
-        void Stat(string title, float value) { Label(title + "   " + value.ToString("0.#") + " / " + settings.attributeCap.ToString("0.#")); }
+        void UpdateStats(PlayerData p)
+        {
+            for (int i = 0; i < statTexts.Length; i++)
+            {
+                if (statTexts[i] == null) continue;
+                var kind = (AttributeKind)i;
+                float value = p.Get(kind);
+                statTexts[i].text = kind + "   " + value.ToString("0.00") + " / " + settings.attributeCap.ToString("0.#")
+                    + (value >= settings.attributeCap ? "  MAX" : "");
+            }
+        }
+        void SetFill(float fraction)
+        {
+            if (barFill == null) return;
+            barFill.anchorMin = Vector2.zero;
+            barFill.anchorMax = new Vector2(Mathf.Clamp01(fraction), 1);
+            barFill.offsetMin = barFill.offsetMax = Vector2.zero;
+        }
+        // 플레이어 화면이 열려 있을 때만 능력치와 훈련 진행도를 갱신합니다.
+        public void RefreshTraining(PlayerData p, TrainingSystem training)
+        {
+            if (trainingText == null || p == null) return;
+            UpdateStats(p);
+            var def = training.Current;
+            if (def == null)
+            {
+                trainingText.text = "Now: none\nPick a training below.";
+                SetFill(0f);
+                return;
+            }
+            float remain = Mathf.Max(0f, training.Interval - training.CarrySeconds);
+            trainingText.text = "Now: " + def.displayName + "\n+" + def.growthPerHour.ToString("0.#") + "/h  ->  "
+                + def.targetAttribute + "\nNext reward in " + remain.ToString("0.0") + "s";
+            SetFill(training.CarrySeconds / training.Interval);
+        }
+        public void ShowOfflineSummary(string title, string body)
+        {
+            if (overlay != null) Destroy(overlay);
+            var root = Rect("OfflineSummary", safeRoot); Stretch(root); overlay = root.gameObject;
+            root.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .78f);
+            var panel = Rect("Panel", root);
+            panel.anchorMin = new Vector2(.08f, .5f); panel.anchorMax = new Vector2(.92f, .5f);
+            panel.pivot = new Vector2(.5f, .5f); panel.offsetMin = panel.offsetMax = Vector2.zero;
+            panel.gameObject.AddComponent<Image>().color = new Color(.1f, .14f, .2f, 1);
+            var v = panel.gameObject.AddComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(32, 32, 32, 32); v.spacing = 20;
+            v.childControlWidth = true; v.childControlHeight = true;
+            v.childForceExpandWidth = true; v.childForceExpandHeight = false;
+            panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var t = TextNode(title, panel, 32); t.alignment = TextAnchor.MiddleCenter; Height(t.gameObject, 56);
+            var b = TextNode(body, panel, 26); Height(b.gameObject, 190);
+            Button("OK", () => { if (overlay != null) Destroy(overlay); overlay = null; }, panel);
+        }
         public void SetStatus(string message) { if (status != null) status.text = message; }
         public void ShowError(string message)
         { Clear(); Label("SAVE COULD NOT BE LOADED", 30, 90); status = Label(message + "\nExisting save was not overwritten.", 23, 240); }
