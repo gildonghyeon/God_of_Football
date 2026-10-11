@@ -116,7 +116,7 @@ namespace MyFootballCareer
             sb.Append("Best attribute ").Append(best.ToString("0.0")).Append('/').Append(rs.requiredBestAttribute.ToString("0.#"))
               .Append(best >= rs.requiredBestAttribute ? "  OK" : "");
             int shown = 0;
-            for (int i = save.careers.Count - 1; i >= 0 && shown < 2; i--, shown++)
+            for (int i = save.careers.Count - 1; i >= 0 && shown < 1; i--, shown++)
             {
                 var c = save.careers[i];
                 sb.Append("\nCareer ").Append(c.careerNumber).Append(": ").Append(c.seasons).Append(" seasons");

@@ -45,10 +45,62 @@ namespace MyFootballCareer
             saves = new CareerSaveSystem();
             ui = gameObject.AddComponent<CareerPrototypeUI>();
             ui.Initialize(uiFont, settings, trainingSettings, Create, Save, SelectTraining, StopTraining, PlayMatch, ChooseOffer, StayWithTeam, Rebirth);
+            ui.OnRetry = RetryLoad;
+            ui.OnRestoreBackup = RestoreBackup;
+            ui.OnStartNew = StartNewGame;
+            ui.OnResetSave = ResetSave;
+            Debug.Log("Save folder: " + Application.persistentDataPath);
+            LoadAndShow(null);
+        }
+
+        // 저장을 읽어 알맞은 화면(선수 생성, 플레이어, 오류)을 보여줍니다.
+        void LoadAndShow(string extraMessage)
+        {
+            training = null;
             blocked = !saves.TryLoad(out current, out string message);
-            if (blocked) ui.ShowError(message);
-            else if (current != null) StartPlayer(message, true);
+            if (blocked) { ui.ShowError(message, saves.HasValidBackup()); return; }
+            if (!string.IsNullOrEmpty(extraMessage))
+                message = string.IsNullOrEmpty(message) ? extraMessage : extraMessage + " " + message;
+            if (current != null) StartPlayer(message, true);
             else ui.ShowCreation();
+        }
+
+        void RetryLoad() { LoadAndShow(null); }
+
+        void RestoreBackup()
+        {
+            if (!saves.TryRestoreBackup(out string message)) { ui.ShowError(message, saves.HasValidBackup()); return; }
+            LoadAndShow(message);
+        }
+
+        // 오류 화면에서 새로 시작: 망가진 파일은 지우지 않고 옆으로 옮깁니다.
+        void StartNewGame()
+        {
+            ui.ShowConfirm("START NEW GAME?", "The broken save file is moved aside, not deleted. A new player will be created.", 150f, "START NEW", DoStartNew);
+        }
+
+        void DoStartNew()
+        {
+            if (!saves.ArchiveSave(out string message)) { ui.ShowError(message, saves.HasValidBackup()); return; }
+            blocked = false; current = null; training = null;
+            ui.ShowCreation();
+        }
+
+        // 플레이 중 저장 초기화: 현재 저장을 먼저 저장한 뒤 옆으로 옮기고 처음부터 시작합니다.
+        void ResetSave()
+        {
+            if (blocked || current == null) return;
+            ui.ShowConfirm("RESET SAVE?", "Your current player and progress are moved aside (not deleted) and you start over with a new player. Rebirth bonuses are not kept.", 200f, "RESET", DoResetSave);
+        }
+
+        void DoResetSave()
+        {
+            if (blocked || current == null) return;
+            saves.TrySave(current, out _);
+            if (!saves.ArchiveSave(out string message)) { ui.SetStatus(message); return; }
+            current = null; training = null;
+            ui.ShowCreation();
+            ui.SetStatus(message + " Create a new player.");
         }
 
         void StartPlayer(string message, bool applyOffline)

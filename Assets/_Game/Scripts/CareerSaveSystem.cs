@@ -117,6 +117,51 @@ namespace MyFootballCareer
             catch (Exception e) { data = null; message = "Cannot load: " + e.Message; return false; }
         }
 
+        // ---------- 복구 도구 ----------
+        public bool HasValidBackup()
+        {
+            try
+            {
+                string backup = FilePath + ".bak";
+                return File.Exists(backup) && Valid(Parse(File.ReadAllText(backup), out _));
+            }
+            catch { return false; }
+        }
+
+        // 망가진 본 파일은 지우지 않고 .broken- 이름으로 옆에 두고, 백업을 본 파일로 복사합니다.
+        public bool TryRestoreBackup(out string message)
+        {
+            try
+            {
+                if (!HasValidBackup()) { message = "No valid backup found."; return false; }
+                string stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                if (File.Exists(FilePath)) File.Move(FilePath, FilePath + ".broken-" + stamp);
+                File.Copy(FilePath + ".bak", FilePath);
+                message = "Backup restored.";
+                return true;
+            }
+            catch (Exception e) { message = "Restore failed: " + e.Message; return false; }
+        }
+
+        // 새로 시작하기 전에 기존 저장 파일을 지우지 않고 .archived- 이름으로 옆으로 옮깁니다.
+        public bool ArchiveSave(out string message)
+        {
+            try
+            {
+                string stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                int moved = 0;
+                foreach (string path in new[] { FilePath, FilePath + ".bak", FilePath + ".tmp" })
+                {
+                    if (!File.Exists(path)) continue;
+                    File.Move(path, path + ".archived-" + stamp);
+                    moved++;
+                }
+                message = moved > 0 ? "Old save moved aside." : "No save file to move.";
+                return true;
+            }
+            catch (Exception e) { message = "Could not move the old save: " + e.Message; return false; }
+        }
+
         public bool TrySave(SaveData data, out string message)
         {
             try

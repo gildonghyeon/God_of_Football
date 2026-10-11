@@ -22,6 +22,8 @@ namespace MyFootballCareer
         public static readonly Color Accent = new Color(.98f, .80f, .28f, 1);
         public static readonly Color RebirthFill = new Color(.42f, .24f, .52f, 1);
         public static readonly Color RebirthEdge = new Color(.78f, .55f, .90f, 1);
+        public static readonly Color DangerFill = new Color(.45f, .16f, .16f, 1);
+        public static readonly Color DangerEdge = new Color(.92f, .45f, .45f, 1);
         public static readonly Color TabActive = new Color(.20f, .45f, .75f, 1);
         public static readonly Color Text = new Color(.93f, .95f, .98f, 1);
         public static readonly Color TextDim = new Color(.62f, .68f, .80f, 1);
@@ -41,6 +43,7 @@ namespace MyFootballCareer
         Action<string, Position, Trait> onCreate;
         Action onSave, onStopTraining, onPlayMatch, onStay, onRebirth;
         Action<string> onSelectTraining, onChooseOffer;
+        public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
         RectTransform safeRoot, viewport, content, tabBar, statusStrip;
@@ -62,6 +65,8 @@ namespace MyFootballCareer
         RectTransform[] statBars = new RectTransform[5];
         Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText;
         RectTransform barFill, transferRoot;
+        List<string> trainingIds = new List<string>();   // 훈련 버튼과 같은 순서의 훈련 ID
+        List<Image> trainingFills = new List<Image>();   // 훈련 버튼 바탕 (선택된 훈련 강조용)
         Image rebirthFill;
         TrainingStageView stage;   // 훈련장 장면
 
@@ -218,28 +223,31 @@ namespace MyFootballCareer
         Button PixelButton(string label, Action action, Transform parent, float height = 76f)
         { return PixelButton(label, action, parent, height, PixelTheme.ButtonFill, PixelTheme.ButtonEdge); }
 
-        // 테두리 + 안쪽 칸. 안쪽 내용을 넣을 Transform을 돌려줍니다.
-        Transform Section(Transform parent, string title)
+        // 테두리 + 안쪽 칸. 안쪽 내용을 넣을 Transform을 돌려줍니다. compact면 여백을 줄입니다.
+        Transform Section(Transform parent, string title, bool compact = false)
         {
             var outer = NewRect("Section", parent);
             outer.gameObject.AddComponent<Image>().color = PixelTheme.PanelEdge;
             ConfigureStack(outer.gameObject, 4, 4, 4, 4, 0);
             var inner = NewRect("Body", outer);
             inner.gameObject.AddComponent<Image>().color = PixelTheme.Panel;
-            ConfigureStack(inner.gameObject, 20, 16, 20, 20, 12);
+            if (compact) ConfigureStack(inner.gameObject, 16, 10, 16, 12, 6);
+            else ConfigureStack(inner.gameObject, 20, 16, 20, 20, 12);
             if (!string.IsNullOrEmpty(title))
             {
-                var t = TextNode(title, inner, 30); t.color = PixelTheme.Accent; Height(t.gameObject, 44);
+                var t = TextNode(title, inner, compact ? 26 : 30); t.color = PixelTheme.Accent; Height(t.gameObject, compact ? 36 : 44);
             }
             return inner;
         }
 
         // 능력치·진행도에 쓰는 가로 막대. 채워지는 부분의 RectTransform을 돌려줍니다.
-        RectTransform MakeBar()
+        RectTransform MakeBar(Transform parent, float height, bool flexibleWidth)
         {
-            var bar = NewRect("Bar", Parent);
+            var bar = NewRect("Bar", parent);
             bar.gameObject.AddComponent<Image>().color = PixelTheme.PanelEdge;
-            Height(bar.gameObject, 18);
+            var layout = bar.gameObject.AddComponent<LayoutElement>();
+            layout.preferredHeight = height;
+            if (flexibleWidth) { layout.flexibleWidth = 1; layout.preferredWidth = 100; }
             var back = NewRect("Back", bar);
             Stretch(back); back.offsetMin = new Vector2(2, 2); back.offsetMax = new Vector2(-2, -2);
             back.gameObject.AddComponent<Image>().color = PixelTheme.BarBack;
@@ -248,6 +256,21 @@ namespace MyFootballCareer
             fill.gameObject.AddComponent<Image>().color = PixelTheme.Bar;
             SetFill(fill, 0f);
             return fill;
+        }
+
+        // 능력치 한 줄: 왼쪽에 글자, 오른쪽에 막대
+        RectTransform MakeStatRow(out Text label)
+        {
+            var row = NewRect("StatRow", Parent);
+            var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 12; h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true; h.childControlHeight = true;
+            h.childForceExpandWidth = false; h.childForceExpandHeight = false;
+            Height(row.gameObject, 36);
+            label = TextNode("", row, 22);
+            var le = label.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = 330; le.preferredHeight = 30;
+            return MakeBar(row, 20, true);
         }
 
         static void SetFill(RectTransform fill, float fraction)
@@ -293,6 +316,7 @@ namespace MyFootballCareer
             Array.Clear(statBars, 0, statBars.Length);
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = null;
             barFill = null; transferRoot = null; rebirthFill = null;
+            trainingIds.Clear(); trainingFills.Clear();
             SetChrome(false);
         }
 
@@ -345,46 +369,69 @@ namespace MyFootballCareer
             pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("CareerPage");
             if (stage.Available) stage.Create(pages[0]);   // HOME 맨 위에 훈련장 장면
 
-            // HOME: 선수 정보, 훈련, 저장
-            currentParent = Section(pages[0], "PLAYER");
-            Label(p.playerName, 33, 48);
-            Label("Position: " + p.position + "   Trait: " + p.trait, 22, 34).color = PixelTheme.TextDim;
-            for (int i = 0; i < statTexts.Length; i++) { statTexts[i] = Label("", 22, 32); statBars[i] = MakeBar(); }
+            // HOME: 스크롤 없이 한 화면에 들어오도록 촘촘하게 배치합니다.
+            currentParent = Section(pages[0], "", true);
+            var nameRow = NewRect("NameRow", Parent);
+            var nameLayout = nameRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            nameLayout.childControlWidth = true; nameLayout.childControlHeight = true;
+            nameLayout.childForceExpandWidth = false; nameLayout.childForceExpandHeight = true;
+            Height(nameRow.gameObject, 36);
+            var nameText = TextNode(p.playerName, nameRow, 26);
+            nameText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            var infoText = TextNode(p.position + " / " + p.trait, nameRow, 22);
+            infoText.alignment = TextAnchor.MiddleRight; infoText.color = PixelTheme.TextDim;
+            infoText.gameObject.AddComponent<LayoutElement>().preferredWidth = 300;
+            for (int i = 0; i < statTexts.Length; i++) statBars[i] = MakeStatRow(out statTexts[i]);
             UpdateStats(p);
 
-            currentParent = Section(pages[0], "TRAINING");
-            trainingText = Label("", 22, 100);
-            barFill = MakeBar();
+            currentParent = Section(pages[0], "", true);
+            trainingText = Label("", 22, 64);
+            barFill = MakeBar(Parent, 16, false);
+            var grid = NewRect("TrainingGrid", Parent);
+            var gridLayout = grid.gameObject.AddComponent<GridLayoutGroup>();
+            gridLayout.cellSize = new Vector2(200, 68); gridLayout.spacing = new Vector2(8, 8);
+            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount; gridLayout.constraintCount = 3;
+            gridLayout.childAlignment = TextAnchor.UpperCenter;
             foreach (var def in trainingSettings.trainings)
             {
                 if (def == null) continue;
                 string id = def.id;
-                PixelButton(def.displayName + "   +" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h",
-                            () => onSelectTraining(id), Parent, 76f);
+                var trainButton = PixelButton(def.displayName + "\n+" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h",
+                                              () => onSelectTraining(id), grid, 0f);
+                trainButton.GetComponentInChildren<Text>().fontSize = 22;
+                trainingIds.Add(id); trainingFills.Add((Image)trainButton.targetGraphic);
             }
-            PixelButton("STOP TRAINING", () => onStopTraining(), Parent, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            var stopButton = PixelButton("STOP", () => onStopTraining(), grid, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            stopButton.GetComponentInChildren<Text>().fontSize = 22;
 
-            currentParent = Section(pages[0], "SYSTEM");
-            PixelButton("SAVE", () => onSave(), Parent, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h", 22, 34).color = PixelTheme.TextDim;
+            currentParent = Section(pages[0], "", true);
+            var systemRow = NewRect("SystemRow", Parent);
+            var systemLayout = systemRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            systemLayout.spacing = 8;
+            systemLayout.childControlWidth = true; systemLayout.childControlHeight = true;
+            systemLayout.childForceExpandWidth = true; systemLayout.childForceExpandHeight = true;
+            Height(systemRow.gameObject, 68);
+            PixelButton("SAVE", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("RESET SAVE", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h", 22, 30).color = PixelTheme.TextDim;
 
             // MATCH: 시즌, 경기, 순위표
-            currentParent = Section(pages[1], "SEASON");
-            seasonText = Label("", 22, 70);
-            var play = PixelButton("PLAY NEXT MATCH", () => onPlayMatch(), Parent, 88f);
+            currentParent = Section(pages[1], "SEASON", true);
+            seasonText = Label("", 22, 64);
+            var play = PixelButton("PLAY NEXT MATCH", () => onPlayMatch(), Parent, 80f);
             playLabel = play.GetComponentInChildren<Text>();
             resultText = Label("", 22, 130);
-            currentParent = Section(pages[1], "STANDINGS");
+            currentParent = Section(pages[1], "STANDINGS", true);
             standingsText = Label("", 22, 200);
 
             // CAREER: 이적 제안, 이력, 환생
             transferRoot = NewRect("TransferRoot", pages[2]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
-            currentParent = Section(pages[2], "HISTORY");
+            currentParent = Section(pages[2], "HISTORY", true);
             historyText = Label("", 22, 60);
-            currentParent = Section(pages[2], "REBIRTH");
+            currentParent = Section(pages[2], "REBIRTH", true);
             rebirthText = Label("", 22, 120);
-            var rebirth = PixelButton("REBIRTH", () => onRebirth(), Parent, 80f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
+            var rebirth = PixelButton("REBIRTH", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
 
             currentParent = null;
@@ -392,11 +439,15 @@ namespace MyFootballCareer
             status.text = message;
         }
 
-        public void ShowError(string message)
+        public void ShowError(string message, bool canRestore)
         {
             Clear();
             Label("SAVE COULD NOT BE LOADED", 30, 90).color = PixelTheme.Accent;
-            status = Label(message + "\nExisting save was not overwritten.", 22, 240);
+            status = Label(message + "\nYour save file was not changed.", 22, 180);
+            PixelButton("RETRY", () => { if (OnRetry != null) OnRetry(); }, content, 80f);
+            if (canRestore)
+                PixelButton("RESTORE BACKUP", () => { if (OnRestoreBackup != null) OnRestoreBackup(); }, content, 80f, PixelTheme.AccentFill, PixelTheme.Accent);
+            PixelButton("START NEW GAME", () => { if (OnStartNew != null) OnStartNew(); }, content, 80f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
         }
 
         // ---------- 갱신 ----------
@@ -422,6 +473,9 @@ namespace MyFootballCareer
             var def = training.Current;
             if (stage != null && stage.Available)
                 stage.Play(def == null ? "idle" : TrainingStageView.AnimationFor(def.targetAttribute));
+            for (int i = 0; i < trainingFills.Count; i++)   // 지금 하는 훈련 버튼을 강조
+                if (trainingFills[i] != null)
+                    trainingFills[i].color = (def != null && def.id == trainingIds[i]) ? PixelTheme.AccentFill : PixelTheme.ButtonFill;
             if (def == null)
             {
                 trainingText.text = "Now: none\nPick a training below.";
@@ -429,7 +483,7 @@ namespace MyFootballCareer
                 return;
             }
             float remain = Mathf.Max(0f, training.Interval - training.CarrySeconds);
-            trainingText.text = "Now: " + def.displayName + "\n+" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h  ->  "
+            trainingText.text = "Now: " + def.displayName + "   +" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h -> "
                 + def.targetAttribute + "\nNext reward in " + remain.ToString("0.0") + "s";
             SetFill(barFill, training.CarrySeconds / training.Interval);
         }
@@ -458,21 +512,21 @@ namespace MyFootballCareer
             foreach (Transform child in transferRoot) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
             if (offers == null || offers.Count == 0) return;
 
-            var body = Section(transferRoot, "TRANSFER OFFERS");
+            var body = Section(transferRoot, "TRANSFER OFFERS", true);
             string note = string.IsNullOrEmpty(pendingTeamId)
-                ? "Pick a team to join next season, or stay. Offers end when the next season starts."
-                : "Transfer agreed. You join the marked team when the next season starts.";
-            var info = TextNode(note, body, 22); info.color = PixelTheme.TextDim; Height(info.gameObject, 76);
+                ? "Pick a team to join next season, or stay."
+                : "Transfer agreed. You join the marked team next season.";
+            var info = TextNode(note, body, 22); info.color = PixelTheme.TextDim; Height(info.gameObject, 34);
             foreach (var offer in offers)
             {
                 string id = offer.teamId;
                 bool agreed = id == pendingTeamId;
                 PixelButton((agreed ? "[AGREED] " : "") + offer.teamName + "\nStrength " + offer.teamStrength.ToString("0")
                             + "   Start " + Mathf.RoundToInt(offer.startChance * 100f) + "%   Wants " + offer.focus,
-                            () => onChooseOffer(id), body, 104f,
+                            () => onChooseOffer(id), body, 92f,
                             agreed ? PixelTheme.AccentFill : PixelTheme.ButtonFill, agreed ? PixelTheme.Accent : PixelTheme.ButtonEdge);
             }
-            PixelButton("STAY WITH " + currentTeamName, () => onStay(), body, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("STAY WITH " + currentTeamName, () => onStay(), body, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         public void SetRebirth(string text, bool available)

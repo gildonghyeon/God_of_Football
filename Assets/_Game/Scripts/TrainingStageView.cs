@@ -10,7 +10,8 @@ namespace MyFootballCareer
     // 같은 이름으로 이미지를 바꿔 넣으면 코드를 고치지 않아도 새 그림이 적용됩니다.
     public class TrainingStageView
     {
-        public const float Scale = 7f;   // 이미지 한 픽셀을 화면에서 몇 배로 키울지
+        public const float Scale = 7f;      // 이미지 한 픽셀을 화면에서 대략 몇 배로 키울지
+        public const int CropTopRows = 8;   // 위쪽 하늘 몇 줄을 잘라 공간을 아낄지
 
         readonly Dictionary<string, Sprite[]> animations = new Dictionary<string, Sprite[]>();
         Sprite background;
@@ -79,33 +80,45 @@ namespace MyFootballCareer
             }
         }
 
-        // 테두리 칸 안에 배경과 선수 이미지를 겹쳐 만듭니다.
+        // 테두리 칸 안에 배경과 선수 이미지를 겹쳐 만듭니다. 위쪽 하늘을 조금 잘라 높이를 줄입니다.
         public RectTransform Create(Transform parent)
         {
             var frameGo = new GameObject("StageFrame", typeof(RectTransform));
             frameGo.transform.SetParent(parent, false);
             frameGo.AddComponent<Image>().color = PixelTheme.PanelEdge;
-            float height = background.rect.height * Scale + 8f;
+            float height = (background.rect.height - CropTopRows) * Scale + 8f;
             var layout = frameGo.AddComponent<LayoutElement>();
             layout.minHeight = height; layout.preferredHeight = height;
 
-            var bg = AddLayer(frameGo.transform, "Background");
+            var viewport = new GameObject("Viewport", typeof(RectTransform));
+            viewport.transform.SetParent(frameGo.transform, false);
+            var viewportRect = viewport.GetComponent<RectTransform>();
+            viewportRect.anchorMin = Vector2.zero; viewportRect.anchorMax = Vector2.one;
+            viewportRect.offsetMin = new Vector2(4, 4); viewportRect.offsetMax = new Vector2(-4, -4);
+            viewport.AddComponent<RectMask2D>();
+
+            float aspect = background.rect.width / background.rect.height;
+            var bg = AddLayer(viewport.transform, "Background", aspect);
             bg.sprite = background;
-            actor = AddLayer(frameGo.transform, "Actor");
+            actor = AddLayer(viewport.transform, "Actor", aspect);
             currentKey = null;
             Play("idle");
             return frameGo.GetComponent<RectTransform>();
         }
 
-        static Image AddLayer(Transform parent, string name)
+        // 아래쪽에 맞춰 가로를 가득 채우고, 높이는 그림 비율대로 정합니다.
+        static Image AddLayer(Transform parent, string name, float aspect)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(4, 4); rect.offsetMax = new Vector2(-4, -4);
+            rect.anchorMin = new Vector2(0, 0); rect.anchorMax = new Vector2(1, 0);
+            rect.pivot = new Vector2(.5f, 0);
+            rect.anchoredPosition = Vector2.zero; rect.sizeDelta = new Vector2(0, 100);
+            var fitter = go.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+            fitter.aspectRatio = aspect;
             var image = go.AddComponent<Image>();
-            image.preserveAspect = true;
             image.raycastTarget = false;
             return image;
         }

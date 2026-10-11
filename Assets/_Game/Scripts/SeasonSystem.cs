@@ -343,7 +343,7 @@ namespace MyFootballCareer
             if (history.Count == 0) return "No completed seasons yet.";
             var sb = new StringBuilder();
             int shown = 0;
-            for (int i = history.Count - 1; i >= 0 && shown < 5; i--, shown++)
+            for (int i = history.Count - 1; i >= 0 && shown < 3; i--, shown++)
             {
                 var h = history[i];
                 if (shown > 0) sb.Append('\n');
