@@ -42,7 +42,7 @@ namespace MyFootballCareer
             if (credited <= 0f) return result;
 
             float before = save.player.Get(def.targetAttribute);
-            float after = Mathf.Min(career.attributeCap, before + def.growthPerHour * credited / 3600f);
+            float after = Mathf.Min(career.attributeCap, before + def.growthPerHour * credited / 3600f * RebirthSystem.TrainingMultiplier(save));
             save.player.Set(def.targetAttribute, after);
 
             result.Granted = true;

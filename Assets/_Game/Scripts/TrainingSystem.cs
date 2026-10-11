@@ -64,7 +64,7 @@ namespace MyFootballCareer
 
         void Grow(TrainingDefinition def, float seconds)
         {
-            float value = save.player.Get(def.targetAttribute) + def.growthPerHour * seconds / 3600f;
+            float value = save.player.Get(def.targetAttribute) + def.growthPerHour * seconds / 3600f * RebirthSystem.TrainingMultiplier(save);
             save.player.Set(def.targetAttribute, Mathf.Min(career.attributeCap, value));
         }
     }

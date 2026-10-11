@@ -370,6 +370,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MyFootballCareer.CareerBootstrap
   settings: {fileID: 11400000, guid: fb7e160b562b9b54a92c386887487fca, type: 2}
+  trainingSettings: {fileID: 11400000, guid: bb8ca412b5320244381a9c136d6d4f55, type: 2}
+  matchSettings: {fileID: 11400000, guid: 3de1eb7bccc374f4e9195c4070f148a5, type: 2}
+  rebirthSettings: {fileID: 11400000, guid: 6a51082fb13a3304ab1ab7f3fe86bbcb, type: 2}
   uiFont: {fileID: 0}
 --- !u!4 &1774349949
 Transform:

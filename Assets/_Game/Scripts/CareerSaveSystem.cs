@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -7,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 3;
+        const int CurrentVersion = 7;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -21,6 +22,10 @@ namespace MyFootballCareer
             if (data.trainingId == null) return false;
             if (float.IsNaN(data.trainingCarrySeconds) || float.IsInfinity(data.trainingCarrySeconds) || data.trainingCarrySeconds < 0) return false;
             if (data.lastSeenUtcTicks < 0) return false;
+            if (data.teamId == null || data.season == null || data.season.matches == null || data.seasonHistory == null) return false;
+            if (data.season.nextMatchIndex < 0 || data.season.nextMatchIndex > data.season.matches.Count) return false;
+            if (data.offers == null || data.transfers == null || data.pendingTeamId == null || data.careers == null) return false;
+            if (data.rebirthCount < 0 || float.IsNaN(data.rebirthBonusPercent) || float.IsInfinity(data.rebirthBonusPercent) || data.rebirthBonusPercent < 0) return false;
             return true;
         }
 
@@ -42,7 +47,40 @@ namespace MyFootballCareer
                 data.lastSeenUtcTicks = 0;   // 처음 업그레이드할 때는 오프라인 보상 없음
                 upgraded = true;
             }
+            if (data.version == 3)
+            {
+                data.version = 4;
+                data.teamId = "";
+                data.season = new SeasonData();
+                data.seasonHistory = new List<SeasonSummary>();
+                upgraded = true;
+            }
+            if (data.version == 4)
+            {
+                data.version = 5;   // 다른 팀 경기 결과(others) 추가. 없는 값은 비어 있는 목록으로 시작
+                upgraded = true;
+            }
+            if (data.version == 5)
+            {
+                data.version = 6;   // 이적 제안·이적 기록 추가
+                upgraded = true;
+            }
+            if (data.version == 6)
+            {
+                data.version = 7;   // 환생 횟수·영구 보너스·커리어 기록 추가
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
+            if (data.teamId == null) data.teamId = "";
+            if (data.season == null) data.season = new SeasonData();
+            if (data.season.matches == null) data.season.matches = new List<MatchRecord>();
+            if (data.seasonHistory == null) data.seasonHistory = new List<SeasonSummary>();
+            if (data.offers == null) data.offers = new List<TransferOffer>();
+            if (data.transfers == null) data.transfers = new List<TransferRecord>();
+            if (data.pendingTeamId == null) data.pendingTeamId = "";
+            if (data.careers == null) data.careers = new List<CareerSummary>();
+            foreach (var match in data.season.matches)
+                if (match != null && match.others == null) match.others = new List<LeagueGame>();
             return upgraded;
         }
 
@@ -73,7 +111,7 @@ namespace MyFootballCareer
                 }
                 data = Parse(File.ReadAllText(FilePath), out bool upgraded);
                 if (!Valid(data)) throw new InvalidDataException("Invalid save. Original file preserved.");
-                if (upgraded) message = "Save upgraded to version 3.";
+                if (upgraded) message = "Save upgraded to version 7.";
                 return true;
             }
             catch (Exception e) { data = null; message = "Cannot load: " + e.Message; return false; }

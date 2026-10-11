@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -22,6 +23,15 @@ namespace MyFootballCareer
         Text[] statTexts = new Text[5];
         InputField nameInput;
         GameObject overlay;
+        Action onPlayMatch;
+        Text seasonText, resultText, playLabel, standingsText, historyText;
+        RectTransform transferRoot;
+        Action<string> onChooseOffer;
+        Action onStay;
+        Action onRebirth;
+        Text rebirthText;
+        Button rebirthButton;
+        public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
         Position position;
         Trait trait;
         Rect lastSafe;
@@ -29,12 +39,13 @@ namespace MyFootballCareer
 
         public void Initialize(Font customFont, CareerSettings config, TrainingSettings training,
             Action<string, Position, Trait> create, Action save,
-            Action<string> selectTraining, Action stopTraining)
+            Action<string> selectTraining, Action stopTraining, Action playMatch,
+            Action<string> chooseOffer, Action stay, Action rebirth)
         {
             font = customFont != null ? customFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             settings = config; trainingSettings = training;
             onCreate = create; onSave = save;
-            onSelectTraining = selectTraining; onStopTraining = stopTraining;
+            onSelectTraining = selectTraining; onStopTraining = stopTraining; onPlayMatch = playMatch; onChooseOffer = chooseOffer; onStay = stay; onRebirth = rebirth;
             var canvasGO = new GameObject("CareerCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasGO.transform.SetParent(transform, false);
             canvasGO.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
@@ -99,9 +110,9 @@ namespace MyFootballCareer
         }
         Text Label(string value, int size = 26, float height = 48)
         { var t = TextNode(value, content, size); Height(t.gameObject, height); return t; }
-        Button Button(string value, Action action, Transform parent = null)
+        Button Button(string value, Action action, Transform parent = null, float height = 72f)
         {
-            var r = Rect("Button", parent != null ? parent : content); Height(r.gameObject, 72);
+            var r = Rect("Button", parent != null ? parent : content); Height(r.gameObject, height);
             r.gameObject.AddComponent<Image>().color = new Color(.13f,.3f,.34f,1);
             var button = r.gameObject.AddComponent<Button>();
             var text = TextNode(value, r, 26); Stretch(text.rectTransform); text.alignment = TextAnchor.MiddleCenter;
@@ -113,6 +124,7 @@ namespace MyFootballCareer
             content.anchoredPosition = Vector2.zero; status = null;
             Array.Clear(statTexts, 0, statTexts.Length);
             trainingText = null; barFill = null;
+            seasonText = null; resultText = null; playLabel = null; standingsText = null; historyText = null; transferRoot = null; rebirthText = null; rebirthButton = null;
         }
         public void ShowCreation()
         {
@@ -161,9 +173,27 @@ namespace MyFootballCareer
             {
                 if (def == null) continue;
                 string id = def.id;
-                Button(def.displayName + "   +" + def.growthPerHour.ToString("0.#") + "/h", () => onSelectTraining(id));
+                Button(def.displayName + "   +" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h", () => onSelectTraining(id));
             }
             Button("STOP TRAINING", () => onStopTraining());
+
+            Label("SEASON", 28, 44);
+            seasonText = Label("", 24, 80);
+            var playButton = Button("PLAY NEXT MATCH", () => onPlayMatch());
+            playLabel = playButton.GetComponentInChildren<Text>();
+            resultText = Label("", 22, 130);
+            transferRoot = Rect("TransferRoot", content);
+            var transferLayout = transferRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            transferLayout.spacing = 10;
+            transferLayout.childControlWidth = true; transferLayout.childControlHeight = true;
+            transferLayout.childForceExpandWidth = true; transferLayout.childForceExpandHeight = false;
+            Label("STANDINGS", 28, 44);
+            standingsText = Label("", 22, 200);
+            Label("HISTORY", 28, 44);
+            historyText = Label("", 22, 60);
+            Label("REBIRTH", 28, 44);
+            rebirthText = Label("", 22, 120);
+            rebirthButton = Button("REBIRTH", () => onRebirth());
             Button("SAVE", onSave);
             Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h\nMatches: not implemented yet.", 23, 80);
             status = Label(message, 23, 110);
@@ -199,11 +229,11 @@ namespace MyFootballCareer
                 return;
             }
             float remain = Mathf.Max(0f, training.Interval - training.CarrySeconds);
-            trainingText.text = "Now: " + def.displayName + "\n+" + def.growthPerHour.ToString("0.#") + "/h  ->  "
+            trainingText.text = "Now: " + def.displayName + "\n+" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h  ->  "
                 + def.targetAttribute + "\nNext reward in " + remain.ToString("0.0") + "s";
             SetFill(training.CarrySeconds / training.Interval);
         }
-        public void ShowOfflineSummary(string title, string body)
+        public void ShowPopup(string title, string body, float bodyHeight = 190f, Action onClose = null)
         {
             if (overlay != null) Destroy(overlay);
             var root = Rect("OfflineSummary", safeRoot); Stretch(root); overlay = root.gameObject;
@@ -218,8 +248,71 @@ namespace MyFootballCareer
             v.childForceExpandWidth = true; v.childForceExpandHeight = false;
             panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var t = TextNode(title, panel, 32); t.alignment = TextAnchor.MiddleCenter; Height(t.gameObject, 56);
-            var b = TextNode(body, panel, 26); Height(b.gameObject, 190);
-            Button("OK", () => { if (overlay != null) Destroy(overlay); overlay = null; }, panel);
+            var b = TextNode(body, panel, 26); Height(b.gameObject, bodyHeight);
+            Button("OK", () => { if (overlay != null) Destroy(overlay); overlay = null; if (onClose != null) onClose(); }, panel);
+        }
+        static void SetLines(Text t, string text, int minLines)
+        {
+            t.text = text;
+            int lines = Mathf.Max(minLines, text.Split('\n').Length);
+            t.GetComponent<LayoutElement>().preferredHeight = lines * 30f + 8f;
+        }
+        public void SetRebirth(string text, bool available)
+        {
+            if (rebirthText == null) return;
+            SetLines(rebirthText, text, 4);
+            rebirthButton.GetComponent<Image>().color = available ? new Color(.45f, .25f, .5f, 1) : new Color(.13f, .3f, .34f, .5f);
+        }
+        // 되돌릴 수 없는 선택 앞에서 한 번 더 확인합니다.
+        public void ShowConfirm(string title, string body, float bodyHeight, string yesLabel, Action onYes)
+        {
+            if (overlay != null) Destroy(overlay);
+            var root = Rect("ConfirmDialog", safeRoot); Stretch(root); overlay = root.gameObject;
+            root.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .78f);
+            var panel = Rect("Panel", root);
+            panel.anchorMin = new Vector2(.06f, .5f); panel.anchorMax = new Vector2(.94f, .5f);
+            panel.pivot = new Vector2(.5f, .5f); panel.offsetMin = panel.offsetMax = Vector2.zero;
+            panel.gameObject.AddComponent<Image>().color = new Color(.1f, .14f, .2f, 1);
+            var v = panel.gameObject.AddComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(28, 28, 28, 28); v.spacing = 16;
+            v.childControlWidth = true; v.childControlHeight = true;
+            v.childForceExpandWidth = true; v.childForceExpandHeight = false;
+            panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var t = TextNode(title, panel, 32); t.alignment = TextAnchor.MiddleCenter; Height(t.gameObject, 56);
+            var b = TextNode(body, panel, 23); Height(b.gameObject, bodyHeight);
+            Button(yesLabel, () => { if (overlay != null) Destroy(overlay); overlay = null; if (onYes != null) onYes(); }, panel);
+            Button("CANCEL", () => { if (overlay != null) Destroy(overlay); overlay = null; }, panel);
+        }
+        // 시즌이 끝나 이적 제안이 있을 때만 제안 목록을 보여줍니다.
+        public void SetTransfer(List<TransferOffer> offers, string pendingTeamId, string currentTeamName)
+        {
+            if (transferRoot == null) return;
+            foreach (Transform child in transferRoot) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            if (offers == null || offers.Count == 0) return;
+
+            var title = TextNode("TRANSFER OFFERS", transferRoot, 28); Height(title.gameObject, 44);
+            string note = string.IsNullOrEmpty(pendingTeamId)
+                ? "Pick a team to join next season, or stay. Offers end when the next season starts."
+                : "Transfer agreed. You join the marked team when the next season starts.";
+            var info = TextNode(note, transferRoot, 22); Height(info.gameObject, 70);
+            foreach (var offer in offers)
+            {
+                string id = offer.teamId;
+                string mark = id == pendingTeamId ? "[AGREED] " : "";
+                Button(mark + offer.teamName + "\nStrength " + offer.teamStrength.ToString("0")
+                       + "   Start " + Mathf.RoundToInt(offer.startChance * 100f) + "%   Wants " + offer.focus,
+                       () => onChooseOffer(id), transferRoot, 96f);
+            }
+            Button("STAY WITH " + currentTeamName, () => onStay(), transferRoot, 72f);
+        }
+        public void SetSeason(string info, string lastResult, bool seasonComplete, string standings, string history)
+        {
+            if (seasonText == null) return;
+            seasonText.text = info;
+            SetLines(resultText, lastResult, 5);
+            SetLines(standingsText, standings, 6);
+            SetLines(historyText, history, 2);
+            playLabel.text = seasonComplete ? "START NEXT SEASON" : "PLAY NEXT MATCH";
         }
         public void SetStatus(string message) { if (status != null) status.text = message; }
         public void ShowError(string message)
