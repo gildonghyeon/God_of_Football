@@ -227,7 +227,7 @@ namespace MyFootballCareer
 
         void PlayMatch()
         {
-            if (blocked || current == null) return;
+            if (blocked || current == null || ui.IsMatchPlaying) return;
 
             if (SeasonSystem.IsComplete(current))
             {
@@ -243,19 +243,25 @@ namespace MyFootballCareer
             var record = SeasonSystem.PlayNext(current, matchSettings, settings);
             if (record == null) { ui.SetStatus("Cannot play: team data is missing."); return; }
             saves.TrySave(current, out string message);   // 결과를 바로 저장해 다시 불러와도 바뀌지 않게 합니다.
-            RefreshSeasonUI();
             ui.SetStatus(message);
-            System.Action afterResult = null;
-            if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
-                afterResult = () => ui.ShowPopup("SEASON COMPLETE", SeasonSystem.DescribeSeasonEnd(current, matchSettings), 260f);
-            ui.ShowPopup("MATCH RESULT", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
+            var ownTeam = matchSettings.FindTeam(current.teamId);
+            string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
+            // 경기 영상을 보여 준 뒤(건너뛰기 포함) 순위와 요약을 갱신하고 결과를 알려 줍니다.
+            ui.ShowMatchReplay(record, current.player, ownName, () =>
+            {
+                RefreshSeasonUI();
+                System.Action afterResult = null;
+                if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
+                    afterResult = () => ui.ShowPopup("SEASON COMPLETE", SeasonSystem.DescribeSeasonEnd(current, matchSettings), 260f);
+                ui.ShowPopup("MATCH RESULT", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
+            });
         }
 
         void Update()
         {
             if (blocked || training == null || current == null) return;
 
-            if (Application.isFocused) training.Tick(Time.unscaledDeltaTime);
+            if (Application.isFocused && !ui.IsMatchPlaying) training.Tick(Time.unscaledDeltaTime);   // 경기 영상 중에는 훈련 중지
 
             autoSaveTimer += Time.unscaledDeltaTime;
             if (autoSaveTimer >= 30f) { autoSaveTimer = 0f; saves.TrySave(current, out _); }

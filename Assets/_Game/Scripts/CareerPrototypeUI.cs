@@ -69,6 +69,7 @@ namespace MyFootballCareer
         List<Image> trainingFills = new List<Image>();   // 훈련 버튼 바탕 (선택된 훈련 강조용)
         Image rebirthFill;
         TrainingStageView stage;   // 훈련장 장면
+        MatchReplayView matchView; // 경기 영상 화면
 
         Transform Parent { get { return currentParent != null ? currentParent : content; } }
 
@@ -81,6 +82,7 @@ namespace MyFootballCareer
             if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             settings = config; trainingSettings = training;
             stage = new TrainingStageView();
+            matchView = new MatchReplayView(font);
             onCreate = create; onSave = save;
             onSelectTraining = selectTraining; onStopTraining = stopTraining; onPlayMatch = playMatch;
             onChooseOffer = chooseOffer; onStay = stay; onRebirth = rebirth;
@@ -162,6 +164,7 @@ namespace MyFootballCareer
         void Update()
         {
             if (stage != null) stage.Tick(Time.unscaledDeltaTime);
+            if (matchView != null) matchView.Tick(Time.unscaledDeltaTime);
             if (safeRoot != null && (Screen.safeArea != lastSafe || Screen.width != lastWidth || Screen.height != lastHeight)) FitSafeArea();
         }
 
@@ -534,6 +537,19 @@ namespace MyFootballCareer
             if (rebirthText == null) return;
             SetLines(rebirthText, text, 4);
             rebirthFill.color = available ? PixelTheme.RebirthFill : PixelTheme.QuietFill;
+        }
+
+        // 경기 영상이 재생되는 동안에는 true입니다. 이 동안 훈련은 멈춥니다.
+        public bool IsMatchPlaying { get { return matchView != null && matchView.Active; } }
+
+        // 경기 영상을 보여 주고, 끝나면(또는 건너뛰면) onFinished를 부릅니다. 그림이 없으면 바로 onFinished를 부릅니다.
+        public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished)
+        {
+            CloseDialog();
+            if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished))
+            {
+                if (onFinished != null) onFinished();
+            }
         }
 
         public void SetStatus(string message) { if (status != null) status.text = message; }
