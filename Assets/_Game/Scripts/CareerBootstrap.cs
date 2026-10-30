@@ -49,6 +49,7 @@ namespace MyFootballCareer
             ui.OnRestoreBackup = RestoreBackup;
             ui.OnStartNew = StartNewGame;
             ui.OnResetSave = ResetSave;
+            ui.OnApplyLook = ChangeLook;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -152,7 +153,17 @@ namespace MyFootballCareer
             RefreshRebirthUI();
         }
 
-        void Create(string rawName, Position position, Trait trait)
+        void ChangeLook(int hair, int skin)
+        {
+            if (blocked || current == null) return;
+            current.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
+            current.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
+            saves.TrySave(current, out string message);
+            ui.ApplyLook(current.player);
+            ui.SetStatus("Look changed. " + message);
+        }
+
+        void Create(string rawName, Position position, Trait trait, int hair, int skin)
         {
             if (blocked || current != null) return;
             string name = rawName.Trim();
@@ -160,6 +171,8 @@ namespace MyFootballCareer
             { ui.SetStatus("Enter a name (1-" + settings.maxNameLength + " characters)."); return; }
             foreach (char c in name) if (char.IsControl(c)) { ui.SetStatus("Name contains invalid characters."); return; }
             var candidate = new SaveData { player = settings.CreatePlayer(name, position, trait) };
+            candidate.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
+            candidate.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             SeasonSystem.Prepare(candidate, matchSettings);
             if (!saves.TrySave(candidate, out string message)) { ui.SetStatus(message); return; }
             current = candidate;

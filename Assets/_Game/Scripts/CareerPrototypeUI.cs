@@ -40,9 +40,10 @@ namespace MyFootballCareer
         Font font;
         CareerSettings settings;
         TrainingSettings trainingSettings;
-        Action<string, Position, Trait> onCreate;
+        Action<string, Position, Trait, int, int> onCreate;
         Action onSave, onStopTraining, onPlayMatch, onStay, onRebirth;
         Action<string> onSelectTraining, onChooseOffer;
+        public Action<int, int> OnApplyLook;   // 외형(머리색, 피부색)을 바꾸면 부르는 동작
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -74,7 +75,7 @@ namespace MyFootballCareer
         Transform Parent { get { return currentParent != null ? currentParent : content; } }
 
         public void Initialize(Font customFont, CareerSettings config, TrainingSettings training,
-            Action<string, Position, Trait> create, Action save,
+            Action<string, Position, Trait, int, int> create, Action save,
             Action<string> selectTraining, Action stopTraining, Action playMatch,
             Action<string> chooseOffer, Action stay, Action rebirth)
         {
@@ -321,6 +322,7 @@ namespace MyFootballCareer
             barFill = null; transferRoot = null; rebirthFill = null;
             trainingIds.Clear(); trainingFills.Clear();
             SetChrome(false);
+            DestroyPreview();
         }
 
         // ---------- 화면 ----------
@@ -329,6 +331,9 @@ namespace MyFootballCareer
             Clear();
             Label("MY FOOTBALL CAREER", 33, 64).color = PixelTheme.Accent;
             Label("Create your first player", 22, 44);
+            newHair = 0; newSkin = 0;
+            var createPreview = AddPreview(content, 190f);
+            ApplyPreview(createPreview, newHair, newSkin);
             Label("Player name", 22, 40).color = PixelTheme.TextDim;
 
             var inputOuter = NewRect("NameInput", content);
@@ -357,8 +362,9 @@ namespace MyFootballCareer
                 trait = (Trait)(((int)trait + 1) % 3);
                 traitButton.GetComponentInChildren<Text>().text = "Trait: " + trait;
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            AddLookButtons(content, createPreview);
             Label("Finisher: Shooting / Playmaker: Passing\nBallWinner: Defending (bonus +" + settings.traitBonus + ")", 22, 76).color = PixelTheme.TextDim;
-            PixelButton("CREATE PLAYER", () => onCreate(nameInput.text, position, trait), content, 88f);
+            PixelButton("CREATE PLAYER", () => onCreate(nameInput.text, position, trait, newHair, newSkin), content, 88f);
             status = Label("Choose position and trait by tapping each button.", 22, 100);
             status.color = PixelTheme.TextDim;
         }
@@ -370,6 +376,8 @@ namespace MyFootballCareer
             status = stripText;
 
             pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("CareerPage");
+            lookHair = p.hairColor; lookSkin = p.skinTone;
+            stage.SetLook(lookHair, lookSkin);               // 내 선수 그림을 외형에 맞게 준비
             if (stage.Available) stage.Create(pages[0]);   // HOME 맨 위에 훈련장 장면
 
             // HOME: 스크롤 없이 한 화면에 들어오도록 촘촘하게 배치합니다.
@@ -415,6 +423,7 @@ namespace MyFootballCareer
             systemLayout.childForceExpandWidth = true; systemLayout.childForceExpandHeight = true;
             Height(systemRow.gameObject, 68);
             PixelButton("SAVE", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("LOOK", () => ShowLookDialog(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             PixelButton("RESET SAVE", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
             Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h", 22, 30).color = PixelTheme.TextDim;
 
@@ -555,6 +564,74 @@ namespace MyFootballCareer
         public void SetStatus(string message) { if (status != null) status.text = message; }
 
         // ---------- 팝업 ----------
+        // ---------- 외형(머리색, 피부색) ----------
+        int lookHair, lookSkin;      // 지금 선수의 외형
+        int newHair, newSkin;        // 선수 생성 화면과 변경 창에서 고르는 외형
+        Texture2D previewTexture;
+        Sprite previewSprite;
+
+        void DestroyPreview()
+        {
+            if (previewSprite != null) Destroy(previewSprite);
+            if (previewTexture != null) Destroy(previewTexture);
+            previewSprite = null; previewTexture = null;
+        }
+
+        Image AddPreview(Transform parent, float height)
+        {
+            var rect = NewRect("LookPreview", parent);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.preserveAspect = true; image.raycastTarget = false; image.enabled = false;
+            Height(rect.gameObject, height);
+            return image;
+        }
+
+        // 정면 대기 그림에 머리색·피부색을 적용해 미리보기로 보여 줍니다.
+        void ApplyPreview(Image target, int hair, int skin)
+        {
+            var asset = Resources.Load<TextAsset>("Art/Chars/blue_idle_front_0");
+            if (asset == null || target == null) return;
+            DestroyPreview();
+            previewTexture = PlayerLook.LoadRecolored(asset.bytes, hair, skin);
+            if (previewTexture == null) return;
+            previewSprite = Sprite.Create(previewTexture, new Rect(0, 0, previewTexture.width, previewTexture.height), new Vector2(.5f, .5f), 100f);
+            target.sprite = previewSprite; target.enabled = true;
+        }
+
+        // 머리색, 피부색을 순서대로 바꾸는 버튼 두 개 (newHair, newSkin 값을 바꾸고 미리보기를 갱신)
+        void AddLookButtons(Transform parent, Image preview)
+        {
+            Button hairButton = null, skinButton = null;
+            hairButton = PixelButton("Hair: " + PlayerLook.HairNames[newHair], () => {
+                newHair = (newHair + 1) % PlayerLook.HairCount;
+                hairButton.GetComponentInChildren<Text>().text = "Hair: " + PlayerLook.HairNames[newHair];
+                ApplyPreview(preview, newHair, newSkin);
+            }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            skinButton = PixelButton("Skin: " + PlayerLook.SkinNames[newSkin], () => {
+                newSkin = (newSkin + 1) % PlayerLook.SkinCount;
+                skinButton.GetComponentInChildren<Text>().text = "Skin: " + PlayerLook.SkinNames[newSkin];
+                ApplyPreview(preview, newHair, newSkin);
+            }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
+        void ShowLookDialog()
+        {
+            newHair = lookHair; newSkin = lookSkin;
+            var inner = BuildDialog("LOOK", "Choose hair and skin color.", 36f);
+            var preview = AddPreview(inner, 220f);
+            ApplyPreview(preview, newHair, newSkin);
+            AddLookButtons(inner, preview);
+            PixelButton("APPLY", () => { CloseDialog(); DestroyPreview(); if (OnApplyLook != null) OnApplyLook(newHair, newSkin); }, inner, 76f);
+            PixelButton("CANCEL", () => { CloseDialog(); DestroyPreview(); }, inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
+        // 선수의 외형이 바뀌었을 때 훈련장 그림을 갱신합니다.
+        public void ApplyLook(PlayerData p)
+        {
+            lookHair = p.hairColor; lookSkin = p.skinTone;
+            if (stage != null) stage.SetLook(lookHair, lookSkin);
+        }
+
         Transform BuildDialog(string title, string body, float bodyHeight)
         {
             if (overlay != null) Destroy(overlay);

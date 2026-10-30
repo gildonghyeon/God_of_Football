@@ -10,10 +10,13 @@ namespace MyFootballCareer
     {
         const float MinutesPerSecond = 6f;    // 90분 / 15초
         const float SimSpeed = 8f;            // 실제 1초 동안 진행하는 경기 속 시간(초)
-        const float PxW = 114f, PxH = 170f, PxOff = 6f, PxPerMeter = 1.5f;   // pitch.png 기준
+        // stadium.png(912x1490) 안에서 경기장 흰 선의 위치입니다. 그림을 바꾸면 이 숫자만 맞춰 주세요.
+        const float ImgW = 912f, ImgH = 1490f;
+        const float FieldLeft = 88f, FieldRight = 823.5f;        // 왼쪽·오른쪽 터치라인
+        const float FieldTop = 145f, FieldMid = 737.5f, FieldBottom = 1343.5f;   // 위쪽 골라인, 중앙선, 아래쪽 골라인
 
         readonly Font font;
-        Sprite pitchSprite, blueSprite, redSprite, youSprite, ballSprite;
+        Sprite pitchSprite, blueSprite, redSprite, greenSprite, youSprite, ballSprite;
         readonly Sprite[] goalFrames = new Sprite[8];
 
         public bool Active { get; private set; }
@@ -41,26 +44,27 @@ namespace MyFootballCareer
         public MatchReplayView(Font font)
         {
             this.font = font;
-            pitchSprite = Load("pitch"); blueSprite = Load("dot_blue"); redSprite = Load("dot_red");
-            youSprite = Load("dot_you"); ballSprite = Load("ball");
-            for (int i = 0; i < goalFrames.Length; i++) goalFrames[i] = Load("goal_" + i);
+            pitchSprite = Load("stadium", true); blueSprite = Load("dot_blue", true); redSprite = Load("dot_red", true);
+            greenSprite = Load("dot_green", true); youSprite = Load("dot_you", true); ballSprite = Load("ball", true);
+            for (int i = 0; i < goalFrames.Length; i++) goalFrames[i] = Load("goal_" + i, false);
         }
 
         public bool Available
         {
             get
             {
-                if (pitchSprite == null || blueSprite == null || redSprite == null || youSprite == null || ballSprite == null) return false;
+                if (pitchSprite == null || blueSprite == null || redSprite == null || greenSprite == null || youSprite == null || ballSprite == null) return false;
                 foreach (var f in goalFrames) if (f == null) return false;
                 return true;
             }
         }
 
-        static Sprite Load(string name)
+        // smooth: 사진처럼 부드러운 그림은 true, 도트 그림은 false
+        static Sprite Load(string name, bool smooth)
         {
             var tex = Resources.Load<Texture2D>("Art/Match/" + name);
             if (tex == null) return null;
-            tex.filterMode = FilterMode.Point;
+            tex.filterMode = smooth ? FilterMode.Bilinear : FilterMode.Point;
             tex.wrapMode = TextureWrapMode.Clamp;
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
         }
@@ -134,7 +138,7 @@ namespace MyFootballCareer
             root = rootRect.gameObject;
 
             // 위쪽: 점수와 시계
-            var hud = Box(rootRect, PixelTheme.PanelEdge, PixelTheme.Panel);
+            var hud = Box(rootRect, PixelTheme.PanelEdge, new Color(PixelTheme.Panel.r, PixelTheme.Panel.g, PixelTheme.Panel.b, .86f));
             hud.anchorMin = new Vector2(0, 1); hud.anchorMax = new Vector2(1, 1); hud.pivot = new Vector2(.5f, 1);
             hud.offsetMin = new Vector2(16, -136); hud.offsetMax = new Vector2(-16, -12);
             var hudInner = hud.GetChild(0) as RectTransform;
@@ -156,13 +160,13 @@ namespace MyFootballCareer
             // 가운데: 코트
             var area = NewRect("PitchArea", rootRect);
             Anchored(area, 0, 0, 1, 1);
-            area.offsetMin = new Vector2(12, 146); area.offsetMax = new Vector2(-12, -148);
+            area.offsetMin = Vector2.zero; area.offsetMax = Vector2.zero;
             pitchRect = NewRect("Pitch", area);
             pitchRect.anchorMin = pitchRect.anchorMax = new Vector2(.5f, .5f);
             pitchRect.pivot = new Vector2(.5f, .5f);
             pitchRect.sizeDelta = new Vector2(100, 100);
             var fitter = pitchRect.gameObject.AddComponent<AspectRatioFitter>();
-            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent; fitter.aspectRatio = PxW / PxH;
+            fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent; fitter.aspectRatio = ImgW / ImgH;
             var pitchImage = pitchRect.gameObject.AddComponent<Image>();
             pitchImage.sprite = pitchSprite; pitchImage.raycastTarget = false;
 
@@ -170,7 +174,7 @@ namespace MyFootballCareer
             {
                 var r = NewRect(i < 11 ? "Ours" + i : "Theirs" + (i - 11), pitchRect);
                 var img = r.gameObject.AddComponent<Image>();
-                img.sprite = i == youSlot ? youSprite : (i < 11 ? blueSprite : redSprite);
+                img.sprite = i == youSlot ? youSprite : ((i % 11) == 0 ? greenSprite : (i < 11 ? blueSprite : redSprite));
                 img.raycastTarget = false;
                 dotRects[i] = r;
             }
@@ -189,7 +193,13 @@ namespace MyFootballCareer
             outline.effectColor = new Color(0, 0, 0, .9f); outline.effectDistance = new Vector2(4, -4);
             bannerText.gameObject.SetActive(false);
 
-            // 아래쪽: 내 선수 기록, 진행 기록, 건너뛰기
+            // 아래쪽: 내 선수 기록, 진행 기록, 건너뛰기 (경기장 가장자리 위에 반투명 띠를 깔아 글자가 잘 보이게 함)
+            var bottomBand = NewRect("BottomBand", rootRect);
+            bottomBand.anchorMin = new Vector2(0, 0); bottomBand.anchorMax = new Vector2(1, 0);
+            bottomBand.pivot = new Vector2(.5f, 0);
+            bottomBand.offsetMin = Vector2.zero; bottomBand.offsetMax = new Vector2(0, 146);
+            bottomBand.gameObject.AddComponent<Image>().color = new Color(0.03f, 0.05f, 0.09f, .78f);
+            bottomBand.gameObject.GetComponent<Image>().raycastTarget = false;
             statsText = TextNode("", rootRect, 20, TextAnchor.MiddleLeft, PixelTheme.Accent);
             statsText.rectTransform.anchorMin = new Vector2(0, 0); statsText.rectTransform.anchorMax = new Vector2(1, 0);
             statsText.rectTransform.pivot = new Vector2(0, 0);
@@ -283,14 +293,13 @@ namespace MyFootballCareer
             for (int i = 0; i < 22; i++)
             {
                 var d = engine.dots[i];
-                PlaceMeters(dotRects[i], d.x, d.y, 0f, i == youSlot ? 9f : 5f);
+                PlaceMeters(dotRects[i], d.x, d.y, 0f, i == youSlot ? 42f : 30f);
             }
-            PlaceMeters(ballRect, engine.ballX, engine.ballY, engine.ballZ, 3f);
+            PlaceMeters(ballRect, engine.ballX, engine.ballY, engine.ballZ, 20f);
             if (youSlot >= 0)
             {
                 var d = engine.dots[youSlot];
-                float cx = PxOff + d.x * PxPerMeter, cy = PxOff + d.y * PxPerMeter - 9f;
-                PlacePx(youLabel, cx, cy, 22f, 8f);
+                PlacePx(youLabel, MeterX(d.x), MeterY(d.y) - 29f, 52f, 20f);
             }
             UpdateStatsLine(Mathf.Clamp01(clock / 90f));
             clockText.text = Mathf.FloorToInt(Mathf.Min(clock, 90f)) + "'";
@@ -300,13 +309,22 @@ namespace MyFootballCareer
         // 미터 좌표를 코트 그림 위의 위치로 바꿉니다. z는 공이 뜬 높이입니다.
         void PlaceMeters(RectTransform rect, float mx, float my, float z, float sizePx)
         {
-            PlacePx(rect, PxOff + mx * PxPerMeter, PxOff + my * PxPerMeter - z * 1.2f, sizePx, sizePx);
+            PlacePx(rect, MeterX(mx), MeterY(my) - z * 10f, sizePx, sizePx);
+        }
+
+        // 경기장 좌표(가로 0~68m, 세로 0~105m)를 그림 픽셀로 바꿉니다. 중앙선을 기준으로 위아래를 따로 맞춥니다.
+        static float MeterX(float mx) { return FieldLeft + mx / 68f * (FieldRight - FieldLeft); }
+        static float MeterY(float my)
+        {
+            return my <= 52.5f
+                ? FieldTop + my / 52.5f * (FieldMid - FieldTop)
+                : FieldMid + (my - 52.5f) / 52.5f * (FieldBottom - FieldMid);
         }
 
         void PlacePx(RectTransform rect, float cx, float cy, float w, float h)
         {
-            rect.anchorMin = new Vector2((cx - w / 2f) / PxW, 1f - (cy + h / 2f) / PxH);
-            rect.anchorMax = new Vector2((cx + w / 2f) / PxW, 1f - (cy - h / 2f) / PxH);
+            rect.anchorMin = new Vector2((cx - w / 2f) / ImgW, 1f - (cy + h / 2f) / ImgH);
+            rect.anchorMax = new Vector2((cx + w / 2f) / ImgW, 1f - (cy - h / 2f) / ImgH);
             rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero;
         }
 

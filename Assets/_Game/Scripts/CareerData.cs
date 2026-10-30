@@ -12,6 +12,7 @@ namespace MyFootballCareer
         public Position position;
         public Trait trait;
         public float shooting, passing, dribbling, defending, stamina;
+        public int hairColor, skinTone;   // 외형: PlayerLook의 머리색·피부색 번호 (0이 원래 모습)
 
         public float Get(AttributeKind kind)
         {
@@ -40,7 +41,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 7;
+        public int version = 8;
         public PlayerData player;
         public string trainingId = "";
         public float trainingCarrySeconds;

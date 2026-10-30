@@ -4,11 +4,11 @@ using UnityEngine;
 using UnityEngine.UI;
 namespace MyFootballCareer
 {
-    // 동선 데이터 한 칸: 시간 t에 (x, y)에 서서 pose 동작을 하고 face 방향을 봅니다. z는 공이 뜬 높이입니다.
+    // 동선 데이터 한 칸: 시간 t에 (x, y)에 서서 pose 동작을 하고 face 방향을 봅니다. z는 공이 뜬 높이(픽셀)입니다.
     public struct StageKey
     {
         public float t, x, y, z;
-        public string pose;   // auto(걷기/서기 자동), stand, kick, dive, hide(공 숨김)
+        public string pose;   // auto(걷기/서기 자동), carry(공을 몰고 가기), stand, kick, dive, cheer, hide(공 숨김)
         public char face;     // u(위) d(아래) l(왼쪽) r(오른쪽) *(이동 방향)
         public StageKey(float t, float x, float y, string pose, char face, float z)
         { this.t = t; this.x = x; this.y = y; this.pose = pose; this.face = face; this.z = z; }
@@ -18,39 +18,44 @@ namespace MyFootballCareer
     public class StageDrill
     {
         public float duration = 1f;
-        public bool ballFollows;   // 공이 선수 발 앞을 따라다니는지 (드리블)
+        public bool ballFollows;   // 공이 선수 발 앞을 따라다니는지
         public StageKey[] player, gk, attacker, mate, ball;
     }
 
-    // 반코트를 위에서 비스듬히 내려다본 훈련장. 선택한 훈련에 따라 선수가 해당 구역으로 걸어가 훈련합니다.
-    //   Resources/Art/Stage/ 폴더: bg.png(배경), <팀>_<방향>_<동작>.png(선수), ball.png, shadow.png, ball_shadow.png
-    //   동선 데이터는 TrainingStageDrills.cs에 있습니다. 같은 이름과 크기로 이미지를 바꾸면 새 그림이 적용됩니다.
+    // 경기장 위쪽(골대와 페널티 박스)을 훈련장으로 쓰는 화면. 선택한 훈련에 따라 선수가 해당 구역으로 걸어가 훈련합니다.
+    //   Resources/Art/Chars/ 폴더: training_bg(배경), <팀>_<동작>_<방향>_<번호>(선수 프레임), ball, shadow
+    //   팀: blue(내 선수) red(상대·동료) gold(골키퍼), 동작: idle run dribble shoot (방향 front side back), jump cheer fall (방향 x)
+    //   동선 데이터는 TrainingStageDrills.cs에 있습니다.
     public class TrainingStageView
     {
-        public const float Scale = 5f;     // 이미지 한 픽셀을 화면에서 대략 몇 배로 키울지
-        const float WalkSpeed = 40f;       // 훈련 구역으로 이동하는 속도 (배경 픽셀/초)
-        const string ArtPath = "Art/Stage/";
+        public const float Scale = 664f / 752f;   // 훈련장 그림 한 픽셀이 화면에서 차지하는 크기(기준 해상도)
+        const float CharScale = 0.85f;            // 선수 그림을 훈련장 그림에 맞춰 줄이는 비율
+        const float BaseRow = 118f;               // 선수 그림에서 발바닥이 있는 줄
+        const float StepPx = 11f;                 // 달리기 그림이 한 장 넘어가는 이동 거리
+        const float WalkSpeed = 90f;              // 훈련 구역으로 이동하는 속도 (그림 픽셀/초)
+        const string ArtPath = "Art/Chars/";
 
         class Actor
         {
             public string team;                       // blue / red / gold (공은 null)
             public RectTransform root, body, shadow;
             public Image bodyImage, shadowImage;
-            public float x, y, z, sortKey, walkDist;
+            public float x, y, z, sortKey, walkDist, poseTime;
             public float homeX, homeY;
             public char homeFace = 'd';
             public char face = 'd';
             public string pose = "stand";
+            public int phase;
             public bool shown = true;
         }
 
         static readonly Comparison<Actor> BySortKey = (p, q) => p.sortKey.CompareTo(q.sortKey);
 
-        readonly Dictionary<string, Sprite> sprites = new Dictionary<string, Sprite>();
+        readonly Dictionary<string, Sprite[]> strips = new Dictionary<string, Sprite[]>();
         readonly Dictionary<string, StageDrill> drills;
         readonly List<Actor> drawOrder = new List<Actor>();
-        Sprite background, ballSprite, shadowSprite, ballShadowSprite;
-        float bgW = 131f, bgH = 56f;
+        Sprite background, ballSprite, shadowSprite;
+        float bgW = 752f, bgH = 360f;
         RectTransform world;
         Actor player, gk, attacker, mate, ball;
         string currentKey = "idle";
@@ -62,39 +67,90 @@ namespace MyFootballCareer
             get
             {
                 return background != null && ballSprite != null && shadowSprite != null
-                    && sprites.ContainsKey("blue_down_stand") && drills.ContainsKey("idle");
+                    && strips.ContainsKey("blue_idle_front") && strips.ContainsKey("blue_run_side")
+                    && drills.ContainsKey("idle");
             }
         }
 
         public TrainingStageView()
         {
             drills = TrainingStageDrills.Build();
-            background = LoadSprite("bg");
+            background = LoadSprite("training_bg");
             ballSprite = LoadSprite("ball");
             shadowSprite = LoadSprite("shadow");
-            ballShadowSprite = LoadSprite("ball_shadow");
-            if (ballShadowSprite == null) ballShadowSprite = shadowSprite;
             if (background != null) { bgW = background.rect.width; bgH = background.rect.height; }
-            foreach (string team in new[] { "blue", "red", "gold" })
+            foreach (string team in new[] { "red", "gold" })
             {
-                foreach (string face in new[] { "down", "up", "side" })
-                    foreach (string pose in new[] { "stand", "walk0", "walk1", "kick" })
-                        Register(team + "_" + face + "_" + pose);
-                Register(team + "_side_dive");
+                foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
+                    foreach (string view in new[] { "front", "side", "back" })
+                        LoadStrip(team + "_" + anim + "_" + view);
+                foreach (string anim in new[] { "jump", "cheer", "fall" })
+                    LoadStrip(team + "_" + anim + "_x");
             }
+            SetLook(0, 0);   // 내 선수(blue): 원래 모습으로 시작
         }
 
-        void Register(string name)
+        // ---------- 내 선수 외형 ----------
+        int lookHair = -1, lookSkin = -1;
+        readonly List<UnityEngine.Object> lookObjects = new List<UnityEngine.Object>();
+
+        // 내 선수(blue) 그림을 머리색·피부색에 맞춰 다시 만듭니다. 같은 외형이면 아무것도 하지 않습니다.
+        public void SetLook(int hair, int skin)
         {
-            var sprite = LoadSprite(name);
-            if (sprite != null) sprites[name] = sprite;
+            hair = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
+            skin = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
+            if (hair == lookHair && skin == lookSkin) return;
+            foreach (var obj in lookObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
+            lookObjects.Clear();
+            foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
+                foreach (string view in new[] { "front", "side", "back" })
+                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin);
+            foreach (string anim in new[] { "jump", "cheer", "fall" })
+                LoadLookStrip("blue_" + anim + "_x", hair, skin);
+            lookHair = hair; lookSkin = skin;
+        }
+
+        // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
+        void LoadLookStrip(string prefix, int hair, int skin)
+        {
+            var list = new List<Sprite>();
+            for (int i = 0; i < 8; i++)
+            {
+                Sprite sprite = null;
+                var asset = Resources.Load<TextAsset>(ArtPath + prefix + "_" + i);
+                if (asset != null)
+                {
+                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin);
+                    if (tex != null)
+                    {
+                        sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
+                        lookObjects.Add(tex); lookObjects.Add(sprite);
+                    }
+                }
+                else sprite = LoadSprite(prefix + "_" + i);
+                if (sprite == null) break;
+                list.Add(sprite);
+            }
+            if (list.Count > 0) strips[prefix] = list.ToArray();
+        }
+
+        void LoadStrip(string prefix)
+        {
+            var list = new List<Sprite>();
+            for (int i = 0; i < 8; i++)
+            {
+                var sprite = LoadSprite(prefix + "_" + i);
+                if (sprite == null) break;
+                list.Add(sprite);
+            }
+            if (list.Count > 0) strips[prefix] = list.ToArray();
         }
 
         static Sprite LoadSprite(string name)
         {
             var tex = Resources.Load<Texture2D>(ArtPath + name);
             if (tex == null) return null;
-            tex.filterMode = FilterMode.Point;   // 도트가 번지지 않게
+            tex.filterMode = FilterMode.Bilinear;
             tex.wrapMode = TextureWrapMode.Clamp;
             return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
         }
@@ -128,7 +184,6 @@ namespace MyFootballCareer
             viewportRect.offsetMin = new Vector2(4, 4); viewportRect.offsetMax = new Vector2(-4, -4);
             viewport.AddComponent<RectMask2D>();
 
-            // 배경: 가로를 가득 채우고 높이는 그림 비율대로
             var worldGo = new GameObject("World", typeof(RectTransform));
             worldGo.transform.SetParent(viewport.transform, false);
             world = worldGo.GetComponent<RectTransform>();
@@ -141,13 +196,13 @@ namespace MyFootballCareer
             var bgImage = worldGo.AddComponent<Image>();
             bgImage.sprite = background; bgImage.raycastTarget = false;
 
-            gk = MakeActor("Goalkeeper", "gold");
-            attacker = MakeActor("Attacker", "red");
-            mate = MakeActor("Teammate", "red");
-            player = MakeActor("Player", "blue");
-            ball = MakeActor("Ball", null);
+            gk = MakeActor("Goalkeeper", "gold", 1);
+            attacker = MakeActor("Attacker", "red", 2);
+            mate = MakeActor("Teammate", "red", 3);
+            player = MakeActor("Player", "blue", 0);
+            ball = MakeActor("Ball", null, 0);
             ball.bodyImage.sprite = ballSprite;
-            ball.shadowImage.sprite = ballShadowSprite;
+            ball.shadowImage.sprite = shadowSprite;
 
             gk.homeX = TrainingStageDrills.HomeGkX; gk.homeY = TrainingStageDrills.HomeGkY; gk.homeFace = TrainingStageDrills.HomeGkFace;
             attacker.homeX = TrainingStageDrills.HomeAttackerX; attacker.homeY = TrainingStageDrills.HomeAttackerY; attacker.homeFace = TrainingStageDrills.HomeAttackerFace;
@@ -165,9 +220,9 @@ namespace MyFootballCareer
             return frameGo.GetComponent<RectTransform>();
         }
 
-        Actor MakeActor(string name, string team)
+        Actor MakeActor(string name, string team, int phase)
         {
-            var actor = new Actor { team = team };
+            var actor = new Actor { team = team, phase = phase };
             var rootGo = new GameObject(name, typeof(RectTransform));
             rootGo.transform.SetParent(world, false);
             actor.root = rootGo.GetComponent<RectTransform>();
@@ -240,12 +295,12 @@ namespace MyFootballCareer
                 Sample(drill.player, drillTime, player.face, out sx, out sy, out sz, out pose, out face);
                 player.x = sx; player.y = sy;
             }
-            Resolve(player, pose, face, Distance(prevX, prevY, player.x, player.y));
+            Resolve(player, pose, face, Distance(prevX, prevY, player.x, player.y), dt);
 
             // 다른 인물: 훈련에 참여하지 않거나 선수가 이동 중이면 제자리에 서 있습니다.
-            UpdateNpc(gk, drill.gk);
-            UpdateNpc(attacker, drill.attacker);
-            UpdateNpc(mate, drill.mate);
+            UpdateNpc(gk, drill.gk, dt);
+            UpdateNpc(attacker, drill.attacker, dt);
+            UpdateNpc(mate, drill.mate, dt);
 
             // 공
             bool ballVisible = true;
@@ -262,8 +317,8 @@ namespace MyFootballCareer
                 float ox, oy;
                 FollowOffset(player.face, out ox, out oy);
                 ball.x = player.x + ox; ball.y = player.y + oy;
-                bool moving = Distance(prevX, prevY, player.x, player.y) > 0.02f;
-                ball.z = moving ? Mathf.Abs(Mathf.Sin(clock * 9f)) * 1.5f : 0f;
+                bool moving = Distance(prevX, prevY, player.x, player.y) > 0.05f;
+                ball.z = moving ? Mathf.Abs(Mathf.Sin(clock * 9f)) * 5f : 0f;
             }
             else ballVisible = false;
 
@@ -274,7 +329,7 @@ namespace MyFootballCareer
             for (int i = 0; i < drawOrder.Count; i++) drawOrder[i].root.SetSiblingIndex(i);
         }
 
-        void UpdateNpc(Actor a, StageKey[] keys)
+        void UpdateNpc(Actor a, StageKey[] keys, float dt)
         {
             float prevX = a.x, prevY = a.y;
             float x, y, z;
@@ -285,21 +340,17 @@ namespace MyFootballCareer
             else
             { x = a.homeX; y = a.homeY; pose = "stand"; face = a.homeFace; }
             a.x = x; a.y = y;
-            Resolve(a, pose, face, Distance(prevX, prevY, x, y));
+            Resolve(a, pose, face, Distance(prevX, prevY, x, y), dt);
         }
 
-        // auto 동작은 움직이면 걷기 두 장을 번갈아, 멈추면 서 있는 모습으로 정합니다.
-        static void Resolve(Actor a, string pose, char face, float moved)
+        // auto는 움직이면 달리기, 멈추면 서 있는 모습으로, carry는 움직이면 공을 몰고, 멈추면 공을 발 앞에 둔 모습으로 정합니다.
+        static void Resolve(Actor a, string pose, char face, float moved, float dt)
         {
-            if (pose == "auto")
-            {
-                if (moved > 0.02f)
-                {
-                    a.walkDist += moved;
-                    pose = ((int)(a.walkDist / 3f)) % 2 == 0 ? "walk0" : "walk1";
-                }
-                else pose = "stand";
-            }
+            bool moving = moved > 0.05f;
+            if (pose == "auto") pose = moving ? "walk" : "stand";
+            else if (pose == "carry") pose = moving ? "dribble" : "dribbleStill";
+            if (moved < 40f) a.walkDist += moved;   // 순간이동한 거리는 달리기 걸음에 넣지 않음
+            if (pose != a.pose) a.poseTime = 0f; else a.poseTime += dt;
             a.pose = pose; a.face = face;
         }
 
@@ -320,10 +371,10 @@ namespace MyFootballCareer
         {
             switch (face)
             {
-                case 'u': ox = 4f; oy = -2f; break;
-                case 'l': ox = -6f; oy = -1f; break;
-                case 'r': ox = 6f; oy = -1f; break;
-                default: ox = 4f; oy = 1f; break;
+                case 'u': ox = 14f; oy = -15f; break;
+                case 'l': ox = -19f; oy = -12f; break;
+                case 'r': ox = 19f; oy = -12f; break;
+                default: ox = 14f; oy = -6f; break;
             }
         }
 
@@ -349,16 +400,46 @@ namespace MyFootballCareer
             face = a.face == '*' ? DirectionFace(b.x - a.x, b.y - a.y, fallbackFace) : a.face;
         }
 
-        // ---------- 그리기 ----------
-        Sprite GetSprite(string team, char face, string pose, out bool flip)
+        // ---------- 그림 고르기 ----------
+        Sprite PickFrame(Actor a, out bool flip)
         {
-            flip = face == 'l';
-            string f = face == 'd' ? "down" : (face == 'u' ? "up" : "side");
-            if (pose == "dive" && f != "side") pose = "stand";
-            Sprite sprite;
-            if (sprites.TryGetValue(team + "_" + f + "_" + pose, out sprite)) return sprite;
-            if (sprites.TryGetValue(team + "_" + f + "_stand", out sprite)) return sprite;
-            return null;
+            flip = a.face == 'l';
+            string view = a.face == 'd' ? "front" : (a.face == 'u' ? "back" : "side");
+            string key;
+            int index;
+            Sprite[] strip;
+            switch (a.pose)
+            {
+                case "walk":
+                    key = a.team + "_run_" + view;
+                    strip = Find(key); index = strip == null ? 0 : ((int)(a.walkDist / StepPx)) % strip.Length; break;
+                case "dribble":
+                    key = a.team + "_dribble_" + view;
+                    strip = Find(key); index = strip == null ? 0 : ((int)(a.walkDist / StepPx)) % strip.Length; break;
+                case "dribbleStill":
+                    key = a.team + "_dribble_" + view;
+                    strip = Find(key); index = 0; break;
+                case "kick":
+                    key = a.team + "_shoot_" + view;
+                    strip = Find(key); index = strip == null ? 0 : Mathf.Min(strip.Length - 1, (int)(a.poseTime * 10f)); break;
+                case "cheer":
+                    key = a.team + "_cheer_x"; flip = false;
+                    strip = Find(key); index = strip == null ? 0 : ((int)(a.poseTime * 5f)) % strip.Length; break;
+                case "dive":
+                    key = a.team + "_fall_x";
+                    strip = Find(key); index = strip == null ? 0 : Mathf.Min(strip.Length - 1, (int)(a.poseTime * 6f)); break;
+                default:
+                    key = a.team + "_idle_" + view;
+                    strip = Find(key); index = strip == null ? 0 : ((int)(clock * 4f) + a.phase) % strip.Length; break;
+            }
+            if (strip == null) { strip = Find(a.team + "_idle_front"); index = 0; flip = false; }
+            return strip == null ? null : strip[Mathf.Clamp(index, 0, strip.Length - 1)];
+        }
+
+        Sprite[] Find(string key)
+        {
+            Sprite[] strip;
+            return strips.TryGetValue(key, out strip) ? strip : null;
         }
 
         void SetShown(Actor a, bool shown)
@@ -368,7 +449,7 @@ namespace MyFootballCareer
             a.root.gameObject.SetActive(shown);
         }
 
-        // 배경 픽셀 좌표(왼쪽 위가 0,0)로 이미지 위치를 정합니다. 위치는 정수로 맞춰 도트가 어긋나지 않게 합니다.
+        // 훈련장 그림 픽셀 좌표(왼쪽 위가 0,0)로 이미지 위치를 정합니다.
         void Place(RectTransform rect, float left, float top, float w, float h)
         {
             rect.anchorMin = new Vector2(left / bgW, 1f - (top + h) / bgH);
@@ -376,21 +457,18 @@ namespace MyFootballCareer
             rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero;
         }
 
-        static float Snap(float v) { return Mathf.Floor(v + 0.5f); }
-
         void RenderCharacter(Actor a)
         {
             bool flip;
-            Sprite sprite = GetSprite(a.team, a.face, a.pose, out flip);
+            Sprite sprite = PickFrame(a, out flip);
             if (sprite == null) { SetShown(a, false); return; }
             SetShown(a, true);
-            float w = sprite.rect.width, h = sprite.rect.height;
-            float feet = Snap(a.y);
+            float w = sprite.rect.width * CharScale, h = sprite.rect.height * CharScale;
             a.bodyImage.sprite = sprite;
             a.body.localScale = new Vector3(flip ? -1f : 1f, 1f, 1f);
-            Place(a.body, Snap(a.x) - Mathf.Floor((w - 1f) / 2f), feet - h + 1f, w, h);
-            float sw = shadowSprite.rect.width, sh = shadowSprite.rect.height;
-            Place(a.shadow, Snap(a.x) - Mathf.Floor((sw - 1f) / 2f), feet, sw, sh);
+            Place(a.body, a.x - w / 2f, a.y - BaseRow * CharScale, w, h);
+            float sw = shadowSprite.rect.width * CharScale, sh = shadowSprite.rect.height * CharScale;
+            Place(a.shadow, a.x - sw / 2f, a.y - sh * 0.62f, sw, sh);
             a.sortKey = a.y;
         }
 
@@ -398,11 +476,10 @@ namespace MyFootballCareer
         {
             SetShown(ball, visible);
             if (!visible) return;
-            float w = ballSprite.rect.width, h = ballSprite.rect.height;
-            float sw = ballShadowSprite.rect.width, sh = ballShadowSprite.rect.height;
-            float bx = Snap(ball.x);
-            Place(ball.body, bx - Mathf.Floor((w - 1f) / 2f), Snap(ball.y - ball.z) - Mathf.Floor((h - 1f) / 2f), w, h);
-            Place(ball.shadow, bx - Mathf.Floor((sw - 1f) / 2f), Snap(ball.y) + 2f, sw, sh);
+            float w = ballSprite.rect.width * CharScale, h = ballSprite.rect.height * CharScale;
+            Place(ball.body, ball.x - w / 2f, ball.y - ball.z - h / 2f, w, h);
+            float sw = shadowSprite.rect.width * CharScale * 0.5f, sh = shadowSprite.rect.height * CharScale * 0.5f;
+            Place(ball.shadow, ball.x - sw / 2f, ball.y - sh * 0.3f, sw, sh);
             ball.sortKey = ball.y + 0.01f;
         }
     }

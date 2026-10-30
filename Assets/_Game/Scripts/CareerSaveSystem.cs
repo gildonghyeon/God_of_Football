@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 7;
+        const int CurrentVersion = 8;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -70,6 +70,11 @@ namespace MyFootballCareer
                 data.version = 7;   // 환생 횟수·영구 보너스·커리어 기록 추가
                 upgraded = true;
             }
+            if (data.version == 7)
+            {
+                data.version = 8;   // 선수 외형(머리색·피부색) 추가. 기존 선수는 원래 모습으로 시작
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -79,6 +84,11 @@ namespace MyFootballCareer
             if (data.transfers == null) data.transfers = new List<TransferRecord>();
             if (data.pendingTeamId == null) data.pendingTeamId = "";
             if (data.careers == null) data.careers = new List<CareerSummary>();
+            if (data.player != null)
+            {
+                data.player.hairColor = Mathf.Clamp(data.player.hairColor, 0, PlayerLook.HairCount - 1);
+                data.player.skinTone = Mathf.Clamp(data.player.skinTone, 0, PlayerLook.SkinCount - 1);
+            }
             foreach (var match in data.season.matches)
                 if (match != null && match.others == null) match.others = new List<LeagueGame>();
             return upgraded;
@@ -111,7 +121,7 @@ namespace MyFootballCareer
                 }
                 data = Parse(File.ReadAllText(FilePath), out bool upgraded);
                 if (!Valid(data)) throw new InvalidDataException("Invalid save. Original file preserved.");
-                if (upgraded) message = "Save upgraded to version 7.";
+                if (upgraded) message = "Save upgraded to version 8.";
                 return true;
             }
             catch (Exception e) { data = null; message = "Cannot load: " + e.Message; return false; }
