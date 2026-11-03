@@ -138,9 +138,10 @@ namespace MyFootballCareer
             root = rootRect.gameObject;
 
             // 위쪽: 점수와 시계
+            const float HudBottom = 136f;   // 화면 위쪽에서 점수판 아래 끝까지의 거리
             var hud = Box(rootRect, PixelTheme.PanelEdge, new Color(PixelTheme.Panel.r, PixelTheme.Panel.g, PixelTheme.Panel.b, .86f));
             hud.anchorMin = new Vector2(0, 1); hud.anchorMax = new Vector2(1, 1); hud.pivot = new Vector2(.5f, 1);
-            hud.offsetMin = new Vector2(16, -136); hud.offsetMax = new Vector2(-16, -12);
+            hud.offsetMin = new Vector2(16, -HudBottom); hud.offsetMax = new Vector2(-16, -12);
             var hudInner = hud.GetChild(0) as RectTransform;
             var left = TextNode(ownName, hudInner, 22, TextAnchor.MiddleLeft, new Color(.55f, .75f, 1f));
             Anchored(left.rectTransform, .03f, .45f, .38f, .95f);
@@ -157,10 +158,12 @@ namespace MyFootballCareer
             Anchored(clockFill, 0, 0, 0, 1);
             clockFill.gameObject.AddComponent<Image>().color = PixelTheme.Bar;
 
-            // 가운데: 코트
+            // 가운데: 코트. 점수판 아래에 두고, 아래쪽 골라인이 기록 띠에 가리지 않도록 아래도 조금 띄웁니다.
+            // 점수판은 코트 그림보다 앞에 그립니다.
             var area = NewRect("PitchArea", rootRect);
             Anchored(area, 0, 0, 1, 1);
-            area.offsetMin = Vector2.zero; area.offsetMax = Vector2.zero;
+            area.offsetMin = new Vector2(0, 66f); area.offsetMax = new Vector2(0, -(HudBottom + 8f));
+            hud.SetAsLastSibling();
             pitchRect = NewRect("Pitch", area);
             pitchRect.anchorMin = pitchRect.anchorMax = new Vector2(.5f, .5f);
             pitchRect.pivot = new Vector2(.5f, .5f);
