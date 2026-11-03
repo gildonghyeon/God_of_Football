@@ -47,6 +47,8 @@ namespace MyFootballCareer
         [Header("리그")]
         public string startTeamId = "harbor-town";   // 새 선수(그리고 환생한 선수)가 시작하는 팀
         [Min(0)] public int promotionSpots = 2;      // 시즌이 끝나면 각 부의 상위 몇 팀이 올라가고, 하위 몇 팀이 내려가는지
+        [Header("주급 (1부부터). 평점이 팀이 요구하는 수준보다 높을수록 더 받습니다 (0.5~2배)")]
+        public float[] weeklyWageByDivision = { 25000f, 10000f, 4000f, 1500f, 500f };
         public DivisionDefinition[] divisions = new DivisionDefinition[]
         {
             new DivisionDefinition { name = "Division 1", recommendedRating = 85f },
@@ -171,6 +173,15 @@ namespace MyFootballCareer
             int d = ClampDivision(division);
             var def = divisions != null && divisions.Length >= d ? divisions[d - 1] : null;
             return def != null ? def.recommendedRating : 0f;
+        }
+
+        // 이 팀이 이 평점의 선수에게 주는 주급 (10 단위)
+        public int WeeklyWage(TeamDefinition team, int division, float rating)
+        {
+            int d = ClampDivision(division);
+            float baseWage = weeklyWageByDivision != null && weeklyWageByDivision.Length >= d ? weeklyWageByDivision[d - 1] : 500f;
+            float factor = Mathf.Clamp(0.6f + (rating - (team != null ? team.requiredRating : 0f)) / 50f, 0.5f, 2f);
+            return Mathf.Max(10, Mathf.RoundToInt(baseWage * factor / 10f) * 10);
         }
 
         // 시작 팀: startTeamId가 없으면 가장 낮은 부의 첫 팀

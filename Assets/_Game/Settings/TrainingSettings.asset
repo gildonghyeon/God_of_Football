@@ -19,20 +19,20 @@ MonoBehaviour:
   - id: shooting
     displayName: Shooting
     targetAttribute: 0
-    growthPerHour: 2.5
+    growthPerHour: 2
   - id: passing
     displayName: Passing
     targetAttribute: 1
-    growthPerHour: 2.5
+    growthPerHour: 2
   - id: dribbling
     displayName: Dribbling
     targetAttribute: 2
-    growthPerHour: 2.5
+    growthPerHour: 2
   - id: defending
     displayName: Defending
     targetAttribute: 3
-    growthPerHour: 2.5
+    growthPerHour: 2
   - id: stamina
     displayName: Stamina
     targetAttribute: 4
-    growthPerHour: 2.5
+    growthPerHour: 2

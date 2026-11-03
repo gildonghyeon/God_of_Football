@@ -50,6 +50,7 @@ namespace MyFootballCareer
             ui.OnStartNew = StartNewGame;
             ui.OnResetSave = ResetSave;
             ui.OnApplyLook = ChangeLook;
+            ui.OnBuyMultiTraining = BuyMultiTraining;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -109,6 +110,7 @@ namespace MyFootballCareer
             training = new TrainingSystem(current, settings, trainingSettings);
             training.ValidateSelection();
             SeasonSystem.Prepare(current, matchSettings);
+            SeasonSystem.EnsureContract(current, matchSettings, settings);
             OfflineResult offline = null;
             if (applyOffline)
             {
@@ -150,6 +152,7 @@ namespace MyFootballCareer
                          SeasonSystem.DescribeHistory(current));
             var team = matchSettings.FindTeam(current.teamId);
             ui.SetTransfer(current.offers, current.pendingTeamId, team != null ? team.displayName : current.teamId);
+            RefreshMoneyUI();
             RefreshRebirthUI();
         }
 
@@ -184,10 +187,12 @@ namespace MyFootballCareer
         void SelectTraining(string id)
         {
             if (blocked || training == null) return;
-            training.Select(id);
+            bool was = training.IsActive(id);
+            training.Toggle(id);
             saves.TrySave(current, out string message);
-            var def = training.Current;
-            ui.SetStatus(def == null ? message : "Training: " + def.displayName + " (+" + (def.growthPerHour * RebirthSystem.TrainingMultiplier(current)).ToString("0.#") + "/h). " + message);
+            var def = trainingSettings.Find(id);
+            string name = def != null ? def.displayName : id;
+            ui.SetStatus((was ? "Stopped " + name + ". " : "Training " + name + ". ") + message);
             ui.RefreshTraining(current.player, training);
         }
 
@@ -198,6 +203,40 @@ namespace MyFootballCareer
             saves.TrySave(current, out string message);
             ui.SetStatus("Training stopped. " + message);
             ui.RefreshTraining(current.player, training);
+        }
+
+        // 동시 훈련 다음 레벨을 삽니다.
+        void BuyMultiTraining()
+        {
+            if (blocked || current == null || training == null) return;
+            long price = trainingSettings.MultiPrice(current.multiTrainingLevel);
+            if (price < 0) { ui.SetStatus("Simultaneous training is at the max level."); return; }
+            if (current.money < price) { ui.SetStatus("Not enough money: " + SeasonSystem.Money(price - current.money) + " more needed."); return; }
+            current.money -= price;
+            current.multiTrainingLevel++;
+            training.ValidateSelection();
+            saves.TrySave(current, out string message);
+            RefreshMoneyUI();
+            ui.RefreshTraining(current.player, training);
+            ui.SetStatus("Simultaneous training Lv " + current.multiTrainingLevel + "! Tap another training to add it. " + message);
+        }
+
+        void RefreshMoneyUI()
+        {
+            int level = current.multiTrainingLevel;
+            var now = TrainingSettings.ExtraSlotSpeeds(level);
+            var next = TrainingSettings.ExtraSlotSpeeds(level + 1);
+            string info = "Now: " + SlotText(now);
+            if (trainingSettings.MultiPrice(level) >= 0) info += "   Next: " + SlotText(next);
+            ui.SetMoney(current.money, current.weeklyWage, level, trainingSettings.MaxMultiLevel, trainingSettings.MultiPrice(level), info);
+        }
+
+        static string SlotText(float[] extra)
+        {
+            if (extra.Length == 0) return "1 training";
+            var sb = new System.Text.StringBuilder("100%");
+            foreach (float s in extra) sb.Append(" + ").Append(Mathf.RoundToInt(s * 100f)).Append('%');
+            return sb.ToString();
         }
 
         void RefreshRebirthUI()
@@ -246,7 +285,7 @@ namespace MyFootballCareer
 
             if (SeasonSystem.IsComplete(current))
             {
-                string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings);   // 이적·승강 안내 (바뀐 게 없으면 null)
+                string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings, settings);   // 이적·승강 안내 (바뀐 게 없으면 null)
                 saves.TrySave(current, out string newSeasonMessage);
                 RefreshSeasonUI();
                 ui.SetStatus("New season started. " + newSeasonMessage);

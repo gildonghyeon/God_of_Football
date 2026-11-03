@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 10;
+        const int CurrentVersion = 11;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -95,6 +95,11 @@ namespace MyFootballCareer
                 }
                 upgraded = true;
             }
+            if (data.version == 10)
+            {
+                data.version = 11;   // 돈·주급·동시 훈련 추가. 주급은 불러올 때 지금 팀과 능력치로 정해집니다.
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -105,6 +110,9 @@ namespace MyFootballCareer
             if (data.pendingTeamId == null) data.pendingTeamId = "";
             if (data.careers == null) data.careers = new List<CareerSummary>();
             if (data.league == null) data.league = new List<TeamDivision>();
+            if (data.extraTrainingIds == null) data.extraTrainingIds = new List<string>();
+            if (data.money < 0) data.money = 0;
+            if (data.multiTrainingLevel < 0) data.multiTrainingLevel = 0;
             if (data.season.teamIds == null) data.season.teamIds = new List<string>();
             if (data.season.fixtures == null) data.season.fixtures = new List<LeagueGame>();
             if (data.player != null)

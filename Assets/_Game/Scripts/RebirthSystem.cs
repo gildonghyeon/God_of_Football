@@ -106,7 +106,12 @@ namespace MyFootballCareer
             save.transfers.Clear();
             save.league.Clear();              // 리그 소속도 처음 상태로
             save.leagueSeason = 0;
+            save.money = 0;                   // 돈과 동시 훈련도 처음부터
+            save.multiTrainingLevel = 0;
+            save.extraTrainingIds.Clear();
+            save.weeklyWage = 0;
             SeasonSystem.Prepare(save, ms);   // 시작 팀과 첫 시즌을 다시 만듭니다.
+            SeasonSystem.EnsureContract(save, ms, career);
 
             return "Rebirth #" + save.rebirthCount + " complete.\nTraining bonus +" + gain.ToString("0.#")
                  + "% (total +" + save.rebirthBonusPercent.ToString("0.#") + "%).\nA new career begins.";
@@ -148,7 +153,7 @@ namespace MyFootballCareer
             var sb = new StringBuilder();
             sb.Append("Resets: attributes");
             if (rs.keepProgressRatio > 0f) sb.Append(" (keep ").Append(Mathf.RoundToInt(rs.keepProgressRatio * 100f)).Append("% of progress)");
-            sb.Append(", training, season, standings, team, transfers.\n");
+            sb.Append(", training, season, standings, team, transfers, money, simultaneous training.\n");
             sb.Append("Keeps: name, position, trait, rebirth count, bonus, career records.\n\n");
             sb.Append("Bonus gained: +").Append(gain.ToString("0.#")).Append("%\n");
             sb.Append("Training speed: x").Append(TrainingMultiplier(save).ToString("0.00"))

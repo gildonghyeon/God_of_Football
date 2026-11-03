@@ -140,6 +140,9 @@ namespace MyFootballCareer
             if (own == null || opp == null) return null;
             MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap);
             GenerateOthers(match, save, ms);
+            EnsureContract(save, ms, career);
+            match.wage = save.weeklyWage;            // 경기 한 번 = 1주
+            save.money += save.weeklyWage;
             season.nextMatchIndex++;
             return match;
         }
@@ -259,12 +262,14 @@ namespace MyFootballCareer
 
         // 다음 시즌을 시작합니다. 끝난 시즌 요약을 이력에 남기고, 이적이 합의되어 있으면 새 팀으로 옮깁니다.
         // 이적하거나 부가 바뀌었으면 안내 문장을, 아니면 null을 돌려줍니다.
-        public static string StartNextSeason(SaveData save, MatchSettings ms)
+        public static string StartNextSeason(SaveData save, MatchSettings ms, CareerSettings career)
         {
             EnsureSeasonEnd(save, ms);
             save.seasonHistory.Add(Summarize(save, ms));
             int before = save.season.division;
+            int oldWage = save.weeklyWage;
             var lines = new List<string>();
+            int newWage = -1;
             if (!string.IsNullOrEmpty(save.pendingTeamId))
             {
                 var target = ms.FindTeam(save.pendingTeamId);
@@ -274,8 +279,12 @@ namespace MyFootballCareer
                     save.transfers.Add(new TransferRecord { afterSeason = save.season.seasonNumber, fromTeamName = from, toTeamName = target.displayName });
                     lines.Add("Transferred: " + from + " -> " + target.displayName);
                     save.teamId = target.id;
+                    foreach (var o in save.offers) if (o.teamId == target.id && o.weeklyWage > 0) newWage = o.weeklyWage;
                 }
             }
+            if (newWage <= 0) newWage = WageFor(save, ms, career, save.teamId);   // 남으면 지금 능력치로 재계약
+            save.weeklyWage = newWage;
+            if (newWage != oldWage) lines.Add("New contract: " + Money(newWage) + " per week.");
             save.pendingTeamId = "";
             save.offers.Clear();
             StartSeason(save, ms, save.season.seasonNumber + 1);
@@ -285,6 +294,19 @@ namespace MyFootballCareer
             else if (before == 0)
                 lines.Add("The league now has " + ms.DivisionCount + " divisions. You play in " + ms.DivisionName(after) + ".");
             return lines.Count > 0 ? string.Join("\n", lines) : null;
+        }
+
+        // ---------- 계약 (주급) ----------
+        // 이 팀이 지금 내 선수에게 주는 주급
+        public static int WageFor(SaveData save, MatchSettings ms, CareerSettings career, string teamId)
+        {
+            return ms.WeeklyWage(ms.FindTeam(teamId), DivisionOf(save, ms, teamId), PlayerRating(save, ms, career));
+        }
+
+        // 계약이 없으면(새 선수, 예전 저장, 환생 직후) 지금 팀과 능력치로 주급을 정합니다.
+        public static void EnsureContract(SaveData save, MatchSettings ms, CareerSettings career)
+        {
+            if (save.weeklyWage <= 0) save.weeklyWage = WageFor(save, ms, career, save.teamId);
         }
 
         // ---------- 이적 ----------
@@ -323,6 +345,7 @@ namespace MyFootballCareer
                 save.offers.Add(new TransferOffer
                 {
                     teamId = t.id, teamName = t.displayName, teamStrength = t.strength, division = DivisionOf(save, ms, t.id),
+                    weeklyWage = ms.WeeklyWage(t, DivisionOf(save, ms, t.id), rating),
                     startChance = MatchSimulation.StartChance(t, rating), focus = t.focus
                 });
             }
@@ -453,6 +476,8 @@ namespace MyFootballCareer
 
         static string ShortDivision(int division) { return "Div " + division; }
 
+        public static string Money(long amount) { return amount.ToString("#,0"); }
+
         // 끝난 시즌의 승강 결과 (내 팀 기준)
         static string MovementText(SaveData save, MatchSettings ms)
         {
@@ -507,6 +532,7 @@ namespace MyFootballCareer
             sb.Append("Round ").Append(m.round).Append(": ").Append(TeamName(save, ms)).Append(' ')
               .Append(m.goalsFor).Append(" - ").Append(m.goalsAgainst).Append(' ').Append(m.opponentName)
               .Append("  (").Append(outcome).Append(")\n");
+            if (m.wage > 0) sb.Append("Wage +").Append(Money(m.wage)).Append('\n');
             if (!m.playerPlayed) return sb.Append("You did not play (bench).").ToString();
             sb.Append("Rating ").Append(m.rating.ToString("0.0")).Append('\n');
             sb.Append("Goals ").Append(m.playerGoals).Append("  Assists ").Append(m.playerAssists)

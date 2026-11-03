@@ -41,7 +41,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 10;
+        public int version = 11;
         public PlayerData player;
         public string trainingId = "";
         public float trainingCarrySeconds;
@@ -58,6 +58,10 @@ namespace MyFootballCareer
         public List<CareerSummary> careers = new List<CareerSummary>();    // 환생 전에 마친 커리어 기록
         public List<TeamDivision> league = new List<TeamDivision>();       // 지금 각 팀이 속한 부 (승강제로 바뀜)
         public int leagueSeason;                                           // 승강을 마지막으로 반영한 시즌 번호
+        public long money;                                                 // 가진 돈
+        public int weeklyWage;                                             // 지금 계약의 주급 (경기 한 번에 1주치)
+        public int multiTrainingLevel;                                     // 동시 훈련 레벨 (0이면 훈련 하나만)
+        public List<string> extraTrainingIds = new List<string>();         // 함께 하는 훈련 (2번째, 3번째 칸)
     }
 
     // 한 팀의 소속 부 (1부가 가장 높음)
@@ -80,6 +84,7 @@ namespace MyFootballCareer
         public int passesAttempted, passesCompleted, defensiveActions;
         public float rating;
         public bool playerPlayed = true;   // false면 벤치에서 경기를 지켜봄
+        public int wage;                   // 이 경기로 받은 주급 (벤치여도 계약대로 받음)
         public List<LeagueGame> others = new List<LeagueGame>();   // 같은 라운드에 열린 다른 팀끼리의 경기
     }
 
@@ -122,6 +127,7 @@ namespace MyFootballCareer
         public float startChance;        // 이 팀에서 선발로 뛸 가능성 (0~1)
         public AttributeKind focus;      // 팀이 중요하게 보는 능력치
         public int division;             // 다음 시즌 이 팀의 부
+        public int weeklyWage;           // 이 팀이 주는 주급
     }
 
     [Serializable] public class TransferRecord
