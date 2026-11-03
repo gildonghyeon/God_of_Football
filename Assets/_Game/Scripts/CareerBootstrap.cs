@@ -153,17 +153,18 @@ namespace MyFootballCareer
             RefreshRebirthUI();
         }
 
-        void ChangeLook(int hair, int skin)
+        void ChangeLook(int hair, int skin, int kit)
         {
             if (blocked || current == null) return;
             current.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             current.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
+            current.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
             saves.TrySave(current, out string message);
             ui.ApplyLook(current.player);
             ui.SetStatus("Look changed. " + message);
         }
 
-        void Create(string rawName, Position position, Trait trait, int hair, int skin)
+        void Create(string rawName, Position position, Trait trait, int hair, int skin, int kit)
         {
             if (blocked || current != null) return;
             string name = rawName.Trim();
@@ -173,6 +174,7 @@ namespace MyFootballCareer
             var candidate = new SaveData { player = settings.CreatePlayer(name, position, trait) };
             candidate.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             candidate.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
+            candidate.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
             SeasonSystem.Prepare(candidate, matchSettings);
             if (!saves.TrySave(candidate, out string message)) { ui.SetStatus(message); return; }
             current = candidate;

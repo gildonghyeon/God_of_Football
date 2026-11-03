@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 8;
+        const int CurrentVersion = 9;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -75,6 +75,11 @@ namespace MyFootballCareer
                 data.version = 8;   // 선수 외형(머리색·피부색) 추가. 기존 선수는 원래 모습으로 시작
                 upgraded = true;
             }
+            if (data.version == 8)
+            {
+                data.version = 9;   // 유니폼 색 추가. 기존 선수는 원래 파란 유니폼으로 시작
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -88,6 +93,7 @@ namespace MyFootballCareer
             {
                 data.player.hairColor = Mathf.Clamp(data.player.hairColor, 0, PlayerLook.HairCount - 1);
                 data.player.skinTone = Mathf.Clamp(data.player.skinTone, 0, PlayerLook.SkinCount - 1);
+                data.player.kitColor = Mathf.Clamp(data.player.kitColor, 0, PlayerLook.KitCount - 1);
             }
             foreach (var match in data.season.matches)
                 if (match != null && match.others == null) match.others = new List<LeagueGame>();

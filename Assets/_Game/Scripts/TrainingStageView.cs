@@ -87,31 +87,32 @@ namespace MyFootballCareer
                 foreach (string anim in new[] { "jump", "cheer", "fall" })
                     LoadStrip(team + "_" + anim + "_x");
             }
-            SetLook(0, 0);   // 내 선수(blue): 원래 모습으로 시작
+            SetLook(0, 0, 0);   // 내 선수(blue): 원래 모습으로 시작
         }
 
         // ---------- 내 선수 외형 ----------
-        int lookHair = -1, lookSkin = -1;
+        int lookHair = -1, lookSkin = -1, lookKit = -1;
         readonly List<UnityEngine.Object> lookObjects = new List<UnityEngine.Object>();
 
-        // 내 선수(blue) 그림을 머리색·피부색에 맞춰 다시 만듭니다. 같은 외형이면 아무것도 하지 않습니다.
-        public void SetLook(int hair, int skin)
+        // 내 선수(blue) 그림을 머리색·피부색·유니폼에 맞춰 다시 만듭니다. 같은 외형이면 아무것도 하지 않습니다.
+        public void SetLook(int hair, int skin, int kit)
         {
             hair = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             skin = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
-            if (hair == lookHair && skin == lookSkin) return;
+            kit = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
+            if (hair == lookHair && skin == lookSkin && kit == lookKit) return;
             foreach (var obj in lookObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
             lookObjects.Clear();
             foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
                 foreach (string view in new[] { "front", "side", "back" })
-                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin);
+                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit);
             foreach (string anim in new[] { "jump", "cheer", "fall" })
-                LoadLookStrip("blue_" + anim + "_x", hair, skin);
-            lookHair = hair; lookSkin = skin;
+                LoadLookStrip("blue_" + anim + "_x", hair, skin, kit);
+            lookHair = hair; lookSkin = skin; lookKit = kit;
         }
 
         // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
-        void LoadLookStrip(string prefix, int hair, int skin)
+        void LoadLookStrip(string prefix, int hair, int skin, int kit)
         {
             var list = new List<Sprite>();
             for (int i = 0; i < 8; i++)
@@ -120,7 +121,7 @@ namespace MyFootballCareer
                 var asset = Resources.Load<TextAsset>(ArtPath + prefix + "_" + i);
                 if (asset != null)
                 {
-                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin);
+                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit);
                     if (tex != null)
                     {
                         sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
