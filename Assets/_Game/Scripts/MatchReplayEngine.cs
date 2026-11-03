@@ -130,6 +130,11 @@ namespace MyFootballCareer
     {
         public int team, slot;                 // team 0=내 팀(위쪽 골대로 공격), 1=상대
         public float x, y, tx, ty, vx, vy, maxSpeed = 7f;
+        public float ax, ay;                   // 대형 위치를 천천히 따라가는 기준점 (목표가 툭툭 바뀌지 않게)
+        public float ox, oy;                   // 선수마다 다른 위치 버릇 (줄이 반듯하게 서지 않게)
+        public float noise;                    // 제자리에서 어슬렁거리는 움직임의 씨앗
+        public float runT, runDx;              // 공 없이 앞으로 뛰어드는 중이면 남은 시간과 옆 방향
+        public bool started;                   // 기준점을 처음 위치로 잡았는가
     }
 
     // 점 22개와 공이 실제 축구처럼 움직이는 간단한 경기 엔진입니다. 화면과는 무관하게 위치만 계산합니다.
@@ -175,9 +180,14 @@ namespace MyFootballCareer
             this.rng = rng; this.youSlot = youSlot;
             pending = new List<ReplayEvent>(events);
             for (int t = 0; t < 2; t++)
-                for (int s = 0; s < 11; s++) dots[t * 11 + s] = new ReplayDot { team = t, slot = s };
+                for (int s = 0; s < 11; s++)
+                    dots[t * 11 + s] = new ReplayDot
+                    {
+                        team = t, slot = s,
+                        ox = s == 0 ? 0f : Rand(-3f, 3f), oy = s == 0 ? 0f : Rand(-0.025f, 0.025f), noise = Rand(0f, 100f)
+                    };
             Kickoff(1);
-            foreach (var d in dots) { FormationTarget(d); d.x = d.tx; d.y = d.ty; }
+            foreach (var d in dots) { FormationTarget(d, 0f); d.x = d.tx; d.y = d.ty; }
             carrier = Idx(0, 9);
             dots[carrier].x = W / 2f; dots[carrier].y = L / 2f + 1f;
         }
@@ -200,75 +210,186 @@ namespace MyFootballCareer
                 BeginScript(next);
             }
             UpdateBall(dt);
-            ComputeTargets();
+            UpdateRuns(dt);
+            ComputeTargets(dt);
             for (int i = 0; i < dots.Length; i++) MoveDot(dots[i], dt);
             if (script != null) UpdateScript(dt);
         }
 
         // ---------- 선수 위치 ----------
-        void FormationTarget(ReplayDot d)
+        // 속도(m/s): 평소에는 걷거나 조깅하고, 압박·침투·공 받기처럼 급할 때만 전력으로 뜁니다.
+        const float JogSpeed = 4.2f, CarrySpeed = 5.6f, SprintSpeed = 7.8f, KeeperSpeed = 3.6f;
+        const float Accel = 4.5f, Decel = 7f;     // 가속·감속 한계 (m/s²). 출발과 멈춤, 방향 전환에 시간이 걸립니다.
+
+        // 대형 안의 자리. 실제 축구처럼 수비할 때는 공 쪽으로 좁게 모이고, 공격할 때는 넓게 벌립니다.
+        // 결과는 기준점(ax, ay)이 천천히 따라가서, 공이 빨리 움직여도 선수 위치가 툭툭 바뀌지 않습니다.
+        void FormationTarget(ReplayDot d, float dt)
         {
             int poss = carrier >= 0 ? dots[carrier].team : lastPoss;
+            bool attacking = poss == d.team;
             float bd = Mathf.Clamp01(BallDepth(d.team));
             float depth, x;
             if (d.slot == 0)
             {
                 depth = 0.03f + 0.08f * bd;
-                x = 34f + (ballX - 34f) * 0.15f;
+                x = 34f + (ballX - 34f) * 0.2f;
             }
             else
             {
-                depth = RoleDepth[d.slot] + (bd - 0.5f) * RoleShift[d.slot] + (poss == d.team ? 0.04f : -0.03f);
+                depth = RoleDepth[d.slot] + (bd - 0.5f) * RoleShift[d.slot] + (attacking ? 0.05f : -0.04f) + d.oy;
                 float rx = d.team == 0 ? RoleX[d.slot] : W - RoleX[d.slot];
-                x = 34f + (rx - 34f) * 0.9f + (ballX - 34f) * 0.22f;
+                float width = attacking ? 0.95f : 0.68f;   // 수비 때는 가운데로 좁힘
+                float slide = attacking ? 0.22f : 0.38f;   // 수비 때는 공 쪽으로 더 쏠림
+                x = 34f + (rx - 34f) * width + (ballX - 34f) * slide + d.ox;
+                bool fullBack = d.slot == 1 || d.slot == 4;
+                bool ballSide = (rx < 34f) == (ballX < 34f);
+                if (attacking && fullBack && ballSide && bd > 0.45f) depth += 0.12f;   // 공 쪽 풀백은 오버래핑
+                if (d.runT > 0f) { depth += 0.16f; x += d.runDx; }                   // 공 없이 침투
             }
             depth = Mathf.Clamp(depth, 0.03f, d.slot == 0 ? 0.14f : 0.95f);
-            d.tx = x + Mathf.Sin(time * 0.9f + d.team * 3f + d.slot) * 0.8f;
-            d.ty = DepthY(d.team, depth) + Mathf.Cos(time * 0.7f + d.slot) * 0.8f;
-            d.maxSpeed = d.slot == 0 ? 4.5f : 7f;
+            float fx = Mathf.Clamp(x, 2f, W - 2f), fy = DepthY(d.team, depth);
+            if (!d.started) { d.ax = fx; d.ay = fy; d.started = true; }
+            float follow = 1f - Mathf.Exp(-(d.runT > 0f ? 2.5f : 1.3f) * dt);
+            d.ax += (fx - d.ax) * follow; d.ay += (fy - d.ay) * follow;
+            // 제자리에서도 조금씩 자리를 고치는 움직임 (선수마다 다른 느린 흔들림)
+            float wx = (Noise(d.noise, time * 0.18f) - 0.5f) * 4f;
+            float wy = (Noise(d.noise + 37f, time * 0.15f) - 0.5f) * 4f;
+            d.tx = d.ax + (d.slot == 0 ? wx * 0.25f : wx);
+            d.ty = d.ay + (d.slot == 0 ? wy * 0.15f : wy);
+            d.maxSpeed = d.slot == 0 ? KeeperSpeed : (d.runT > 0f ? SprintSpeed : JogSpeed);
         }
 
-        void ComputeTargets()
+        // 공을 가진 팀의 미드필더·공격수가 가끔 수비 뒷공간으로 뛰어듭니다.
+        void UpdateRuns(float dt)
         {
-            for (int i = 0; i < dots.Length; i++) FormationTarget(dots[i]);
+            int poss = carrier >= 0 ? dots[carrier].team : lastPoss;
+            for (int i = 0; i < dots.Length; i++)
+            {
+                var d = dots[i];
+                if (d.runT > 0f) { d.runT -= dt; if (d.team != poss) d.runT = 0f; continue; }
+                if (d.team != poss || d.slot < 5 || i == carrier || script != null) continue;
+                if (rng.NextDouble() < (d.slot >= 9 ? 0.09 : 0.04) * dt)
+                {
+                    d.runT = Rand(2.5f, 4.5f);
+                    d.runDx = Rand(-7f, 7f);
+                }
+            }
+        }
+
+        int presser = -1, coverer = -1;   // 공을 막는 선수, 패스 길을 막는 선수 (자주 바뀌지 않게 기억)
+
+        void ComputeTargets(float dt)
+        {
+            for (int i = 0; i < dots.Length; i++) FormationTarget(dots[i], dt);
             int poss = carrier >= 0 ? dots[carrier].team : lastPoss;
             int press = 1 - poss;
 
-            // 공을 갖지 않은 팀: 공에 가장 가까운 두 명이 압박
-            int first = -1, second = -1;
-            float firstD = float.MaxValue, secondD = float.MaxValue;
+            // 공을 갖지 않은 팀: 가장 가까운 선수가 공을 막고, 다음 선수는 가까운 패스 길을 막습니다.
+            // 원래 압박하던 선수가 3m 넘게 더 멀어져야 다른 선수로 바뀝니다.
+            int first = -1; float firstD = float.MaxValue;
             for (int s = 1; s <= 10; s++)
             {
-                var d = dots[Idx(press, s)];
-                float dist = Mathf.Sqrt((d.x - ballX) * (d.x - ballX) + (d.y - ballY) * (d.y - ballY));
-                if (dist < firstD) { second = first; secondD = firstD; first = s; firstD = dist; }
-                else if (dist < secondD) { second = s; secondD = dist; }
+                float dist = DistTo(dots[Idx(press, s)], ballX, ballY);
+                if (dist < firstD) { first = Idx(press, s); firstD = dist; }
             }
-            if (first > 0) PressBall(dots[Idx(press, first)]);
-            if (second > 0) PressBall(dots[Idx(press, second)]);
+            if (presser < 0 || dots[presser].team != press || DistTo(dots[presser], ballX, ballY) > firstD + 3f) presser = first;
+            int second = -1; float secondD = float.MaxValue;
+            for (int s = 1; s <= 10; s++)
+            {
+                int i = Idx(press, s);
+                if (i == presser) continue;
+                float dist = DistTo(dots[i], ballX, ballY);
+                if (dist < secondD) { second = i; secondD = dist; }
+            }
+            if (coverer < 0 || coverer == presser || dots[coverer].team != press || DistTo(dots[coverer], ballX, ballY) > secondD + 3f) coverer = second;
+            if (presser >= 0) PressBall(dots[presser], poss);
+            if (coverer >= 0) CoverLane(dots[coverer], poss);
 
             if (carrier >= 0 && script == null)
             {
                 var c = dots[carrier];
                 if (c.slot != 0)
                 {
+                    // 공을 몰고 앞으로: 곧게 달리지 않고 빈 곳을 찾아 천천히 방향을 틉니다. 수비가 가까우면 느려집니다.
                     float dir = c.team == 0 ? -1f : 1f;
-                    c.ty = Mathf.Clamp(c.y + dir * 12f, 2f, L - 2f);
-                    c.tx = c.x + (34f - c.x) * 0.15f + Mathf.Sin(time * 0.7f + carrier) * 3f;
-                    c.maxSpeed = 7.8f;
+                    float weave = (Noise(c.noise + 11f, time * 0.35f) - 0.5f) * 16f;
+                    c.ty = Mathf.Clamp(c.y + dir * 10f, 2f, L - 2f);
+                    c.tx = Mathf.Clamp(c.x + (34f - c.x) * 0.12f + weave, 3f, W - 3f);
+                    float near = presser >= 0 ? DistTo(dots[presser], c.x, c.y) : 99f;
+                    c.maxSpeed = near < 4f ? JogSpeed : CarrySpeed;
                 }
                 else { c.tx = c.x; c.ty = c.y; }
             }
             if (flying && fKind == KindPass && fRecv >= 0)
             {
                 var r = dots[fRecv];
-                r.tx = fTx; r.ty = fTy; r.maxSpeed = 8f;
+                r.tx = fTx; r.ty = fTy; r.maxSpeed = SprintSpeed;
             }
+            Separate();
             if (script != null) ApplyScriptTargets();
         }
 
-        void PressBall(ReplayDot d) { d.tx = ballX; d.ty = ballY; d.maxSpeed = 8f; }
+        static float DistTo(ReplayDot d, float x, float y) { return Mathf.Sqrt((d.x - x) * (d.x - x) + (d.y - y) * (d.y - y)); }
 
+        // 부드럽게 변하는 0~1 값 (값 노이즈). seed가 다르면 다른 흐름이 나옵니다.
+        static float Noise(float seed, float t)
+        {
+            int i = Mathf.FloorToInt(t);
+            float f = t - i, u = f * f * (3f - 2f * f);
+            return Mathf.Lerp(Hash(seed, i), Hash(seed, i + 1), u);
+        }
+
+        static float Hash(float seed, int i)
+        {
+            float h = Mathf.Sin(i * 127.1f + seed * 311.7f) * 43758.5453f;
+            return h - Mathf.Floor(h);
+        }
+
+        // 공 앞 1.5m(자기 골대 쪽)에 서서 막습니다.
+        void PressBall(ReplayDot d, int possTeam)
+        {
+            float toOwnGoal = d.team == 0 ? 1f : -1f;
+            d.tx = ballX; d.ty = ballY + toOwnGoal * 1.5f; d.maxSpeed = SprintSpeed;
+        }
+
+        // 공을 가진 선수와 가장 가까운 동료 사이에 서서 패스 길을 막습니다.
+        void CoverLane(ReplayDot d, int possTeam)
+        {
+            int mate = -1; float best = float.MaxValue;
+            for (int s = 1; s <= 10; s++)
+            {
+                int i = Idx(possTeam, s);
+                if (i == carrier) continue;
+                float dist = DistTo(dots[i], ballX, ballY);
+                if (dist < best) { best = dist; mate = i; }
+            }
+            if (mate < 0) return;
+            d.tx = Mathf.Lerp(ballX, dots[mate].x, 0.55f);
+            d.ty = Mathf.Lerp(ballY, dots[mate].y, 0.55f);
+            d.maxSpeed = (SprintSpeed + JogSpeed) * 0.5f;
+        }
+
+        // 같은 팀끼리 4m 안으로 겹치면 목표를 서로 밀어냅니다. (공을 가진 선수와 골키퍼는 그대로)
+        void Separate()
+        {
+            const float Min = 4f;
+            for (int t = 0; t < 2; t++)
+                for (int a = 1; a <= 10; a++)
+                    for (int b = a + 1; b <= 10; b++)
+                    {
+                        var p = dots[Idx(t, a)]; var q = dots[Idx(t, b)];
+                        float dx = q.tx - p.tx, dy = q.ty - p.ty;
+                        float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                        if (dist >= Min) continue;
+                        if (dist < 0.01f) { dx = 1f; dy = 0f; dist = 1f; }
+                        float push = (Min - dist) * 0.5f;
+                        bool pFixed = Idx(t, a) == carrier, qFixed = Idx(t, b) == carrier;
+                        if (!pFixed) { p.tx -= dx / dist * push; p.ty -= dy / dist * push; }
+                        if (!qFixed) { q.tx += dx / dist * push; q.ty += dy / dist * push; }
+                    }
+        }
+
+        // 목표 쪽으로 속도를 바꾸되, 가속·감속 한계 안에서만 바꿉니다. 목표에 가까워지면 미리 속도를 줄입니다.
         void MoveDot(ReplayDot d, float dt)
         {
             float dx = d.tx - d.x, dy = d.ty - d.y;
@@ -276,11 +397,17 @@ namespace MyFootballCareer
             float mult = 1f;
             if (YouIdx >= 0 && d == dots[YouIdx])   // 내 선수: 체력·드리블이 속도를, 체력이 후반 피로를 정함
                 mult = stats.speedFactor * (1f - (1f - stats.staminaN) * 0.3f * clockNow / 90f);
-            float speed = Mathf.Min(d.maxSpeed * mult * (boost > 0f ? 1.6f : 1f), dist * 2.5f);
-            float vx = dist > 0.01f ? dx / dist * speed : 0f;
-            float vy = dist > 0.01f ? dy / dist * speed : 0f;
-            float k = 1f - Mathf.Exp(-6f * dt);
-            d.vx += (vx - d.vx) * k; d.vy += (vy - d.vy) * k;
+            float top = d.maxSpeed * mult * (boost > 0f ? 1.3f : 1f);
+            float speed = Mathf.Min(top, Mathf.Sqrt(2f * Decel * 0.6f * dist));   // 멈출 거리를 생각해 미리 감속
+            if (dist < 0.4f) speed = 0f;
+            float wantX = dist > 0.01f ? dx / dist * speed : 0f;
+            float wantY = dist > 0.01f ? dy / dist * speed : 0f;
+            float cx = wantX - d.vx, cy = wantY - d.vy;
+            float change = Mathf.Sqrt(cx * cx + cy * cy);
+            bool slowing = wantX * wantX + wantY * wantY < d.vx * d.vx + d.vy * d.vy;
+            float limit = (slowing ? Decel : Accel) * dt;
+            if (change > limit) { cx *= limit / change; cy *= limit / change; }
+            d.vx += cx; d.vy += cy;
             d.x = Mathf.Clamp(d.x + d.vx * dt, 0f, W);
             d.y = Mathf.Clamp(d.y + d.vy * dt, 0f, L);
         }
