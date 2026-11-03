@@ -12,7 +12,8 @@ namespace MyFootballCareer
         [Header("영구 보너스: 훈련 성장 속도 증가율(%)")]
         public float baseBonusPercent = 10f;                  // 환생할 때마다 기본으로 얻는 보너스
         public float bonusPerSeasonPercent = 5f;              // 끝낸 시즌 1개당
-        public float bonusPerAttributePointPercent = 0.2f;    // 시작 때보다 오른 능력치 1점당
+        [Min(0)] public int maxBonusSeasons = 10;             // 시즌 보너스로 세는 최대 시즌 수 (경기는 바로 진행되므로 시즌만 넘겨 쌓지 못하게)
+        public float bonusPerAttributePointPercent = 0.1f;    // 시작 때보다 오른 능력치 1점당
         public float maxBonusPercent = 300f;                  // 누적 보너스 상한
 
         [Header("초기화 정도")]

@@ -44,7 +44,7 @@ namespace MyFootballCareer
         public static float BonusGain(SaveData save, CareerSettings career, RebirthSettings rs)
         {
             float gain = rs.baseBonusPercent
-                       + rs.bonusPerSeasonPercent * CompletedSeasons(save)
+                       + rs.bonusPerSeasonPercent * Mathf.Min(CompletedSeasons(save), rs.maxBonusSeasons)
                        + rs.bonusPerAttributePointPercent * ProgressPoints(save.player, career);
             float room = Mathf.Max(0f, rs.maxBonusPercent - save.rebirthBonusPercent);
             return Mathf.Clamp(gain, 0f, room);

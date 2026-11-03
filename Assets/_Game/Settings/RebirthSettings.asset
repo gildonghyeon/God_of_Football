@@ -16,6 +16,7 @@ MonoBehaviour:
   requiredBestAttribute: 20
   baseBonusPercent: 10
   bonusPerSeasonPercent: 5
-  bonusPerAttributePointPercent: 0.2
+  maxBonusSeasons: 10
+  bonusPerAttributePointPercent: 0.1
   maxBonusPercent: 300
   keepProgressRatio: 0
