@@ -30,6 +30,7 @@ namespace MyFootballCareer
     {
         public const float Scale = 664f / 752f;   // 훈련장 그림 한 픽셀이 화면에서 차지하는 크기(기준 해상도)
         const float CharScale = 0.85f;            // 선수 그림을 훈련장 그림에 맞춰 줄이는 비율
+        const float BallDiameter = 23f;           // 선수 그림 속 공의 지름(선수 그림 픽셀)
         const float BaseRow = 118f;               // 선수 그림에서 발바닥이 있는 줄
         const float StepPx = 11f;                 // 달리기 그림이 한 장 넘어가는 이동 거리
         const float WalkSpeed = 90f;              // 훈련 구역으로 이동하는 속도 (그림 픽셀/초)
@@ -477,7 +478,9 @@ namespace MyFootballCareer
         {
             SetShown(ball, visible);
             if (!visible) return;
-            float w = ballSprite.rect.width * CharScale, h = ballSprite.rect.height * CharScale;
+            // 공 그림 크기와 상관없이, 선수 그림(드리블 동작) 속 공과 같은 지름으로 그립니다.
+            float aspect = ballSprite.rect.height / ballSprite.rect.width;
+            float w = BallDiameter * CharScale, h = BallDiameter * aspect * CharScale;
             Place(ball.body, ball.x - w / 2f, ball.y - ball.z - h / 2f, w, h);
             float sw = shadowSprite.rect.width * CharScale * 0.5f, sh = shadowSprite.rect.height * CharScale * 0.5f;
             Place(ball.shadow, ball.x - sw / 2f, ball.y - sh * 0.3f, sw, sh);
