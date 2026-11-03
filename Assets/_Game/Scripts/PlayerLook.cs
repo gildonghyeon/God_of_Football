@@ -93,7 +93,9 @@ namespace MyFootballCareer
                 float deg = hh * 360f;
                 hue[i] = deg; sat[i] = s; val[i] = v;
                 bool warm = deg >= 335f || deg <= 40f;
-                hairMask[i] = warm && s >= 0.12f && s <= 0.65f && v >= 0.045f && v <= 0.48f;
+                // 달리기 뒷모습 등의 머리 음영은 보랏빛 갈색(300° 근처)이라 범위를 넓힙니다. 채도가 아주 낮은 것은 윤곽선이 아닐 만큼 밝을 때만.
+                bool hairTone = warm || deg >= 300f;
+                hairMask[i] = hairTone && (s >= 0.12f || (s >= 0.08f && v >= 0.14f)) && s <= 0.65f && v >= 0.045f && v <= 0.48f;
                 skinMask[i] = (deg >= 335f || (deg >= 6f && deg <= 40f)) && s >= 0.10f && s <= 0.72f && v >= 0.55f;
             }
 

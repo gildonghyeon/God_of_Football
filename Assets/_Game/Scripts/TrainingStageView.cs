@@ -32,8 +32,11 @@ namespace MyFootballCareer
         const float CharScale = 0.85f;            // 선수 그림을 훈련장 그림에 맞춰 줄이는 비율
         const float BallDiameter = 23f;           // 선수 그림 속 공의 지름(선수 그림 픽셀)
         const float BaseRow = 118f;               // 선수 그림에서 발바닥이 있는 줄
-        const float StepPx = 11f;                 // 달리기 그림이 한 장 넘어가는 이동 거리
-        const float WalkSpeed = 90f;              // 훈련 구역으로 이동하는 속도 (그림 픽셀/초)
+        const float StepPx = 8f;                  // 달리기 그림이 한 장 넘어가는 이동 거리
+        const float WalkSpeed = 70f;              // 훈련 구역으로 이동하는 속도 (그림 픽셀/초)
+        const float StepBob = 3f;                 // 달릴 때 걸음마다 몸이 들썩이는 높이 (선수 그림 픽셀). 그림자는 땅에 그대로 둡니다.
+        const float StrideStepPx = 9f;            // 보강한 달리기 그림이 한 장 넘어가는 이동 거리
+        const float StrideBob = 2f;               // 보강한 달리기 그림에서 다리가 모일 때 몸이 떠오르는 높이
         const string ArtPath = "Art/Chars/";
 
         class Actor
@@ -109,7 +112,64 @@ namespace MyFootballCareer
                     LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit);
             foreach (string anim in new[] { "jump", "cheer", "fall" })
                 LoadLookStrip("blue_" + anim + "_x", hair, skin, kit);
+            LoadStrideStrips();
             lookHair = hair; lookSkin = skin; lookKit = kit;
+        }
+
+        // ---------- 보강한 달리기 그림 (StrideFrames) ----------
+        Dictionary<string, int[][]> strideMaps;   // 어느 픽셀을 어디서 가져올지: 원래 색 그림으로 한 번만 계산
+        bool strideTried;
+
+        // 방금 만든 외형 그림들로 보강한 달리기 그림(blue_stride_<방향>)을 만듭니다. 그림이 모자라면 원래 달리기 그림을 씁니다.
+        void LoadStrideStrips()
+        {
+            foreach (string view in StrideFrames.Views) strips.Remove("blue_stride_" + view);
+            if (!strideTried) { strideTried = true; strideMaps = StrideFrames.Build(OriginalPixels); }
+            if (strideMaps == null) return;
+            var colored = new Color32[StrideFrames.Sources.Length][];
+            for (int s = 0; s < colored.Length; s++)
+            {
+                colored[s] = LookPixels("blue_" + StrideFrames.Sources[s]);
+                if (colored[s] == null) return;
+            }
+            foreach (string view in StrideFrames.Views)
+            {
+                var frames = strideMaps[view];
+                var list = new Sprite[frames.Length];
+                for (int f = 0; f < frames.Length; f++)
+                {
+                    var tex = new Texture2D(100, 130, TextureFormat.RGBA32, false);
+                    tex.filterMode = FilterMode.Bilinear; tex.wrapMode = TextureWrapMode.Clamp;
+                    tex.SetPixels32(StrideFrames.Apply(frames[f], colored));
+                    tex.Apply(false, true);
+                    list[f] = Sprite.Create(tex, new Rect(0, 0, 100, 130), new Vector2(.5f, .5f), 100f);
+                    lookObjects.Add(tex); lookObjects.Add(list[f]);
+                }
+                strips["blue_stride_" + view] = list;
+            }
+        }
+
+        // 원래 색 그림의 픽셀 (blue_ 뒤 이름)
+        static Color32[] OriginalPixels(string name)
+        {
+            var asset = Resources.Load<TextAsset>(ArtPath + "blue_" + name);
+            if (asset == null) return null;
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Color32[] px = tex.LoadImage(asset.bytes) ? tex.GetPixels32() : null;
+            UnityEngine.Object.Destroy(tex);
+            return px;
+        }
+
+        // 지금 외형으로 만든 그림의 픽셀 (예: blue_run_side_3)
+        Color32[] LookPixels(string name)
+        {
+            int cut = name.LastIndexOf('_');
+            int index;
+            if (cut < 0 || !int.TryParse(name.Substring(cut + 1), out index)) return null;
+            Sprite[] strip;
+            if (!strips.TryGetValue(name.Substring(0, cut), out strip) || index >= strip.Length) return null;
+            var tex = strip[index].texture;
+            return tex.isReadable && tex.width == 100 && tex.height == 130 ? tex.GetPixels32() : null;
         }
 
         // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
@@ -275,7 +335,7 @@ namespace MyFootballCareer
                 StageKey first = drill.player[0];
                 float dx = first.x - player.x, dy = first.y - player.y;
                 float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                float step = WalkSpeed * dt;
+                float step = WalkSpeed * dt * Mathf.Clamp(dist / 24f, 0.4f, 1f);   // 도착할 때는 천천히 멈춥니다.
                 if (dist <= step)
                 {
                     player.x = first.x; player.y = first.y;
@@ -287,6 +347,8 @@ namespace MyFootballCareer
                 {
                     player.x += dx / dist * step; player.y += dy / dist * step;
                     face = DirectionFace(dx, dy, player.face);
+                    // 보강한 달리기 그림이 있으면 달려가고(공은 발 앞을 따라옴), 없으면 다리 움직임이 큰 드리블 그림을 씁니다.
+                    pose = strips.ContainsKey(player.team + "_stride_side") ? "auto" : "carry";
                 }
             }
             else
@@ -314,6 +376,7 @@ namespace MyFootballCareer
                 ball.x = bx; ball.y = by; ball.z = bz;
                 ballVisible = bp != "hide";
             }
+            else if (walking && player.pose == "dribble") ballVisible = false;   // 드리블 그림 안에 공이 그려져 있습니다.
             else if (walking || drill.ballFollows)
             {
                 float ox, oy;
@@ -403,9 +466,11 @@ namespace MyFootballCareer
         }
 
         // ---------- 그림 고르기 ----------
-        Sprite PickFrame(Actor a, out bool flip)
+        // lift: 이 그림을 땅에서 띄워 그릴 높이(선수 그림 픽셀)
+        Sprite PickFrame(Actor a, out bool flip, out float lift)
         {
             flip = a.face == 'l';
+            lift = 0f;
             string view = a.face == 'd' ? "front" : (a.face == 'u' ? "back" : "side");
             string key;
             int index;
@@ -413,9 +478,20 @@ namespace MyFootballCareer
             switch (a.pose)
             {
                 case "walk":
+                    // 보강한 달리기 그림(20장): 다리가 모이는 장(홀수)에서 몸이 떠오릅니다.
+                    strip = Find(a.team + "_stride_" + view);
+                    if (strip != null)
+                    {
+                        index = ((int)(a.walkDist / StrideStepPx)) % strip.Length;
+                        lift = index % 2 == 1 ? StrideBob : 0f;
+                        break;
+                    }
+                    // 달리기 그림은 다리 움직임이 작아서, 한 걸음(그림 2.5장)마다 몸을 살짝 띄워 발을 딛는 느낌을 줍니다.
+                    lift = Mathf.Abs(Mathf.Sin(a.walkDist / (StepPx * 2.5f) * Mathf.PI)) * StepBob;
                     key = a.team + "_run_" + view;
                     strip = Find(key); index = strip == null ? 0 : ((int)(a.walkDist / StepPx)) % strip.Length; break;
                 case "dribble":
+                    lift = Mathf.Abs(Mathf.Sin(a.walkDist / (StepPx * 2.5f) * Mathf.PI)) * StepBob;
                     key = a.team + "_dribble_" + view;
                     strip = Find(key); index = strip == null ? 0 : ((int)(a.walkDist / StepPx)) % strip.Length; break;
                 case "dribbleStill":
@@ -462,13 +538,14 @@ namespace MyFootballCareer
         void RenderCharacter(Actor a)
         {
             bool flip;
-            Sprite sprite = PickFrame(a, out flip);
+            float lift;
+            Sprite sprite = PickFrame(a, out flip, out lift);
             if (sprite == null) { SetShown(a, false); return; }
             SetShown(a, true);
             float w = sprite.rect.width * CharScale, h = sprite.rect.height * CharScale;
             a.bodyImage.sprite = sprite;
             a.body.localScale = new Vector3(flip ? -1f : 1f, 1f, 1f);
-            Place(a.body, a.x - w / 2f, a.y - BaseRow * CharScale, w, h);
+            Place(a.body, a.x - w / 2f, a.y - (BaseRow + lift) * CharScale, w, h);
             float sw = shadowSprite.rect.width * CharScale, sh = shadowSprite.rect.height * CharScale;
             Place(a.shadow, a.x - sw / 2f, a.y - sh * 0.62f, sw, sh);
             a.sortKey = a.y;
