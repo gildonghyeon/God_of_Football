@@ -41,7 +41,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 9;
+        public int version = 10;
         public PlayerData player;
         public string trainingId = "";
         public float trainingCarrySeconds;
@@ -56,6 +56,15 @@ namespace MyFootballCareer
         public int rebirthCount;
         public float rebirthBonusPercent;                                   // 영구 보너스: 훈련 성장 속도 증가율(%)
         public List<CareerSummary> careers = new List<CareerSummary>();    // 환생 전에 마친 커리어 기록
+        public List<TeamDivision> league = new List<TeamDivision>();       // 지금 각 팀이 속한 부 (승강제로 바뀜)
+        public int leagueSeason;                                           // 승강을 마지막으로 반영한 시즌 번호
+    }
+
+    // 한 팀의 소속 부 (1부가 가장 높음)
+    [Serializable] public class TeamDivision
+    {
+        public string teamId;
+        public int division;
     }
 
     // 경기 한 번의 일정과 결과. 결과는 한 번 저장하면 다시 계산하지 않습니다.
@@ -76,6 +85,7 @@ namespace MyFootballCareer
 
     [Serializable] public class LeagueGame
     {
+        public int round;                  // 시즌 일정(fixtures)에서만 씀
         public string homeId, awayId;
         public int homeGoals, awayGoals;
     }
@@ -85,6 +95,11 @@ namespace MyFootballCareer
         public int seasonNumber = 1;
         public int nextMatchIndex;
         public List<MatchRecord> matches = new List<MatchRecord>();
+        public int division;                                            // 이번 시즌 내 팀의 부 (0이면 부가 생기기 전의 시즌)
+        public List<string> teamIds = new List<string>();               // 이번 시즌 같은 부의 팀들
+        public List<LeagueGame> fixtures = new List<LeagueGame>();      // 같은 부 전체 일정 (다른 팀끼리 경기의 대진)
+        public int seed;                                                // 다른 부 결과를 계산할 때 쓰는 값
+        public int nextDivision;                                        // 승강 반영 뒤 내 팀의 부 (0이면 아직)
     }
 
     [Serializable] public class SeasonSummary
@@ -96,6 +111,7 @@ namespace MyFootballCareer
         public string champion;
         public string teamName;     // 그 시즌에 뛴 팀
         public int appearances;     // 출전 경기 수
+        public int division;        // 그 시즌의 부 (0이면 부가 생기기 전)
     }
 
     // 다른 팀이 보낸 이적 제안. 계약·연봉 같은 조건은 이후 이 클래스에 추가합니다.
@@ -105,6 +121,7 @@ namespace MyFootballCareer
         public float teamStrength;
         public float startChance;        // 이 팀에서 선발로 뛸 가능성 (0~1)
         public AttributeKind focus;      // 팀이 중요하게 보는 능력치
+        public int division;             // 다음 시즌 이 팀의 부
     }
 
     [Serializable] public class TransferRecord
@@ -117,7 +134,8 @@ namespace MyFootballCareer
     [Serializable] public class CareerSummary
     {
         public int careerNumber, seasons, goals, assists;
-        public int bestPosition;            // 최고 순위 (0이면 기록 없음)
+        public int bestPosition;            // 최고 순위 (0이면 기록 없음). bestDivision에서의 순위
+        public int bestDivision;            // 가장 높이 올라간 부 (0이면 기록 없음)
         public float bonusGainedPercent;    // 이 환생으로 얻은 영구 보너스(%)
         public string teamName;             // 환생 직전 소속 팀
     }

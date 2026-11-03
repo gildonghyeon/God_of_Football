@@ -68,8 +68,15 @@ namespace MyFootballCareer
             {
                 summary.goals += s.playerGoals;
                 summary.assists += s.playerAssists;
-                if (s.finalPosition > 0 && (summary.bestPosition == 0 || s.finalPosition < summary.bestPosition))
+                if (s.finalPosition <= 0) continue;
+                // 최고 성적: 더 높은 부가 먼저, 같은 부면 더 높은 순위 (부가 생기기 전 시즌은 가장 낮게 봅니다)
+                int div = s.division > 0 ? s.division : int.MaxValue;
+                int bestDiv = summary.bestDivision > 0 ? summary.bestDivision : int.MaxValue;
+                if (summary.bestPosition == 0 || div < bestDiv || (div == bestDiv && s.finalPosition < summary.bestPosition))
+                {
+                    summary.bestDivision = s.division;
                     summary.bestPosition = s.finalPosition;
+                }
             }
             save.careers.Add(summary);
 
@@ -97,6 +104,8 @@ namespace MyFootballCareer
             save.offersSeason = 0;
             save.pendingTeamId = "";
             save.transfers.Clear();
+            save.league.Clear();              // 리그 소속도 처음 상태로
+            save.leagueSeason = 0;
             SeasonSystem.Prepare(save, ms);   // 시작 팀과 첫 시즌을 다시 만듭니다.
 
             return "Rebirth #" + save.rebirthCount + " complete.\nTraining bonus +" + gain.ToString("0.#")
@@ -120,7 +129,12 @@ namespace MyFootballCareer
             {
                 var c = save.careers[i];
                 sb.Append("\nCareer ").Append(c.careerNumber).Append(": ").Append(c.seasons).Append(" seasons");
-                if (c.bestPosition > 0) sb.Append(", best ").Append(c.bestPosition).Append(c.bestPosition == 1 ? "st" : "th");
+                if (c.bestPosition > 0)
+                {
+                    sb.Append(", best ");
+                    if (c.bestDivision > 0) sb.Append("Div ").Append(c.bestDivision).Append(' ');
+                    sb.Append(SeasonSystem.Ordinal(c.bestPosition));
+                }
                 sb.Append(", G").Append(c.goals).Append(" A").Append(c.assists).Append(", +").Append(c.bonusGainedPercent.ToString("0.#")).Append("%");
             }
             return sb.ToString();

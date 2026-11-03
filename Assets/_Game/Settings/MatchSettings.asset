@@ -15,37 +15,320 @@ MonoBehaviour:
   baseGoals: 1.3
   playerImpact: 0.3
   homeAdvantage: 1.1
+  startTeamId: harbor-town
+  promotionSpots: 2
+  divisions:
+  - name: Division 1
+    recommendedRating: 85
+  - name: Division 2
+    recommendedRating: 60
+  - name: Division 3
+    recommendedRating: 39
+  - name: Division 4
+    recommendedRating: 23
+  - name: Division 5
+    recommendedRating: 10
   teams:
-  - id: harbor-town
-    displayName: Harbor Town FC
-    strength: 48
-    requiredRating: 8
+  - id: crownhaven
+    displayName: Crownhaven FC
+    division: 1
+    strength: 90
+    requiredRating: 94
+    focus: 1
+  - id: kingsport-athletic
+    displayName: Kingsport Athletic
+    division: 1
+    strength: 88
+    requiredRating: 92
+    focus: 3
+  - id: silverkeep-united
+    displayName: Silverkeep United
+    division: 1
+    strength: 87
+    requiredRating: 90
+    focus: 0
+  - id: goldmoor-city
+    displayName: Goldmoor City
+    division: 1
+    strength: 85
+    requiredRating: 88
+    focus: 2
+  - id: highspire
+    displayName: Highspire FC
+    division: 1
+    strength: 84
+    requiredRating: 86
+    focus: 4
+  - id: stormwatch-rovers
+    displayName: Stormwatch Rovers
+    division: 1
+    strength: 82
+    requiredRating: 84
+    focus: 1
+  - id: starfall-united
+    displayName: Starfall United
+    division: 1
+    strength: 81
+    requiredRating: 82
+    focus: 3
+  - id: valecrest-city
+    displayName: Valecrest City
+    division: 1
+    strength: 79
+    requiredRating: 80
+    focus: 0
+  - id: thunderpeak
+    displayName: Thunderpeak FC
+    division: 1
+    strength: 78
+    requiredRating: 78
+    focus: 2
+  - id: aldercrown-albion
+    displayName: Aldercrown Albion
+    division: 1
+    strength: 76
+    requiredRating: 76
+    focus: 4
+  - id: northbrook
+    displayName: Northbrook FC
+    division: 2
+    strength: 76
+    requiredRating: 69
+    focus: 2
+  - id: eastmere-united
+    displayName: Eastmere United
+    division: 2
+    strength: 75
+    requiredRating: 67
+    focus: 4
+  - id: westhollow-city
+    displayName: Westhollow City
+    division: 2
+    strength: 73
+    requiredRating: 65
+    focus: 1
+  - id: southvale-rovers
+    displayName: Southvale Rovers
+    division: 2
+    strength: 72
+    requiredRating: 63
+    focus: 3
+  - id: oakridge-athletic
+    displayName: Oakridge Athletic
+    division: 2
+    strength: 70
+    requiredRating: 61
+    focus: 0
+  - id: pinecrest
+    displayName: Pinecrest FC
+    division: 2
+    strength: 69
+    requiredRating: 59
+    focus: 2
+  - id: rivermouth-town
+    displayName: Rivermouth Town
+    division: 2
+    strength: 67
+    requiredRating: 57
+    focus: 4
+  - id: stonegate-united
+    displayName: Stonegate United
+    division: 2
+    strength: 66
+    requiredRating: 55
+    focus: 1
+  - id: copperton
+    displayName: Copperton FC
+    division: 2
+    strength: 64
+    requiredRating: 53
+    focus: 3
+  - id: brightwater
+    displayName: Brightwater SC
+    division: 2
+    strength: 63
+    requiredRating: 51
+    focus: 0
+  - id: ashgrove
+    displayName: Ashgrove FC
+    division: 3
+    strength: 63
+    requiredRating: 47
+    focus: 3
+  - id: elmstead-town
+    displayName: Elmstead Town
+    division: 3
+    strength: 62
+    requiredRating: 45
+    focus: 0
+  - id: foxden-united
+    displayName: Foxden United
+    division: 3
+    strength: 60
+    requiredRating: 43
+    focus: 2
+  - id: glenhollow-rovers
+    displayName: Glenhollow Rovers
+    division: 3
+    strength: 59
+    requiredRating: 42
+    focus: 4
+  - id: hollowmere
+    displayName: Hollowmere FC
+    division: 3
+    strength: 58
+    requiredRating: 40
+    focus: 1
+  - id: lakeshore-athletic
+    displayName: Lakeshore Athletic
+    division: 3
+    strength: 56
+    requiredRating: 38
+    focus: 3
+  - id: millbrook-city
+    displayName: Millbrook City
+    division: 3
+    strength: 55
+    requiredRating: 36
+    focus: 0
+  - id: nettlefield
+    displayName: Nettlefield FC
+    division: 3
+    strength: 54
+    requiredRating: 35
+    focus: 2
+  - id: quarry-hill-united
+    displayName: Quarry Hill United
+    division: 3
+    strength: 52
+    requiredRating: 33
+    focus: 4
+  - id: rosewood-town
+    displayName: Rosewood Town
+    division: 3
+    strength: 51
+    requiredRating: 31
+    focus: 1
+  - id: saltmarsh
+    displayName: Saltmarsh FC
+    division: 4
+    strength: 51
+    requiredRating: 30
+    focus: 4
+  - id: thistledown-united
+    displayName: Thistledown United
+    division: 4
+    strength: 50
+    requiredRating: 28
+    focus: 1
+  - id: underhill-rovers
+    displayName: Underhill Rovers
+    division: 4
+    strength: 49
+    requiredRating: 27
+    focus: 3
+  - id: wheatley-green
+    displayName: Wheatley Green FC
+    division: 4
+    strength: 47
+    requiredRating: 25
+    focus: 0
+  - id: yarrow-town
+    displayName: Yarrow Town
+    division: 4
+    strength: 46
+    requiredRating: 24
+    focus: 2
+  - id: brambleton
+    displayName: Brambleton FC
+    division: 4
+    strength: 45
+    requiredRating: 22
+    focus: 4
+  - id: cinderwick-athletic
+    displayName: Cinderwick Athletic
+    division: 4
+    strength: 44
+    requiredRating: 21
+    focus: 1
+  - id: dunmore-rangers
+    displayName: Dunmore Rangers
+    division: 4
+    strength: 42
+    requiredRating: 19
+    focus: 3
+  - id: fernvale
+    displayName: Fernvale FC
+    division: 4
+    strength: 41
+    requiredRating: 18
+    focus: 0
+  - id: graniteford-united
+    displayName: Graniteford United
+    division: 4
+    strength: 40
+    requiredRating: 16
+    focus: 2
+  - id: red-cedar
+    displayName: Red Cedar United
+    division: 5
+    strength: 40
+    requiredRating: 16
+    focus: 0
+  - id: iron-bay
+    displayName: Iron Bay SC
+    division: 5
+    strength: 39
+    requiredRating: 15
+    focus: 2
+  - id: blue-ridge
+    displayName: Blue Ridge FC
+    division: 5
+    strength: 38
+    requiredRating: 13
+    focus: 4
+  - id: mossbank-united
+    displayName: Mossbank United
+    division: 5
+    strength: 37
+    requiredRating: 12
     focus: 1
   - id: maple-hill
     displayName: Maple Hill FC
-    strength: 46
-    requiredRating: 12
-    focus: 2
-  - id: iron-bay
-    displayName: Iron Bay SC
-    strength: 52
-    requiredRating: 25
+    division: 5
+    strength: 36
+    requiredRating: 11
     focus: 3
-  - id: red-cedar
-    displayName: Red Cedar United
-    strength: 55
-    requiredRating: 35
+  - id: lantern-bay-rovers
+    displayName: Lantern Bay Rovers
+    division: 5
+    strength: 34
+    requiredRating: 9
     focus: 0
-  - id: blue-ridge
-    displayName: Blue Ridge FC
-    strength: 50
-    requiredRating: 18
+  - id: kettle-cove
+    displayName: Kettle Cove FC
+    division: 5
+    strength: 33
+    requiredRating: 8
+    focus: 2
+  - id: hazelbrook
+    displayName: Hazelbrook FC
+    division: 5
+    strength: 32
+    requiredRating: 7
     focus: 4
   - id: sunfield
     displayName: Sunfield Rovers
-    strength: 44
-    requiredRating: 10
+    division: 5
+    strength: 31
+    requiredRating: 5
     focus: 1
+  - id: harbor-town
+    displayName: Harbor Town FC
+    division: 5
+    strength: 30
+    requiredRating: 4
+    focus: 3
   profiles:
   - position: 0
     shooting: 0.4

@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 9;
+        const int CurrentVersion = 10;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -80,6 +80,21 @@ namespace MyFootballCareer
                 data.version = 9;   // 유니폼 색 추가. 기존 선수는 원래 파란 유니폼으로 시작
                 upgraded = true;
             }
+            if (data.version == 9)
+            {
+                // 5부 리그·승강제 추가. 진행 중인 시즌은 원래 6팀으로 끝까지 치르고(division 0), 다음 시즌부터 부에 들어갑니다.
+                data.version = 10;
+                if (data.season != null && data.season.matches != null && data.season.matches.Count > 0)
+                {
+                    var ids = new List<string>();
+                    if (!string.IsNullOrEmpty(data.teamId)) ids.Add(data.teamId);
+                    foreach (var m in data.season.matches)
+                        if (m != null && !string.IsNullOrEmpty(m.opponentId) && !ids.Contains(m.opponentId)) ids.Add(m.opponentId);
+                    data.season.teamIds = ids;
+                    data.season.division = 0;
+                }
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -89,6 +104,9 @@ namespace MyFootballCareer
             if (data.transfers == null) data.transfers = new List<TransferRecord>();
             if (data.pendingTeamId == null) data.pendingTeamId = "";
             if (data.careers == null) data.careers = new List<CareerSummary>();
+            if (data.league == null) data.league = new List<TeamDivision>();
+            if (data.season.teamIds == null) data.season.teamIds = new List<string>();
+            if (data.season.fixtures == null) data.season.fixtures = new List<LeagueGame>();
             if (data.player != null)
             {
                 data.player.hairColor = Mathf.Clamp(data.player.hairColor, 0, PlayerLook.HairCount - 1);

@@ -143,7 +143,7 @@ namespace MyFootballCareer
         void RefreshSeasonUI()
         {
             if (SeasonSystem.EnsureOffers(current, matchSettings, settings)) saves.TrySave(current, out _);
-            ui.SetSeason(SeasonSystem.DescribeNext(current, matchSettings),
+            ui.SetSeason(SeasonSystem.DescribeNext(current, matchSettings, settings),
                          SeasonSystem.DescribeLast(current, matchSettings),
                          SeasonSystem.IsComplete(current),
                          SeasonSystem.DescribeStandings(current, matchSettings),
@@ -246,12 +246,13 @@ namespace MyFootballCareer
 
             if (SeasonSystem.IsComplete(current))
             {
-                string transferMessage = SeasonSystem.StartNextSeason(current, matchSettings);
+                string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings);   // 이적·승강 안내 (바뀐 게 없으면 null)
                 saves.TrySave(current, out string newSeasonMessage);
                 RefreshSeasonUI();
                 ui.SetStatus("New season started. " + newSeasonMessage);
-                if (transferMessage != null)
-                    ui.ShowPopup("TRANSFER COMPLETE", transferMessage + "\nSeason " + current.season.seasonNumber + " starts with your new team.", 150f);
+                if (changeMessage != null)
+                    ui.ShowPopup("NEW SEASON", changeMessage + "\nSeason " + current.season.seasonNumber + " starts in "
+                        + matchSettings.DivisionName(current.season.division) + ".", 170f);
                 return;
             }
 

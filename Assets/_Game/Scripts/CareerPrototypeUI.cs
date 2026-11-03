@@ -510,7 +510,7 @@ namespace MyFootballCareer
         public void SetSeason(string info, string lastResult, bool seasonComplete, string standings, string history)
         {
             if (seasonText == null) return;
-            seasonText.text = info;
+            SetLines(seasonText, info, 2);
             SetLines(resultText, lastResult, 5);
             SetLines(standingsText, standings, 6);
             SetLines(historyText, history, 2);
@@ -533,7 +533,8 @@ namespace MyFootballCareer
             {
                 string id = offer.teamId;
                 bool agreed = id == pendingTeamId;
-                PixelButton((agreed ? "[AGREED] " : "") + offer.teamName + "\nStrength " + offer.teamStrength.ToString("0")
+                PixelButton((agreed ? "[AGREED] " : "") + offer.teamName + (offer.division > 0 ? "  (Div " + offer.division + ")" : "")
+                            + "\nStrength " + offer.teamStrength.ToString("0")
                             + "   Start " + Mathf.RoundToInt(offer.startChance * 100f) + "%   Wants " + offer.focus,
                             () => onChooseOffer(id), body, 92f,
                             agreed ? PixelTheme.AccentFill : PixelTheme.ButtonFill, agreed ? PixelTheme.Accent : PixelTheme.ButtonEdge);
