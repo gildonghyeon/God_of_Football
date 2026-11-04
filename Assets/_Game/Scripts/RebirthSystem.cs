@@ -106,14 +106,15 @@ namespace MyFootballCareer
             save.transfers.Clear();
             save.league.Clear();              // 리그 소속도 처음 상태로
             save.leagueSeason = 0;
-            save.money = 0;                   // 돈과 동시 훈련도 처음부터
-            save.multiTrainingLevel = 0;
-            save.extraTrainingIds.Clear();
+            save.money = 0;                   // 돈과 노력 포인트도 처음부터
+            save.effortPoints = 0f;
+            save.effortRateLevel = 0;         // 증가량 업그레이드도 처음부터 (환생 보너스는 남음)
+            save.lastUpgraded = -1;
             save.weeklyWage = 0;
             SeasonSystem.Prepare(save, ms);   // 시작 팀과 첫 시즌을 다시 만듭니다.
             SeasonSystem.EnsureContract(save, ms, career);
 
-            return "Rebirth #" + save.rebirthCount + " complete.\nTraining bonus +" + gain.ToString("0.#")
+            return "Rebirth #" + save.rebirthCount + " complete.\nEffort point bonus +" + gain.ToString("0.#")
                  + "% (total +" + save.rebirthBonusPercent.ToString("0.#") + "%).\nA new career begins.";
         }
 
@@ -123,7 +124,7 @@ namespace MyFootballCareer
             int seasons = CompletedSeasons(save);
             float best = BestAttribute(save.player);
             var sb = new StringBuilder();
-            sb.Append("Rebirths ").Append(save.rebirthCount).Append("   Training bonus +")
+            sb.Append("Rebirths ").Append(save.rebirthCount).Append("   Effort bonus +")
               .Append(save.rebirthBonusPercent.ToString("0.#")).Append("%\n");
             sb.Append("Seasons completed ").Append(seasons).Append('/').Append(rs.requiredSeasons)
               .Append(seasons >= rs.requiredSeasons ? "  OK" : "").Append('\n');
@@ -153,10 +154,10 @@ namespace MyFootballCareer
             var sb = new StringBuilder();
             sb.Append("Resets: attributes");
             if (rs.keepProgressRatio > 0f) sb.Append(" (keep ").Append(Mathf.RoundToInt(rs.keepProgressRatio * 100f)).Append("% of progress)");
-            sb.Append(", training, season, standings, team, transfers, money, simultaneous training.\n");
+            sb.Append(", training, season, standings, team, transfers, money, effort points, effort rate.\n");
             sb.Append("Keeps: name, position, trait, rebirth count, bonus, career records.\n\n");
             sb.Append("Bonus gained: +").Append(gain.ToString("0.#")).Append("%\n");
-            sb.Append("Training speed: x").Append(TrainingMultiplier(save).ToString("0.00"))
+            sb.Append("Effort point speed: x").Append(TrainingMultiplier(save).ToString("0.00"))
               .Append(" -> x").Append((1f + total / 100f).ToString("0.00"));
             if (gain <= 0f) sb.Append("\n(Bonus is at its limit.)");
             return sb.ToString();

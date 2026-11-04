@@ -1,124 +1,135 @@
-using System.Collections.Generic;
 using UnityEngine;
 namespace MyFootballCareer
 {
-    // 화면과 무관한 훈련 규칙입니다. 오브젝트에 붙이지 않습니다.
-    // 첫 번째 칸(trainingId)은 항상 100% 속도이고, 동시 훈련 레벨에 따라 2·3번째 칸(extraTrainingIds)이 생깁니다.
+    public enum UpgradeOutcome { Success, GreatSuccess, Fail, NotEnough, Max }   // GreatSuccess: +2
+
+    // 강화 한 번의 결과 (결과 창에 보여줄 내용)
+    public class UpgradeResult
+    {
+        public UpgradeOutcome Outcome;
+        public AttributeKind Attribute;
+        public float Before, After, Chance;
+        public long Cost;
+    }
+
+    // 화면과 무관한 노력 포인트 규칙입니다. 오브젝트에 붙이지 않습니다.
+    // 노력 포인트는 매 프레임 흐른 시간만큼 늘어나고(오프라인은 IdleRewardSystem), 강화와 증가량 업그레이드에 씁니다.
     public class TrainingSystem
     {
         readonly SaveData save;
         readonly CareerSettings career;
         readonly TrainingSettings training;
+        readonly System.Random rng;
 
-        public TrainingSystem(SaveData save, CareerSettings career, TrainingSettings training)
+        public TrainingSystem(SaveData save, CareerSettings career, TrainingSettings training, System.Random rng = null)
         {
             this.save = save; this.career = career; this.training = training;
+            this.rng = rng ?? new System.Random(unchecked((int)System.DateTime.UtcNow.Ticks));
         }
 
-        public float Interval => Mathf.Max(1f, training.rewardIntervalSeconds);
-        public float CarrySeconds => save.trainingCarrySeconds;
-        public TrainingDefinition Current => training.Find(save.trainingId);
-        public int SlotCount => 1 + TrainingSettings.ExtraSlotSpeeds(save.multiTrainingLevel).Length;
+        public float Points => save.effortPoints;
+        public float PointsPerSecond => PerSecond(save, training);
+        public int LastUpgraded => save.lastUpgraded;
+        public int RateLevel => save.effortRateLevel;
+        public float FriendlyWait(long nowTicks) { return FriendlyWait(save, training, nowTicks); }
+        public long NextFriendlyReward => FriendlyReward(save, training);
 
-        // 지금 하는 훈련들과 속도 배율 (첫 칸부터)
-        public List<KeyValuePair<TrainingDefinition, float>> Active()
+        public float DivisionMultiplier => training.DivisionMultiplier(save.season != null ? save.season.division : 0);
+
+        // 초당 노력 포인트: 기본 × 증가량 업그레이드 × 리그 보너스(뛰는 부) × 환생 보너스
+        public static float PerSecond(SaveData save, TrainingSettings training)
         {
-            return ActiveTrainings(save, training);
+            float division = training.DivisionMultiplier(save.season != null ? save.season.division : 0);
+            return training.effortPerSecond * training.RateMultiplier(save.effortRateLevel) * division * RebirthSystem.TrainingMultiplier(save);
         }
 
-        public static List<KeyValuePair<TrainingDefinition, float>> ActiveTrainings(SaveData save, TrainingSettings training)
+        // ---------- 친선 경기 보상 ----------
+        // 다섯 능력치 레벨의 평균 (정수로 버림)
+        public static float AverageLevel(PlayerData p)
         {
-            var list = new List<KeyValuePair<TrainingDefinition, float>>();
-            var main = training.Find(save.trainingId);
-            if (main == null) return list;
-            list.Add(new KeyValuePair<TrainingDefinition, float>(main, 1f));
-            var speeds = TrainingSettings.ExtraSlotSpeeds(save.multiTrainingLevel);
-            for (int i = 0; i < speeds.Length && i < save.extraTrainingIds.Count; i++)
-            {
-                var def = training.Find(save.extraTrainingIds[i]);
-                if (def != null) list.Add(new KeyValuePair<TrainingDefinition, float>(def, speeds[i]));
-            }
-            return list;
+            if (p == null) return 0f;
+            return Mathf.Floor((Mathf.Floor(p.shooting) + Mathf.Floor(p.passing) + Mathf.Floor(p.dribbling)
+                              + Mathf.Floor(p.defending) + Mathf.Floor(p.stamina)) / 5f);
         }
 
-        // 저장된 훈련 ID가 설정에 없거나 칸이 모자라면 정리합니다.
-        public void ValidateSelection()
+        // 친선 경기 보상량: 평균 능력치 레벨에서 강화를 friendlyRewardUpgrades번 할 수 있는 노력 포인트
+        public static long FriendlyReward(SaveData save, TrainingSettings training)
         {
-            if (!string.IsNullOrEmpty(save.trainingId) && training.Find(save.trainingId) == null)
-            {
-                save.trainingId = "";
-                save.trainingCarrySeconds = 0f;
-            }
-            save.extraTrainingIds.RemoveAll(id => training.Find(id) == null || id == save.trainingId);
-            int extraSlots = SlotCount - 1;
-            if (string.IsNullOrEmpty(save.trainingId) && save.extraTrainingIds.Count > 0)
-            {
-                save.trainingId = save.extraTrainingIds[0];
-                save.extraTrainingIds.RemoveAt(0);
-            }
-            while (save.extraTrainingIds.Count > extraSlots) save.extraTrainingIds.RemoveAt(save.extraTrainingIds.Count - 1);
+            return (long)Mathf.Round(training.friendlyRewardUpgrades * training.UpgradeCost(AverageLevel(save.player)));
         }
 
-        // 매 프레임 호출. 한 번에 최대 1초까지만 인정해 과도한 성장을 막습니다.
+        // 다음 친선 경기까지 남은 시간(초). 0이면 바로 할 수 있음
+        public static float FriendlyWait(SaveData save, TrainingSettings training, long nowTicks)
+        {
+            if (save.lastFriendlyTicks <= 0 || training.friendlyCooldownMinutes <= 0f) return 0f;
+            double since = (nowTicks - save.lastFriendlyTicks) / (double)System.TimeSpan.TicksPerSecond;
+            if (since < 0) return training.friendlyCooldownMinutes * 60f;   // 시계를 되돌렸으면 다시 기다리게 (시계를 돌려 모으지 못하게)
+            return Mathf.Max(0f, training.friendlyCooldownMinutes * 60f - (float)since);
+        }
+
+        // 친선 경기를 한 번 치렀을 때 부름. friendlyRewardEvery번째 경기면 보상을 주고 그 양을, 아니면 0을 돌려줍니다.
+        public static long CountFriendly(SaveData save, TrainingSettings training, long nowTicks)
+        {
+            save.lastFriendlyTicks = nowTicks;
+            save.friendliesPlayed++;
+            save.friendlyCount++;
+            if (save.friendlyCount < Mathf.Max(1, training.friendlyRewardEvery)) return 0;
+            save.friendlyCount = 0;
+            long reward = FriendlyReward(save, training);
+            save.effortPoints += reward;
+            return reward;
+        }
+
+        public static void Earn(SaveData save, TrainingSettings training, float seconds)
+        {
+            save.effortPoints += PerSecond(save, training) * Mathf.Max(0f, seconds);
+        }
+
+        // 매 프레임 호출. 한 프레임에 최대 1초까지만 인정해 과도한 적립을 막습니다.
         public void Tick(float deltaSeconds)
         {
-            if (Current == null || save.player == null) return;
-            save.trainingCarrySeconds += Mathf.Clamp(deltaSeconds, 0f, 1f);
-            while (save.trainingCarrySeconds >= Interval)
+            if (save.player == null) return;
+            Earn(save, training, Mathf.Clamp(deltaSeconds, 0f, 1f));
+        }
+
+        // ---------- 능력치 강화 ----------
+        public long Cost(AttributeKind kind) { return training.UpgradeCost(save.player.Get(kind)); }
+        public float Chance(AttributeKind kind) { return training.SuccessChance(save.player.Get(kind), career.attributeCap); }
+        public bool IsMax(AttributeKind kind) { return save.player.Get(kind) >= career.attributeCap; }
+        public bool CanAfford(AttributeKind kind) { return !IsMax(kind) && save.effortPoints >= Cost(kind); }
+
+        // 강화에 도전합니다. 비용은 성공·실패와 상관없이 씁니다.
+        // 성공 확률 중 doubleShare 몫(기본 절반)은 +2, 나머지는 +1입니다. (예전의 소수점 능력치는 정수로 버린 뒤 더함, 최대치는 넘지 않음)
+        public UpgradeResult TryUpgrade(AttributeKind kind)
+        {
+            var r = new UpgradeResult { Attribute = kind, Before = save.player.Get(kind), Cost = Cost(kind), Chance = Chance(kind) };
+            r.After = r.Before;
+            if (IsMax(kind)) { r.Outcome = UpgradeOutcome.Max; return r; }
+            if (save.effortPoints < r.Cost) { r.Outcome = UpgradeOutcome.NotEnough; return r; }
+            save.effortPoints -= r.Cost;
+            save.lastUpgraded = (int)kind;
+            double roll = rng.NextDouble();
+            if (roll < r.Chance)
             {
-                save.trainingCarrySeconds -= Interval;
-                GrowAll(Interval);
+                bool great = roll < r.Chance * training.doubleShare;
+                r.After = Mathf.Min(career.attributeCap, Mathf.Floor(r.Before) + (great ? 2f : 1f));
+                save.player.Set(kind, r.After);
+                r.Outcome = great ? UpgradeOutcome.GreatSuccess : UpgradeOutcome.Success;
             }
+            else r.Outcome = UpgradeOutcome.Fail;
+            return r;
         }
 
-        public bool IsActive(string id) { return id == save.trainingId || save.extraTrainingIds.Contains(id); }
+        // ---------- 노력 포인트 증가량 ----------
+        public long RateCost => training.RateCost(save.effortRateLevel);
 
-        // 훈련 버튼: 하고 있는 훈련이면 빼고, 빈 칸이 있으면 넣고, 칸이 다 찼으면 마지막 칸을 바꿉니다.
-        // 바꾸기 전에 지금까지 쌓인 시간을 먼저 정산합니다.
-        public void Toggle(string id)
+        public bool BuyRate()
         {
-            if (training.Find(id) == null) return;
-            Settle();
-            if (IsActive(id))
-            {
-                if (save.trainingId == id)
-                {
-                    save.trainingId = save.extraTrainingIds.Count > 0 ? save.extraTrainingIds[0] : "";
-                    if (save.extraTrainingIds.Count > 0) save.extraTrainingIds.RemoveAt(0);
-                }
-                else save.extraTrainingIds.Remove(id);
-                return;
-            }
-            int extraSlots = SlotCount - 1;
-            if (string.IsNullOrEmpty(save.trainingId)) save.trainingId = id;
-            else if (save.extraTrainingIds.Count < extraSlots) save.extraTrainingIds.Add(id);
-            else if (extraSlots == 0) save.trainingId = id;
-            else save.extraTrainingIds[save.extraTrainingIds.Count - 1] = id;
-        }
-
-        public void Stop()
-        {
-            Settle();
-            save.trainingId = "";
-            save.extraTrainingIds.Clear();
-        }
-
-        void Settle()
-        {
-            if (Current != null && save.player != null && save.trainingCarrySeconds > 0f)
-                GrowAll(save.trainingCarrySeconds);
-            save.trainingCarrySeconds = 0f;
-        }
-
-        void GrowAll(float seconds)
-        {
-            foreach (var slot in Active()) Grow(save, career, slot.Key, seconds * slot.Value);
-        }
-
-        public static void Grow(SaveData save, CareerSettings career, TrainingDefinition def, float seconds)
-        {
-            float value = save.player.Get(def.targetAttribute) + def.growthPerHour * seconds / 3600f * RebirthSystem.TrainingMultiplier(save);
-            save.player.Set(def.targetAttribute, Mathf.Min(career.attributeCap, value));
+            long cost = RateCost;
+            if (cost < 0 || save.effortPoints < cost) return false;
+            save.effortPoints -= cost;
+            save.effortRateLevel++;
+            return true;
         }
     }
 }

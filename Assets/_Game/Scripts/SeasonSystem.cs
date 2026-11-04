@@ -147,6 +147,24 @@ namespace MyFootballCareer
             return match;
         }
 
+        // 친선 경기: 같은 부의 다른 팀과 한 경기. 시즌 일정·순위에는 들어가지 않고 주급은 똑같이 받습니다.
+        // round가 0인 기록이 친선 경기입니다. 상대 팀이 없으면 null.
+        public static MatchRecord PlayFriendly(SaveData save, MatchSettings ms, CareerSettings career, System.Random rng)
+        {
+            var own = ms.FindTeam(save.teamId);
+            if (own == null) return null;
+            var pool = new List<TeamDefinition>();
+            foreach (var t in SeasonTeams(save, ms)) if (t.id != save.teamId) pool.Add(t);
+            if (pool.Count == 0) return null;
+            var opp = pool[rng.Next(pool.Count)];
+            var match = new MatchRecord { round = 0, opponentId = opp.id, opponentName = opp.displayName, home = rng.Next(2) == 0, seed = rng.Next() };
+            MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap);
+            EnsureContract(save, ms, career);
+            match.wage = save.weeklyWage;            // 친선 경기도 1주치
+            save.money += save.weeklyWage;
+            return match;
+        }
+
         // 같은 라운드에 열린 다른 팀끼리의 경기 결과를 만듭니다.
         static void GenerateOthers(MatchRecord match, SaveData save, MatchSettings ms)
         {
@@ -529,7 +547,7 @@ namespace MyFootballCareer
             string outcome = m.goalsFor > m.goalsAgainst ? "WIN" : (m.goalsFor < m.goalsAgainst ? "LOSS" : "DRAW");
             int passPercent = m.passesAttempted > 0 ? Mathf.RoundToInt(100f * m.passesCompleted / m.passesAttempted) : 0;
             var sb = new StringBuilder();
-            sb.Append("Round ").Append(m.round).Append(": ").Append(TeamName(save, ms)).Append(' ')
+            sb.Append(m.round > 0 ? "Round " + m.round : "Friendly").Append(": ").Append(TeamName(save, ms)).Append(' ')
               .Append(m.goalsFor).Append(" - ").Append(m.goalsAgainst).Append(' ').Append(m.opponentName)
               .Append("  (").Append(outcome).Append(")\n");
             if (m.wage > 0) sb.Append("Wage +").Append(Money(m.wage)).Append('\n');

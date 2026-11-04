@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 11;
+        const int CurrentVersion = 15;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -100,6 +100,43 @@ namespace MyFootballCareer
                 data.version = 11;   // 돈·주급·동시 훈련 추가. 주급은 불러올 때 지금 팀과 능력치로 정해집니다.
                 upgraded = true;
             }
+            if (data.version == 11)
+            {
+                // 훈련 → 노력 포인트로 바뀜. 동시 훈련은 없어져서 산 레벨만큼 돈을 돌려줍니다.
+                data.version = 12;
+                long[] paid = { 30000, 150000, 500000, 1500000 };
+                for (int i = 0; i < data.multiTrainingLevel && i < paid.Length; i++) data.money += paid[i];
+                data.multiTrainingLevel = 0;
+                if (data.extraTrainingIds != null) data.extraTrainingIds.Clear();
+                data.trainingId = "";
+                data.trainingCarrySeconds = 0f;
+                data.effortPoints = 0f;
+                data.lastUpgraded = -1;
+                upgraded = true;
+            }
+            if (data.version == 12)
+            {
+                // 노력 포인트 단위가 커짐(시간당 7 → 초당 1, 강화 비용 약 230배). 모아 둔 포인트도 같은 비율로 바꿉니다.
+                data.version = 13;
+                data.effortPoints *= 230f;
+                data.effortRateLevel = 0;
+                data.trainingCarrySeconds = 0f;
+                upgraded = true;
+            }
+            if (data.version == 13)
+            {
+                data.version = 14;   // 리그 보너스·승리 보너스 추가 (바로 받을 수 있는 상태로 시작)
+                data.lastWinBonusTicks = 0;
+                upgraded = true;
+            }
+            if (data.version == 14)
+            {
+                data.version = 15;   // 승리 보너스 → 친선 경기 보상 (바로 친선 경기를 할 수 있는 상태로 시작)
+                data.friendlyCount = 0;
+                data.friendliesPlayed = 0;
+                data.lastFriendlyTicks = 0;
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -113,6 +150,9 @@ namespace MyFootballCareer
             if (data.extraTrainingIds == null) data.extraTrainingIds = new List<string>();
             if (data.money < 0) data.money = 0;
             if (data.multiTrainingLevel < 0) data.multiTrainingLevel = 0;
+            if (float.IsNaN(data.effortPoints) || float.IsInfinity(data.effortPoints) || data.effortPoints < 0f) data.effortPoints = 0f;
+            if (data.lastUpgraded < -1 || data.lastUpgraded > 4) data.lastUpgraded = -1;
+            if (data.effortRateLevel < 0) data.effortRateLevel = 0;
             if (data.season.teamIds == null) data.season.teamIds = new List<string>();
             if (data.season.fixtures == null) data.season.fixtures = new List<LeagueGame>();
             if (data.player != null)

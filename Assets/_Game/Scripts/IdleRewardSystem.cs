@@ -1,19 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 namespace MyFootballCareer
 {
-    // 오프라인 동안 오른 능력치 하나
-    public class OfflineGain
-    {
-        public string TrainingName;
-        public AttributeKind Attribute;
-        public float Speed;           // 이 훈련 칸의 속도 배율
-        public float Before, After;
-        public float Gain => After - Before;
-    }
-
     public class OfflineResult
     {
         public bool Granted;          // 보상이 실제로 지급되었는가
@@ -22,10 +11,11 @@ namespace MyFootballCareer
         public float AwaySeconds;     // 실제로 자리를 비운 시간
         public float CreditedSeconds; // 보상으로 인정한 시간
         public float CapSeconds;      // 인정 시간 상한
-        public List<OfflineGain> Gains = new List<OfflineGain>();
+        public float Points;          // 받은 노력 포인트
+        public float Total;           // 받은 뒤 가진 노력 포인트
     }
 
-    // 앱을 꺼둔 시간(또는 백그라운드에 있던 시간)만큼 지금 하는 훈련(동시 훈련 포함)의 성장을 반영합니다.
+    // 앱을 꺼둔 시간(또는 백그라운드에 있던 시간)만큼 노력 포인트를 줍니다.
     public static class IdleRewardSystem
     {
         public static OfflineResult Apply(SaveData save, CareerSettings career, TrainingSettings training, long nowTicks)
@@ -40,28 +30,20 @@ namespace MyFootballCareer
             double away = (nowTicks - last) / (double)TimeSpan.TicksPerSecond;
             if (away < 0) { result.ClockRewound = true; return result; }
             result.AwaySeconds = (float)away;
-
-            var active = TrainingSystem.ActiveTrainings(save, training);
-            if (active.Count == 0) return result;
             if (away < Mathf.Max(0f, training.minOfflineSeconds)) return result;
 
             float cap = Mathf.Max(0f, training.offlineCapHours) * 3600f;
             float credited = Mathf.Min((float)away, cap);
             if (credited <= 0f) return result;
 
-            foreach (var slot in active)
-            {
-                var gain = new OfflineGain { TrainingName = slot.Key.displayName, Attribute = slot.Key.targetAttribute, Speed = slot.Value };
-                gain.Before = save.player.Get(slot.Key.targetAttribute);
-                TrainingSystem.Grow(save, career, slot.Key, credited * slot.Value);
-                gain.After = save.player.Get(slot.Key.targetAttribute);
-                result.Gains.Add(gain);
-            }
-
+            float before = save.effortPoints;
+            TrainingSystem.Earn(save, training, credited);
             result.Granted = true;
             result.Capped = away > cap;
             result.CreditedSeconds = credited;
             result.CapSeconds = cap;
+            result.Points = save.effortPoints - before;
+            result.Total = save.effortPoints;
             return result;
         }
 
@@ -71,16 +53,8 @@ namespace MyFootballCareer
             sb.Append("Away: ").Append(FormatDuration(r.AwaySeconds)).Append('\n');
             sb.Append("Counted: ").Append(FormatDuration(r.CreditedSeconds));
             if (r.Capped) sb.Append(" (cap ").Append(FormatDuration(r.CapSeconds)).Append(')');
-            foreach (var g in r.Gains)
-            {
-                sb.Append('\n').Append(g.TrainingName);
-                if (g.Speed < 0.999f) sb.Append(" (").Append(Mathf.RoundToInt(g.Speed * 100f)).Append("%)");
-                sb.Append(": ");
-                if (g.Gain > 0.0001f)
-                    sb.Append(g.Before.ToString("0.00")).Append(" -> ").Append(g.After.ToString("0.00"))
-                      .Append("  (+").Append(g.Gain.ToString("0.00")).Append(')');
-                else sb.Append("already at the maximum");
-            }
+            sb.Append("\nEffort points +").Append(SeasonSystem.Money((long)r.Points)).Append("  (now ").Append(SeasonSystem.Money((long)r.Total)).Append(')');
+            sb.Append("\nTry upgrades on the HOME tab.");
             return sb.ToString();
         }
 

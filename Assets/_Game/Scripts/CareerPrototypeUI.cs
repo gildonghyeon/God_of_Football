@@ -19,7 +19,6 @@ namespace MyFootballCareer
         public static readonly Color QuietFill = new Color(.16f, .21f, .31f, 1);
         public static readonly Color QuietEdge = new Color(.33f, .40f, .55f, 1);
         public static readonly Color AccentFill = new Color(.48f, .38f, .10f, 1);
-        public static readonly Color SecondFill = new Color(.12f, .38f, .45f, 1);   // 함께 하는 훈련(2·3번째 칸)
         public static readonly Color Accent = new Color(.98f, .80f, .28f, 1);
         public static readonly Color RebirthFill = new Color(.42f, .24f, .52f, 1);
         public static readonly Color RebirthEdge = new Color(.78f, .55f, .90f, 1);
@@ -42,11 +41,13 @@ namespace MyFootballCareer
         CareerSettings settings;
         TrainingSettings trainingSettings;
         Action<string, Position, Trait, int, int, int> onCreate;
-        Action onSave, onStopTraining, onPlayMatch, onStay, onRebirth;
-        Action<string> onSelectTraining, onChooseOffer;
+        Action onSave, onPlayMatch, onStay, onRebirth;
+        Action<string> onChooseOffer;
+        Action<AttributeKind> onUpgrade;
         public Action<int, int, int> OnApplyLook;   // 외형(머리색, 피부색, 유니폼)을 바꾸면 부르는 동작
+        public Action OnBuyEffortRate;              // 노력 포인트 증가량을 올리는 동작
+        public Action OnPlayFriendly;               // 친선 경기를 하는 동작
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
-        public Action OnBuyMultiTraining;   // 동시 훈련 레벨을 사는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
         RectTransform safeRoot, viewport, content, tabBar, statusStrip;
@@ -65,13 +66,13 @@ namespace MyFootballCareer
         RectTransform[] pages = new RectTransform[3];
         Image[] tabFills = new Image[3];
         Text[] statTexts = new Text[5];
+        Button[] upgradeButtons = new Button[5];
+        Button rateButton;
         RectTransform[] statBars = new RectTransform[5];
-        Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText;
-        Text moneyText, multiText, buyLabel;
-        Image buyFill;
-        RectTransform barFill, transferRoot;
-        List<string> trainingIds = new List<string>();   // 훈련 버튼과 같은 순서의 훈련 ID
-        List<Image> trainingFills = new List<Image>();   // 훈련 버튼 바탕 (선택된 훈련 강조용)
+        Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText, friendlyText;
+        Button friendlyButton;
+        Text moneyText;
+        RectTransform transferRoot;
         Image rebirthFill;
         TrainingStageView stage;   // 훈련장 장면
         MatchReplayView matchView; // 경기 영상 화면
@@ -80,7 +81,7 @@ namespace MyFootballCareer
 
         public void Initialize(Font customFont, CareerSettings config, TrainingSettings training,
             Action<string, Position, Trait, int, int, int> create, Action save,
-            Action<string> selectTraining, Action stopTraining, Action playMatch,
+            Action<AttributeKind> upgrade, Action playMatch,
             Action<string> chooseOffer, Action stay, Action rebirth)
         {
             font = customFont != null ? customFont : Resources.Load<Font>("Fonts/Galmuri11");
@@ -89,7 +90,7 @@ namespace MyFootballCareer
             stage = new TrainingStageView();
             matchView = new MatchReplayView(font);
             onCreate = create; onSave = save;
-            onSelectTraining = selectTraining; onStopTraining = stopTraining; onPlayMatch = playMatch;
+            onUpgrade = upgrade; onPlayMatch = playMatch;
             onChooseOffer = chooseOffer; onStay = stay; onRebirth = rebirth;
 
             var canvasGO = new GameObject("CareerCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -267,18 +268,24 @@ namespace MyFootballCareer
         }
 
         // 능력치 한 줄: 왼쪽에 글자, 오른쪽에 막대
-        RectTransform MakeStatRow(out Text label)
+        // 능력치 한 줄: 왼쪽에 글자, 가운데 막대, 오른쪽에 노력 포인트로 +1 하는 버튼
+        RectTransform MakeStatRow(AttributeKind kind, out Text label, out Button upgrade)
         {
             var row = NewRect("StatRow", Parent);
             var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 12; h.childAlignment = TextAnchor.MiddleLeft;
+            h.spacing = 10; h.childAlignment = TextAnchor.MiddleLeft;
             h.childControlWidth = true; h.childControlHeight = true;
             h.childForceExpandWidth = false; h.childForceExpandHeight = false;
-            Height(row.gameObject, 36);
+            Height(row.gameObject, 52);
             label = TextNode("", row, 22);
             var le = label.gameObject.AddComponent<LayoutElement>();
-            le.preferredWidth = 330; le.preferredHeight = 30;
-            return MakeBar(row, 20, true);
+            le.preferredWidth = 190; le.preferredHeight = 30;
+            var bar = MakeBar(row, 20, true);
+            upgrade = PixelButton("+1", () => onUpgrade(kind), row, 0f);
+            upgrade.GetComponentInChildren<Text>().fontSize = 20;
+            var ble = upgrade.gameObject.GetComponent<LayoutElement>() ?? upgrade.gameObject.AddComponent<LayoutElement>();
+            ble.preferredWidth = 220; ble.minWidth = 220; ble.preferredHeight = 48; ble.flexibleWidth = 0;
+            return bar;
         }
 
         static void SetFill(RectTransform fill, float fraction)
@@ -322,10 +329,12 @@ namespace MyFootballCareer
             Array.Clear(pages, 0, pages.Length);
             Array.Clear(statTexts, 0, statTexts.Length);
             Array.Clear(statBars, 0, statBars.Length);
-            trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = null;
-            moneyText = multiText = buyLabel = null; buyFill = null;
-            barFill = null; transferRoot = null; rebirthFill = null;
-            trainingIds.Clear(); trainingFills.Clear();
+            Array.Clear(upgradeButtons, 0, upgradeButtons.Length);
+            rateButton = null;
+            trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = null;
+            friendlyButton = null;
+            moneyText = null;
+            transferRoot = null; rebirthFill = null;
             SetChrome(false);
             DestroyPreview();
         }
@@ -397,28 +406,13 @@ namespace MyFootballCareer
             var infoText = TextNode(p.position + " / " + p.trait, nameRow, 22);
             infoText.alignment = TextAnchor.MiddleRight; infoText.color = PixelTheme.TextDim;
             infoText.gameObject.AddComponent<LayoutElement>().preferredWidth = 300;
-            for (int i = 0; i < statTexts.Length; i++) statBars[i] = MakeStatRow(out statTexts[i]);
-            UpdateStats(p);
-
-            currentParent = Section(pages[0], "", true);
+            // 노력 포인트: 방치하면 쌓이고, 아래 능력치의 +1 버튼으로 씁니다.
             trainingText = Label("", 22, 64);
-            barFill = MakeBar(Parent, 16, false);
-            var grid = NewRect("TrainingGrid", Parent);
-            var gridLayout = grid.gameObject.AddComponent<GridLayoutGroup>();
-            gridLayout.cellSize = new Vector2(200, 68); gridLayout.spacing = new Vector2(8, 8);
-            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount; gridLayout.constraintCount = 3;
-            gridLayout.childAlignment = TextAnchor.UpperCenter;
-            foreach (var def in trainingSettings.trainings)
-            {
-                if (def == null) continue;
-                string id = def.id;
-                var trainButton = PixelButton(def.displayName + "\n+" + (def.growthPerHour * TrainingMultiplier).ToString("0.#") + "/h",
-                                              () => onSelectTraining(id), grid, 0f);
-                trainButton.GetComponentInChildren<Text>().fontSize = 22;
-                trainingIds.Add(id); trainingFills.Add((Image)trainButton.targetGraphic);
-            }
-            var stopButton = PixelButton("STOP", () => onStopTraining(), grid, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            stopButton.GetComponentInChildren<Text>().fontSize = 22;
+            var rate = PixelButton("EFFORT RATE", () => { if (OnBuyEffortRate != null) OnBuyEffortRate(); }, Parent, 56f);
+            rateButton = rate; rate.GetComponentInChildren<Text>().fontSize = 20;
+            for (int i = 0; i < statTexts.Length; i++)
+                statBars[i] = MakeStatRow((AttributeKind)i, out statTexts[i], out upgradeButtons[i]);
+            UpdateStats(p);
 
             currentParent = Section(pages[0], "", true);
             var systemRow = NewRect("SystemRow", Parent);
@@ -438,15 +432,15 @@ namespace MyFootballCareer
             var play = PixelButton("PLAY NEXT MATCH", () => onPlayMatch(), Parent, 80f);
             playLabel = play.GetComponentInChildren<Text>();
             resultText = Label("", 22, 130);
+            currentParent = Section(pages[1], "FRIENDLY", true);
+            friendlyText = Label("", 22, 64);
+            friendlyButton = PixelButton("PLAY FRIENDLY", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
             currentParent = Section(pages[1], "STANDINGS", true);
             standingsText = Label("", 22, 200);
 
             // CAREER: 이적 제안, 이력, 환생
             currentParent = Section(pages[2], "MONEY", true);
             moneyText = Label("", 22, 64);
-            multiText = Label("", 22, 64);
-            var buy = PixelButton("UPGRADE", () => { if (OnBuyMultiTraining != null) OnBuyMultiTraining(); }, Parent, 72f);
-            buyLabel = buy.GetComponentInChildren<Text>(); buyFill = (Image)buy.targetGraphic;
             transferRoot = NewRect("TransferRoot", pages[2]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
             currentParent = Section(pages[2], "HISTORY", true);
@@ -481,8 +475,7 @@ namespace MyFootballCareer
                 if (statTexts[i] == null) continue;
                 var kind = (AttributeKind)i;
                 float value = p.Get(kind);
-                statTexts[i].text = kind + "   " + value.ToString("0.00") + " / " + settings.attributeCap.ToString("0.#")
-                    + (value >= settings.attributeCap ? "  MAX" : "");
+                statTexts[i].text = kind + "  " + Mathf.Floor(value).ToString("0") + (value >= settings.attributeCap ? "  MAX" : "");
                 SetFill(statBars[i], value / cap);
             }
         }
@@ -492,34 +485,37 @@ namespace MyFootballCareer
         {
             if (trainingText == null || p == null) return;
             UpdateStats(p);
-            var def = training.Current;
+            // 훈련장: 마지막으로 강화한 능력치의 훈련 장면 (아직 없으면 대기)
             if (stage != null && stage.Available)
-                stage.Play(def == null ? "idle" : TrainingStageView.AnimationFor(def.targetAttribute));
-            var active = training.Active();
-            for (int i = 0; i < trainingFills.Count; i++)   // 지금 하는 훈련 버튼을 강조 (첫 칸 금색, 함께 하는 칸 청록색)
+                stage.Play(training.LastUpgraded < 0 ? "idle" : TrainingStageView.AnimationFor((AttributeKind)training.LastUpgraded));
+            for (int i = 0; i < upgradeButtons.Length; i++)
             {
-                if (trainingFills[i] == null) continue;
-                Color fill = PixelTheme.ButtonFill;
-                for (int k = 0; k < active.Count; k++)
-                    if (active[k].Key.id == trainingIds[i]) fill = k == 0 ? PixelTheme.AccentFill : PixelTheme.SecondFill;
-                trainingFills[i].color = fill;
+                var b = upgradeButtons[i];
+                if (b == null) continue;
+                var kind = (AttributeKind)i;
+                bool max = training.IsMax(kind);
+                b.GetComponentInChildren<Text>().text = max ? "MAX"
+                    : SeasonSystem.Money(training.Cost(kind)) + "  " + Mathf.RoundToInt(training.Chance(kind) * 100f) + "%";
+                ((Image)b.targetGraphic).color = training.CanAfford(kind) ? PixelTheme.ButtonFill : PixelTheme.QuietFill;
             }
-            if (def == null)
+            trainingText.text = "Effort points " + SeasonSystem.Money((long)training.Points)
+                + "   +" + training.PointsPerSecond.ToString("0.00") + "/s  (league x" + training.DivisionMultiplier.ToString("0.##") + ")"
+                + "\nTap an attribute button to try an upgrade (cost / success chance).";
+            if (rateButton != null)
             {
-                trainingText.text = "Now: none\nPick a training below." + (training.SlotCount > 1 ? "  (" + training.SlotCount + " at once)" : "");
-                SetFill(barFill, 0f);
-                return;
+                long rc = training.RateCost;
+                rateButton.GetComponentInChildren<Text>().text = "EFFORT RATE Lv " + training.RateLevel
+                    + (rc < 0 ? "  (MAX)" : "   UPGRADE " + SeasonSystem.Money(rc));
+                ((Image)rateButton.targetGraphic).color = rc >= 0 && training.Points >= rc ? PixelTheme.AccentFill : PixelTheme.QuietFill;
             }
-            float remain = Mathf.Max(0f, training.Interval - training.CarrySeconds);
-            var now = new System.Text.StringBuilder("Now: ");
-            for (int k = 0; k < active.Count; k++)
-            {
-                if (k > 0) now.Append(" + ");
-                now.Append(active[k].Key.displayName).Append(" +").Append((active[k].Key.growthPerHour * TrainingMultiplier * active[k].Value).ToString("0.#")).Append("/h");
-            }
-            if (active.Count < training.SlotCount) now.Append("  (tap another to add)");
-            trainingText.text = now + "\nNext reward in " + remain.ToString("0") + "s";
-            SetFill(barFill, training.CarrySeconds / training.Interval);
+        }
+
+        // 친선 경기 안내와 버튼 색 (할 수 있을 때만 강조)
+        public void SetFriendly(string info, bool ready)
+        {
+            if (friendlyText == null) return;
+            friendlyText.text = info;
+            if (friendlyButton != null) ((Image)friendlyButton.targetGraphic).color = ready ? PixelTheme.AccentFill : PixelTheme.QuietFill;
         }
 
         static void SetLines(Text t, string text, int minLines)
@@ -566,14 +562,10 @@ namespace MyFootballCareer
         }
 
         // 돈, 주급, 동시 훈련 레벨과 다음 레벨 가격 (price < 0이면 최고 레벨)
-        public void SetMoney(long money, int weeklyWage, int level, int maxLevel, long price, string levelInfo)
+        public void SetMoney(long money, int weeklyWage)
         {
             if (moneyText == null) return;
             moneyText.text = "Money " + SeasonSystem.Money(money) + "\nWage " + SeasonSystem.Money(weeklyWage) + " per match (1 week)";
-            multiText.text = "Simultaneous training Lv " + level + "/" + maxLevel + "\n" + levelInfo;
-            bool canBuy = price >= 0 && money >= price;
-            buyLabel.text = price < 0 ? "MAX LEVEL" : "UPGRADE  (" + SeasonSystem.Money(price) + ")";
-            buyFill.color = canBuy ? PixelTheme.ButtonFill : PixelTheme.QuietFill;
         }
 
         public void SetRebirth(string text, bool available)

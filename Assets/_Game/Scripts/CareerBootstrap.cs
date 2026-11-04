@@ -44,13 +44,14 @@ namespace MyFootballCareer
             }
             saves = new CareerSaveSystem();
             ui = gameObject.AddComponent<CareerPrototypeUI>();
-            ui.Initialize(uiFont, settings, trainingSettings, Create, Save, SelectTraining, StopTraining, PlayMatch, ChooseOffer, StayWithTeam, Rebirth);
+            ui.Initialize(uiFont, settings, trainingSettings, Create, Save, UpgradeAttribute, PlayMatch, ChooseOffer, StayWithTeam, Rebirth);
             ui.OnRetry = RetryLoad;
             ui.OnRestoreBackup = RestoreBackup;
             ui.OnStartNew = StartNewGame;
             ui.OnResetSave = ResetSave;
             ui.OnApplyLook = ChangeLook;
-            ui.OnBuyMultiTraining = BuyMultiTraining;
+            ui.OnBuyEffortRate = BuyEffortRate;
+            ui.OnPlayFriendly = PlayFriendly;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -108,7 +109,6 @@ namespace MyFootballCareer
         void StartPlayer(string message, bool applyOffline)
         {
             training = new TrainingSystem(current, settings, trainingSettings);
-            training.ValidateSelection();
             SeasonSystem.Prepare(current, matchSettings);
             SeasonSystem.EnsureContract(current, matchSettings, settings);
             OfflineResult offline = null;
@@ -154,6 +154,7 @@ namespace MyFootballCareer
             ui.SetTransfer(current.offers, current.pendingTeamId, team != null ? team.displayName : current.teamId);
             RefreshMoneyUI();
             RefreshRebirthUI();
+            RefreshFriendlyUI();
         }
 
         void ChangeLook(int hair, int skin, int kit)
@@ -184,59 +185,47 @@ namespace MyFootballCareer
             StartPlayer(message, false);
         }
 
-        void SelectTraining(string id)
-        {
-            if (blocked || training == null) return;
-            bool was = training.IsActive(id);
-            training.Toggle(id);
-            saves.TrySave(current, out string message);
-            var def = trainingSettings.Find(id);
-            string name = def != null ? def.displayName : id;
-            ui.SetStatus((was ? "Stopped " + name + ". " : "Training " + name + ". ") + message);
-            ui.RefreshTraining(current.player, training);
-        }
-
-        void StopTraining()
-        {
-            if (blocked || training == null) return;
-            training.Stop();
-            saves.TrySave(current, out string message);
-            ui.SetStatus("Training stopped. " + message);
-            ui.RefreshTraining(current.player, training);
-        }
-
-        // 동시 훈련 다음 레벨을 삽니다.
-        void BuyMultiTraining()
+        // 노력 포인트로 능력치 강화에 도전합니다. 확률로 성공·실패하고 결과 창을 보여줍니다.
+        void UpgradeAttribute(AttributeKind kind)
         {
             if (blocked || current == null || training == null) return;
-            long price = trainingSettings.MultiPrice(current.multiTrainingLevel);
-            if (price < 0) { ui.SetStatus("Simultaneous training is at the max level."); return; }
-            if (current.money < price) { ui.SetStatus("Not enough money: " + SeasonSystem.Money(price - current.money) + " more needed."); return; }
-            current.money -= price;
-            current.multiTrainingLevel++;
-            training.ValidateSelection();
-            saves.TrySave(current, out string message);
-            RefreshMoneyUI();
+            var r = training.TryUpgrade(kind);
+            if (r.Outcome == UpgradeOutcome.Max) { ui.SetStatus(kind + " is already at the maximum."); return; }
+            if (r.Outcome == UpgradeOutcome.NotEnough)
+            {
+                ui.SetStatus("Not enough effort points: " + kind + " needs " + SeasonSystem.Money(r.Cost) + ".");
+                return;
+            }
+            saves.TrySave(current, out _);
+            string chance = Mathf.RoundToInt(r.Chance * 100f) + "%";
+            string used = "\n\nChance " + chance + " (+2: " + Mathf.RoundToInt(r.Chance * trainingSettings.doubleShare * 100f) + "%)"
+                        + "   Used " + SeasonSystem.Money(r.Cost) + " effort points";
+            if (r.Outcome == UpgradeOutcome.GreatSuccess)
+                ui.ShowPopup("GREAT SUCCESS! +2", kind + "  " + r.Before.ToString("0") + " -> " + r.After.ToString("0") + used, 150f);
+            else if (r.Outcome == UpgradeOutcome.Success)
+                ui.ShowPopup("UPGRADE SUCCESS!", kind + "  " + r.Before.ToString("0") + " -> " + r.After.ToString("0") + used, 150f);
+            else
+                ui.ShowPopup("UPGRADE FAILED", kind + " stays at " + r.Before.ToString("0") + used, 150f);
+            ui.SetStatus(r.Outcome == UpgradeOutcome.Fail ? kind + " upgrade failed." : kind + " +" + (r.After - r.Before).ToString("0") + ".");
             ui.RefreshTraining(current.player, training);
-            ui.SetStatus("Simultaneous training Lv " + current.multiTrainingLevel + "! Tap another training to add it. " + message);
+            RefreshRebirthUI();
+        }
+
+        // 노력 포인트로 노력 포인트 증가량을 올립니다.
+        void BuyEffortRate()
+        {
+            if (blocked || current == null || training == null) return;
+            long cost = training.RateCost;
+            if (cost < 0) { ui.SetStatus("Effort rate is at the max level."); return; }
+            if (!training.BuyRate()) { ui.SetStatus("Not enough effort points: " + SeasonSystem.Money(cost) + " needed."); return; }
+            saves.TrySave(current, out _);
+            ui.SetStatus("Effort rate Lv " + current.effortRateLevel + ": " + training.PointsPerSecond.ToString("0.00") + " per second.");
+            ui.RefreshTraining(current.player, training);
         }
 
         void RefreshMoneyUI()
         {
-            int level = current.multiTrainingLevel;
-            var now = TrainingSettings.ExtraSlotSpeeds(level);
-            var next = TrainingSettings.ExtraSlotSpeeds(level + 1);
-            string info = "Now: " + SlotText(now);
-            if (trainingSettings.MultiPrice(level) >= 0) info += "   Next: " + SlotText(next);
-            ui.SetMoney(current.money, current.weeklyWage, level, trainingSettings.MaxMultiLevel, trainingSettings.MultiPrice(level), info);
-        }
-
-        static string SlotText(float[] extra)
-        {
-            if (extra.Length == 0) return "1 training";
-            var sb = new System.Text.StringBuilder("100%");
-            foreach (float s in extra) sb.Append(" + ").Append(Mathf.RoundToInt(s * 100f)).Append('%');
-            return sb.ToString();
+            ui.SetMoney(current.money, current.weeklyWage);
         }
 
         void RefreshRebirthUI()
@@ -312,6 +301,46 @@ namespace MyFootballCareer
             });
         }
 
+        // 친선 경기: 순위와 상관없는 한 경기. 주급을 받고, friendlyRewardEvery경기마다 노력 포인트 보상
+        void PlayFriendly()
+        {
+            if (blocked || current == null || training == null || ui.IsMatchPlaying) return;
+            long now = System.DateTime.UtcNow.Ticks;
+            float wait = training.FriendlyWait(now);
+            if (wait > 0f) { ui.SetStatus("Next friendly in " + IdleRewardSystem.FormatDuration(wait) + "."); return; }
+
+            var record = SeasonSystem.PlayFriendly(current, matchSettings, settings, new System.Random(unchecked((int)now)));
+            if (record == null) { ui.SetStatus("Cannot play a friendly: no opponent."); return; }
+            long reward = TrainingSystem.CountFriendly(current, trainingSettings, now);
+            saves.TrySave(current, out string message);
+            ui.SetStatus(message);
+            int every = Mathf.Max(1, trainingSettings.friendlyRewardEvery);
+            string rewardLine = reward > 0
+                ? "\nFriendly reward: +" + SeasonSystem.Money(reward) + " effort points!"
+                : "\nFriendlies " + current.friendlyCount + "/" + every + "  (reward after " + every + ")";
+            var ownTeam = matchSettings.FindTeam(current.teamId);
+            string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
+            ui.ShowMatchReplay(record, current.player, ownName, () =>
+            {
+                RefreshMoneyUI();
+                RefreshFriendlyUI();
+                ui.RefreshTraining(current.player, training);
+                ui.ShowPopup("FRIENDLY RESULT", SeasonSystem.DescribeResult(record, current, matchSettings) + rewardLine, 290f);
+            });
+        }
+
+        void RefreshFriendlyUI()
+        {
+            if (current == null || training == null) return;
+            int every = Mathf.Max(1, trainingSettings.friendlyRewardEvery);
+            float wait = training.FriendlyWait(System.DateTime.UtcNow.Ticks);
+            string reward = "+" + SeasonSystem.Money(training.NextFriendlyReward) + " effort points";
+            ui.SetFriendly((every <= 1 ? "Reward " + reward + " per friendly"
+                                       : "Friendlies " + current.friendlyCount + "/" + every + "   Reward " + reward)
+                + "\n" + (wait > 0f ? "Next friendly in " + IdleRewardSystem.FormatDuration(wait) : "Ready to play.  Wage paid as usual."),
+                wait <= 0f);
+        }
+
         void Update()
         {
             if (blocked || training == null || current == null) return;
@@ -322,7 +351,7 @@ namespace MyFootballCareer
             if (autoSaveTimer >= 30f) { autoSaveTimer = 0f; saves.TrySave(current, out _); }
 
             refreshTimer += Time.unscaledDeltaTime;
-            if (refreshTimer >= 0.2f) { refreshTimer = 0f; ui.RefreshTraining(current.player, training); RefreshRebirthUI(); }
+            if (refreshTimer >= 0.2f) { refreshTimer = 0f; ui.RefreshTraining(current.player, training); RefreshRebirthUI(); RefreshFriendlyUI(); }
         }
 
         void Save()

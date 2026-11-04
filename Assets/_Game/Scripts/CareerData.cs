@@ -41,10 +41,17 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 11;
+        public int version = 15;
         public PlayerData player;
-        public string trainingId = "";
-        public float trainingCarrySeconds;
+        public string trainingId = "";      // v11 이전의 훈련 선택 (지금은 쓰지 않음)
+        public float trainingCarrySeconds;  // v12의 지급 대기 시간 (지금은 쓰지 않음: 포인트는 1초마다 계속 늘어남)
+        public float effortPoints;          // 가진 노력 포인트
+        public int effortRateLevel;         // 노력 포인트 증가량 업그레이드 레벨
+        public long lastWinBonusTicks;      // v14의 승리 보너스 시각 (지금은 쓰지 않음)
+        public int friendlyCount;           // 다음 친선 경기 보상까지 치른 친선 경기 수
+        public int friendliesPlayed;        // 지금까지 치른 친선 경기 수
+        public long lastFriendlyTicks;      // 마지막 친선 경기의 UTC 시각
+        public int lastUpgraded = -1;       // 마지막으로 강화한 능력치 (훈련장 장면용, -1이면 없음)
         public long lastSeenUtcTicks;   // 마지막으로 저장한 UTC 시각 (오프라인 보상 계산용)
         public string teamId = "";      // 소속 팀 ID
         public SeasonData season = new SeasonData();
@@ -60,8 +67,8 @@ namespace MyFootballCareer
         public int leagueSeason;                                           // 승강을 마지막으로 반영한 시즌 번호
         public long money;                                                 // 가진 돈
         public int weeklyWage;                                             // 지금 계약의 주급 (경기 한 번에 1주치)
-        public int multiTrainingLevel;                                     // 동시 훈련 레벨 (0이면 훈련 하나만)
-        public List<string> extraTrainingIds = new List<string>();         // 함께 하는 훈련 (2번째, 3번째 칸)
+        public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
+        public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
     }
 
     // 한 팀의 소속 부 (1부가 가장 높음)

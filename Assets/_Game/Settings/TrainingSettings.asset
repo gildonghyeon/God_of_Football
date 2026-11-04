@@ -12,27 +12,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 59619a246680eac4ab8f08b8f8b8ff8d, type: 3}
   m_Name: TrainingSettings
   m_EditorClassIdentifier: Assembly-CSharp::MyFootballCareer.TrainingSettings
-  rewardIntervalSeconds: 60
   offlineCapHours: 10
   minOfflineSeconds: 30
-  trainings:
-  - id: shooting
-    displayName: Shooting
-    targetAttribute: 0
-    growthPerHour: 2
-  - id: passing
-    displayName: Passing
-    targetAttribute: 1
-    growthPerHour: 2
-  - id: dribbling
-    displayName: Dribbling
-    targetAttribute: 2
-    growthPerHour: 2
-  - id: defending
-    displayName: Defending
-    targetAttribute: 3
-    growthPerHour: 2
-  - id: stamina
-    displayName: Stamina
-    targetAttribute: 4
-    growthPerHour: 2
+  effortPerSecond: 1
+  upgradeBaseCost: 60
+  upgradeCostSpan: 32
+  upgradeCostPower: 3.8
+  minSuccessChance: 0.01
+  doubleShare: 0.5
+  baseLevel: 10
+  rateStepPercent: 15
+  rateBaseCost: 900
+  rateCostGrowth: 1.32
+  rateMaxLevel: 30
+  divisionMultipliers:
+  - 6
+  - 3.5
+  - 2.2
+  - 1.5
+  - 1
+  friendlyRewardEvery: 1
+  friendlyRewardUpgrades: 2
+  friendlyCooldownMinutes: 5
