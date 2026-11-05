@@ -47,6 +47,7 @@ namespace MyFootballCareer
         public Action<int, int, int> OnApplyLook;   // 외형(머리색, 피부색, 유니폼)을 바꾸면 부르는 동작
         public Action OnBuyEffortRate;              // 노력 포인트 증가량을 올리는 동작
         public Action OnPlayFriendly;               // 친선 경기를 하는 동작
+        public Action<int> OnBuyFacility;           // 시설 레벨을 올리는 동작 (FacilityKind 번호)
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -71,6 +72,7 @@ namespace MyFootballCareer
         RectTransform[] statBars = new RectTransform[5];
         Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText, friendlyText;
         Button friendlyButton;
+        Button[] facilityButtons = new Button[FacilitySystem.Count];
         Text moneyText;
         RectTransform transferRoot;
         Image rebirthFill;
@@ -337,6 +339,7 @@ namespace MyFootballCareer
             rateButton = null;
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = null;
             friendlyButton = null;
+            Array.Clear(facilityButtons, 0, facilityButtons.Length);
             moneyText = null;
             transferRoot = null; rebirthFill = null;
             SetChrome(false);
@@ -447,6 +450,14 @@ namespace MyFootballCareer
             moneyText = Label("", 22, 64);
             transferRoot = NewRect("TransferRoot", pages[2]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
+            currentParent = Section(pages[2], "FACILITIES", true);
+            Label("Spend money on permanent boosts. Reset on rebirth.", 20, 30).color = PixelTheme.TextDim;
+            for (int i = 0; i < facilityButtons.Length; i++)
+            {
+                int index = i;
+                facilityButtons[i] = PixelButton("", () => { if (OnBuyFacility != null) OnBuyFacility(index); }, Parent, 112f);
+                facilityButtons[i].GetComponentInChildren<Text>().fontSize = 20;
+            }
             currentParent = Section(pages[2], "HISTORY", true);
             historyText = Label("", 22, 60);
             currentParent = Section(pages[2], "REBIRTH", true);
@@ -576,10 +587,20 @@ namespace MyFootballCareer
         }
 
         // 돈, 주급, 동시 훈련 레벨과 다음 레벨 가격 (price < 0이면 최고 레벨)
-        public void SetMoney(long money, int weeklyWage)
+        // pay: 경기 한 번에 실제로 받는 돈, agentPercent: 에이전트 보너스(%)
+        public void SetMoney(long money, int pay, int agentPercent)
         {
             if (moneyText == null) return;
-            moneyText.text = "Money " + SeasonSystem.Money(money) + "\nWage " + SeasonSystem.Money(weeklyWage) + " per match (1 week)";
+            moneyText.text = "Money " + SeasonSystem.Money(money) + "\nWage " + SeasonSystem.Money(pay) + " per match (1 week)"
+                + (agentPercent > 0 ? "  incl. agent +" + agentPercent + "%" : "");
+        }
+
+        // 시설 버튼: 글자와 살 수 있는지 (살 수 있으면 강조)
+        public void SetFacility(int index, string text, bool affordable)
+        {
+            if (index < 0 || index >= facilityButtons.Length || facilityButtons[index] == null) return;
+            facilityButtons[index].GetComponentInChildren<Text>().text = text;
+            ((Image)facilityButtons[index].targetGraphic).color = affordable ? PixelTheme.AccentFill : PixelTheme.QuietFill;
         }
 
         public void SetRebirth(string text, bool available)

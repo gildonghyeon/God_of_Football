@@ -15,7 +15,7 @@ MonoBehaviour:
   offlineCapHours: 10
   minOfflineSeconds: 30
   effortPerSecond: 1
-  upgradeBaseCost: 60
+  upgradeBaseCost: 110
   upgradeCostSpan: 32
   upgradeCostPower: 3.8
   minSuccessChance: 0.01
@@ -34,3 +34,8 @@ MonoBehaviour:
   friendlyRewardEvery: 1
   friendlyRewardUpgrades: 2
   friendlyCooldownMinutes: 5
+  facilityMaxLevel: 10
+  facilityBaseCost: 3000
+  facilityCostGrowth: 2.2
+  trainingGroundPercent: 10
+  coachDiscountPercent: 3

@@ -17,6 +17,8 @@ MonoBehaviour:
   homeAdvantage: 1.1
   startTeamId: harbor-town
   promotionSpots: 2
+  agentWagePercent: 5
+  agentScorePerLevel: 1
   divisions:
   - name: Division 1
     recommendedRating: 85

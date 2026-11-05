@@ -36,11 +36,12 @@ namespace MyFootballCareer
 
         public float DivisionMultiplier => training.DivisionMultiplier(save.season != null ? save.season.division : 0);
 
-        // 초당 노력 포인트: 기본 × 증가량 업그레이드 × 리그 보너스(뛰는 부) × 환생 보너스
+        // 초당 노력 포인트: 기본 × 증가량 업그레이드 × 리그 보너스(뛰는 부) × 훈련장 × 환생 보너스
         public static float PerSecond(SaveData save, TrainingSettings training)
         {
             float division = training.DivisionMultiplier(save.season != null ? save.season.division : 0);
-            return training.effortPerSecond * training.RateMultiplier(save.effortRateLevel) * division * RebirthSystem.TrainingMultiplier(save);
+            return training.effortPerSecond * training.RateMultiplier(save.effortRateLevel) * division
+                 * FacilitySystem.EffortMultiplier(save, training) * RebirthSystem.TrainingMultiplier(save);
         }
 
         // ---------- 친선 경기 보상 ----------
@@ -93,7 +94,12 @@ namespace MyFootballCareer
         }
 
         // ---------- 능력치 강화 ----------
-        public long Cost(AttributeKind kind) { return training.UpgradeCost(save.player.Get(kind)); }
+        // 강화 비용 (전담 코치 할인 반영, 최소 1)
+        public long Cost(AttributeKind kind)
+        {
+            long baseCost = training.UpgradeCost(save.player.Get(kind));
+            return System.Math.Max(1L, (long)Mathf.Round(baseCost * (1f - FacilitySystem.CoachDiscount(save, training))));
+        }
         public float Chance(AttributeKind kind) { return training.SuccessChance(save.player.Get(kind), career.attributeCap); }
         public bool IsMax(AttributeKind kind) { return save.player.Get(kind) >= career.attributeCap; }
         public bool CanAfford(AttributeKind kind) { return !IsMax(kind) && save.effortPoints >= Cost(kind); }

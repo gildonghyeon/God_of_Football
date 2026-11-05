@@ -141,8 +141,8 @@ namespace MyFootballCareer
             MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap);
             GenerateOthers(match, save, ms);
             EnsureContract(save, ms, career);
-            match.wage = save.weeklyWage;            // 경기 한 번 = 1주
-            save.money += save.weeklyWage;
+            match.wage = FacilitySystem.MatchPay(save, ms);   // 경기 한 번 = 1주 (에이전트 보너스 포함)
+            save.money += match.wage;
             season.nextMatchIndex++;
             return match;
         }
@@ -160,8 +160,8 @@ namespace MyFootballCareer
             var match = new MatchRecord { round = 0, opponentId = opp.id, opponentName = opp.displayName, home = rng.Next(2) == 0, seed = rng.Next() };
             MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap);
             EnsureContract(save, ms, career);
-            match.wage = save.weeklyWage;            // 친선 경기도 1주치
-            save.money += save.weeklyWage;
+            match.wage = FacilitySystem.MatchPay(save, ms);   // 친선 경기도 1주치
+            save.money += match.wage;
             return match;
         }
 
@@ -391,7 +391,7 @@ namespace MyFootballCareer
             save.offersSeason = save.season.seasonNumber;
 
             float rating = PlayerRating(save, ms, career);
-            float score = PerformanceScore(Summarize(save, ms), Standings(save, ms).Count);
+            float score = Mathf.Min(100f, PerformanceScore(Summarize(save, ms), Standings(save, ms).Count) + FacilitySystem.ScoreBonus(save, ms));   // 에이전트 보너스 포함
             save.offersScore = Mathf.RoundToInt(score);
             int myDivision = DivisionOf(save, ms, save.teamId);
             var rng = new System.Random(unchecked((int)DateTime.UtcNow.Ticks) ^ save.season.seasonNumber);

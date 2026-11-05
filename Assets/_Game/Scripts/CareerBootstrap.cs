@@ -52,6 +52,7 @@ namespace MyFootballCareer
             ui.OnApplyLook = ChangeLook;
             ui.OnBuyEffortRate = BuyEffortRate;
             ui.OnPlayFriendly = PlayFriendly;
+            ui.OnBuyFacility = BuyFacility;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -218,7 +219,31 @@ namespace MyFootballCareer
 
         void RefreshMoneyUI()
         {
-            ui.SetMoney(current.money, current.weeklyWage);
+            ui.SetMoney(current.money, FacilitySystem.MatchPay(current, matchSettings),
+                        Mathf.RoundToInt((FacilitySystem.WageMultiplier(current, matchSettings) - 1f) * 100f));
+            for (int i = 0; i < FacilitySystem.Count; i++)
+            {
+                var kind = (FacilityKind)i;
+                long cost = FacilitySystem.Cost(current, kind, trainingSettings);
+                ui.SetFacility(i, FacilitySystem.Name(kind) + "  Lv " + FacilitySystem.Level(current, kind) + "/" + trainingSettings.facilityMaxLevel
+                    + "\n" + FacilitySystem.Effect(current, kind, trainingSettings, matchSettings)
+                    + "\n" + (cost < 0 ? "MAX LEVEL" : "UPGRADE  " + SeasonSystem.Money(cost)),
+                    cost >= 0 && current.money >= cost);
+            }
+        }
+
+        // 돈으로 시설 레벨을 올립니다.
+        void BuyFacility(int index)
+        {
+            if (blocked || current == null || index < 0 || index >= FacilitySystem.Count) return;
+            var kind = (FacilityKind)index;
+            long cost = FacilitySystem.Cost(current, kind, trainingSettings);
+            if (cost < 0) { ui.SetStatus(FacilitySystem.Name(kind) + " is at the max level."); return; }
+            if (!FacilitySystem.Buy(current, kind, trainingSettings)) { ui.SetStatus("Not enough money: " + SeasonSystem.Money(cost) + " needed."); return; }
+            saves.TrySave(current, out _);
+            ui.SetStatus(FacilitySystem.Name(kind) + " Lv " + FacilitySystem.Level(current, kind) + ": " + FacilitySystem.Effect(current, kind, trainingSettings, matchSettings));
+            RefreshMoneyUI();
+            ui.RefreshTraining(current.player, training);
         }
 
         void RefreshRebirthUI()

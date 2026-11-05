@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 15;
+        const int CurrentVersion = 16;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -137,6 +137,12 @@ namespace MyFootballCareer
                 data.lastFriendlyTicks = 0;
                 upgraded = true;
             }
+            if (data.version == 15)
+            {
+                data.version = 16;   // 시설 추가 (모두 Lv0에서 시작)
+                data.facilityLevels = new List<int>();
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -148,6 +154,7 @@ namespace MyFootballCareer
             if (data.careers == null) data.careers = new List<CareerSummary>();
             if (data.league == null) data.league = new List<TeamDivision>();
             if (data.extraTrainingIds == null) data.extraTrainingIds = new List<string>();
+            if (data.facilityLevels == null) data.facilityLevels = new List<int>();
             if (data.money < 0) data.money = 0;
             if (data.multiTrainingLevel < 0) data.multiTrainingLevel = 0;
             if (float.IsNaN(data.effortPoints) || float.IsInfinity(data.effortPoints) || data.effortPoints < 0f) data.effortPoints = 0f;

@@ -49,6 +49,9 @@ namespace MyFootballCareer
         [Min(0)] public int promotionSpots = 2;      // 시즌이 끝나면 각 부의 상위 몇 팀이 올라가고, 하위 몇 팀이 내려가는지
         [Header("주급 (1부부터). 평점이 팀이 요구하는 수준보다 높을수록 더 받습니다 (0.5~2배)")]
         public float[] weeklyWageByDivision = { 25000f, 10000f, 4000f, 1500f, 500f };
+        [Header("에이전트 시설: 레벨마다 받는 주급 +%, 시즌 성적 점수 +")]
+        [Min(0)] public float agentWagePercent = 5f;
+        [Min(0)] public float agentScorePerLevel = 1f;
         public DivisionDefinition[] divisions = new DivisionDefinition[]
         {
             new DivisionDefinition { name = "Division 1", recommendedRating = 85f },

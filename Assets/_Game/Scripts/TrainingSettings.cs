@@ -15,10 +15,10 @@ namespace MyFootballCareer
         [Min(0)] public float effortPerSecond = 1f;          // 기본 초당 노력 포인트
 
         [Header("능력치 강화 (레벨 10 → 100)")]
-        [Min(0)] public float upgradeBaseCost = 60f;         // 레벨 10에서 한 번 도전하는 비용 (기본 속도로 60초)
+        [Min(0)] public float upgradeBaseCost = 110f;        // 레벨 10에서 한 번 도전하는 비용 (기본 속도로 110초)
         // 비용 = 기본 비용 × (1 + 오른 레벨 / upgradeCostSpan)^upgradeCostPower
         // 레벨이 오를수록 비용은 계속 늘지만, 레벨당 오르는 비율은 점점 줄어듭니다 (Lv10 약 12% → Lv99 약 3%)
-        // Lv30 약 380, Lv50 약 1,310, Lv70 약 3,320, Lv90 약 7,010, Lv99 약 9,400
+        // Lv30 약 700, Lv50 약 2,400, Lv70 약 6,080, Lv90 약 12,850, Lv99 약 17,240
         [Min(1)] public float upgradeCostSpan = 32f;
         [Min(0)] public float upgradeCostPower = 3.8f;
         [Range(0, 1)] public float minSuccessChance = 0.01f; // 99 → 100 강화의 성공 확률 (10 → 11은 100%, 그 사이는 고르게 줄어듦)
@@ -38,6 +38,13 @@ namespace MyFootballCareer
         [Min(1)] public int friendlyRewardEvery = 1;             // 이 경기 수마다 보상 (1이면 매 경기)
         [Min(0)] public float friendlyRewardUpgrades = 2f;       // 보상 = 평균 능력치 레벨에서 강화 몇 번 할 수 있는 양인지
         [Min(0)] public float friendlyCooldownMinutes = 5f;      // 친선 경기 사이 대기 시간 (경기는 바로 끝나므로 연달아 모으지 못하게). 0이면 제한 없음
+
+        [Header("시설: 돈으로 레벨업 (환생하면 초기화). 에이전트 효과는 MatchSettings")]
+        [Min(0)] public int facilityMaxLevel = 10;
+        [Min(0)] public float facilityBaseCost = 3000f;        // Lv0 → Lv1 가격
+        [Min(1)] public float facilityCostGrowth = 2.2f;       // 레벨이 오를 때마다 가격 배율 (3,000 → Lv9→10 약 362만)
+        [Min(0)] public float trainingGroundPercent = 10f;     // 훈련장: 레벨마다 노력 포인트 +%
+        [Min(0)] public float coachDiscountPercent = 3f;       // 전담 코치: 레벨마다 강화 비용 -%
 
         // 이 부에서 뛸 때의 노력 포인트 배율 (부가 없던 예전 시즌은 1)
         public float DivisionMultiplier(int division)
