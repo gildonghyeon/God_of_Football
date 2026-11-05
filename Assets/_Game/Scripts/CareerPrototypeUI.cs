@@ -76,6 +76,7 @@ namespace MyFootballCareer
         Image rebirthFill;
         TrainingStageView stage;   // 훈련장 장면
         MatchReplayView matchView; // 경기 영상 화면
+        UpgradeEffects upgradeFx;  // 강화 결과 연출
 
         Transform Parent { get { return currentParent != null ? currentParent : content; } }
 
@@ -107,6 +108,7 @@ namespace MyFootballCareer
 
             safeRoot = NewRect("SafeArea", canvasGO.transform);
             FitSafeArea();
+            upgradeFx = new UpgradeEffects(font, safeRoot);
             if (EventSystem.current == null)
             {
                 var events = new GameObject("CareerEventSystem", typeof(EventSystem));
@@ -171,6 +173,7 @@ namespace MyFootballCareer
         {
             if (stage != null) stage.Tick(Time.unscaledDeltaTime);
             if (matchView != null) matchView.Tick(Time.unscaledDeltaTime);
+            if (upgradeFx != null) upgradeFx.Tick(Time.unscaledDeltaTime);
             if (safeRoot != null && (Screen.safeArea != lastSafe || Screen.width != lastWidth || Screen.height != lastHeight)) FitSafeArea();
         }
 
@@ -280,6 +283,7 @@ namespace MyFootballCareer
             label = TextNode("", row, 22);
             var le = label.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = 190; le.preferredHeight = 30;
+            label.rectTransform.pivot = new Vector2(0f, .5f);   // 강화 연출에서 글자가 왼쪽 끝을 기준으로 커지도록
             var bar = MakeBar(row, 20, true);
             upgrade = PixelButton("+1", () => onUpgrade(kind), row, 0f);
             upgrade.GetComponentInChildren<Text>().fontSize = 20;
@@ -589,6 +593,14 @@ namespace MyFootballCareer
         }
 
         public void SetStatus(string message) { if (status != null) status.text = message; }
+
+        // 강화 결과 연출 (결과 창 대신). 능력치 글자가 새 값으로 바뀐 뒤에 부릅니다.
+        public void ShowUpgradeResult(UpgradeResult r)
+        {
+            if (upgradeFx == null || r == null) return;
+            int i = (int)r.Attribute;
+            upgradeFx.Play(r, i >= 0 && i < statTexts.Length ? statTexts[i] : null, trainingSettings != null ? trainingSettings.doubleShare : 0.5f);
+        }
 
         // ---------- 팝업 ----------
         // ---------- 외형(머리색, 피부색, 유니폼) ----------

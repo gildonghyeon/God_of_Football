@@ -197,17 +197,9 @@ namespace MyFootballCareer
                 return;
             }
             saves.TrySave(current, out _);
-            string chance = Mathf.RoundToInt(r.Chance * 100f) + "%";
-            string used = "\n\nChance " + chance + " (+2: " + Mathf.RoundToInt(r.Chance * trainingSettings.doubleShare * 100f) + "%)"
-                        + "   Used " + SeasonSystem.Money(r.Cost) + " effort points";
-            if (r.Outcome == UpgradeOutcome.GreatSuccess)
-                ui.ShowPopup("GREAT SUCCESS! +2", kind + "  " + r.Before.ToString("0") + " -> " + r.After.ToString("0") + used, 150f);
-            else if (r.Outcome == UpgradeOutcome.Success)
-                ui.ShowPopup("UPGRADE SUCCESS!", kind + "  " + r.Before.ToString("0") + " -> " + r.After.ToString("0") + used, 150f);
-            else
-                ui.ShowPopup("UPGRADE FAILED", kind + " stays at " + r.Before.ToString("0") + used, 150f);
             ui.SetStatus(r.Outcome == UpgradeOutcome.Fail ? kind + " upgrade failed." : kind + " +" + (r.After - r.Before).ToString("0") + ".");
-            ui.RefreshTraining(current.player, training);
+            ui.RefreshTraining(current.player, training);   // 새 값을 먼저 그린 뒤 연출
+            ui.ShowUpgradeResult(r);
             RefreshRebirthUI();
         }
 
