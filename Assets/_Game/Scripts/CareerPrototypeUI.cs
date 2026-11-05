@@ -540,29 +540,39 @@ namespace MyFootballCareer
         }
 
         // 시즌이 끝나 이적 제안이 있을 때만 제안 목록을 보여줍니다.
-        public void SetTransfer(List<TransferOffer> offers, string pendingTeamId, string currentTeamName)
+        // summary: 시즌 성적 등급과 제안 수 안내 (null이면 아직 시즌 중)
+        // decided: 선택을 확정했으면 true. 이때는 버튼을 누를 수 없고 결과만 보여 줍니다.
+        public void SetTransfer(List<TransferOffer> offers, string pendingTeamId, string currentTeamName, string summary, bool decided)
         {
             if (transferRoot == null) return;
             foreach (Transform child in transferRoot) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-            if (offers == null || offers.Count == 0) return;
+            bool none = offers == null || offers.Count == 0;
+            if (none && summary == null) return;
 
             var body = Section(transferRoot, "TRANSFER OFFERS", true);
-            string note = string.IsNullOrEmpty(pendingTeamId)
-                ? "Pick a team to join next season, or stay."
-                : "Transfer agreed. You join the marked team next season.";
+            if (summary != null) { var s = TextNode(summary, body, 22); s.horizontalOverflow = HorizontalWrapMode.Wrap; Height(s.gameObject, 64); }
+            if (none) return;   // 제안이 없으면 지금 팀에 남습니다
+            string note = !decided ? "Pick a team to join next season, or stay. You decide only once."
+                : string.IsNullOrEmpty(pendingTeamId) ? "Decision final: you stay with " + currentTeamName + "."
+                : "Decision final: you join the marked team next season.";
             var info = TextNode(note, body, 22); info.color = PixelTheme.TextDim; Height(info.gameObject, 34);
             foreach (var offer in offers)
             {
                 string id = offer.teamId;
                 bool agreed = id == pendingTeamId;
-                PixelButton((agreed ? "[AGREED] " : "") + offer.teamName + (offer.division > 0 ? "  (Div " + offer.division + ")" : "")
+                var button = PixelButton((agreed ? "[CONFIRMED] " : "") + offer.teamName + (offer.division > 0 ? "  (Div " + offer.division + ")" : "")
                             + "\nStrength " + offer.teamStrength.ToString("0")
                             + "   Start " + Mathf.RoundToInt(offer.startChance * 100f) + "%   Wants " + offer.focus
                             + (offer.weeklyWage > 0 ? "\nWage " + SeasonSystem.Money(offer.weeklyWage) + " per week" : ""),
                             () => onChooseOffer(id), body, offer.weeklyWage > 0 ? 120f : 92f,
-                            agreed ? PixelTheme.AccentFill : PixelTheme.ButtonFill, agreed ? PixelTheme.Accent : PixelTheme.ButtonEdge);
+                            agreed ? PixelTheme.AccentFill : decided ? PixelTheme.QuietFill : PixelTheme.ButtonFill,
+                            agreed ? PixelTheme.Accent : decided ? PixelTheme.QuietEdge : PixelTheme.ButtonEdge);
+                if (decided) button.interactable = false;
             }
-            PixelButton("STAY WITH " + currentTeamName, () => onStay(), body, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            var stay = PixelButton((decided && string.IsNullOrEmpty(pendingTeamId) ? "[CONFIRMED] " : "") + "STAY WITH " + currentTeamName, () => onStay(), body, 68f,
+                decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.AccentFill : PixelTheme.QuietFill,
+                decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.Accent : PixelTheme.QuietEdge);
+            if (decided) stay.interactable = false;
         }
 
         // 돈, 주급, 동시 훈련 레벨과 다음 레벨 가격 (price < 0이면 최고 레벨)

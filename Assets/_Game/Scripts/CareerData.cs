@@ -58,7 +58,9 @@ namespace MyFootballCareer
         public List<SeasonSummary> seasonHistory = new List<SeasonSummary>();
         public List<TransferOffer> offers = new List<TransferOffer>();   // 시즌 종료 후 받은 이적 제안
         public int offersSeason;                                         // 제안을 받은 시즌 번호
+        public int offersScore = -1;                                     // 그 시즌의 성적 점수 (0~100, -1이면 없음)
         public string pendingTeamId = "";                                // 다음 시즌에 합류하기로 한 팀
+        public bool transferDecided;                                     // 이번 제안에 대한 선택(이적 또는 잔류)을 확정했는지. 확정하면 바꿀 수 없음
         public List<TransferRecord> transfers = new List<TransferRecord>();
         public int rebirthCount;
         public float rebirthBonusPercent;                                   // 영구 보너스: 훈련 성장 속도 증가율(%)

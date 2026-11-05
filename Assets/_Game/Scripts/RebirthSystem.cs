@@ -103,6 +103,7 @@ namespace MyFootballCareer
             save.offers.Clear();
             save.offersSeason = 0;
             save.pendingTeamId = "";
+            save.transferDecided = false;
             save.transfers.Clear();
             save.league.Clear();              // 리그 소속도 처음 상태로
             save.leagueSeason = 0;

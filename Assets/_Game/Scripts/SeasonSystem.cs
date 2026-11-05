@@ -304,6 +304,7 @@ namespace MyFootballCareer
             save.weeklyWage = newWage;
             if (newWage != oldWage) lines.Add("New contract: " + Money(newWage) + " per week.");
             save.pendingTeamId = "";
+            save.transferDecided = false;
             save.offers.Clear();
             StartSeason(save, ms, save.season.seasonNumber + 1);
             int after = save.season.division;
@@ -330,7 +331,55 @@ namespace MyFootballCareer
         // ---------- 이적 ----------
         const float OfferMinStartChance = 0.5f;   // 선발 가능성이 이보다 낮은 팀은 제안하지 않습니다.
 
-        // 시즌이 끝나면 최대 3곳에서 제안을 받습니다. 실력이 좋으면 한두 단계 위 부의 팀이 먼저 제안합니다. 새 제안이 생기면 true.
+        // ---------- 시즌 성적 점수 ----------
+        // 이적 제안은 능력치(선발로 뛸 수 있는 팀인지)와 이번 시즌 성적 점수로 정해집니다.
+        // 점수 0~100 = 평균 평점 60점 + 출전 비율 25점 + 팀 순위 15점
+        public static float PerformanceScore(SeasonSummary s, int teamCount)
+        {
+            if (s == null || s.played <= 0) return 0f;
+            float ratingPart = s.appearances > 0 ? Mathf.Clamp01((s.averageRating - 5.8f) / 2.0f) * 60f : 0f;   // 평균 5.8 이하 0점, 7.8 이상 만점
+            float appsPart = 25f * s.appearances / s.played;
+            float teamPart = teamCount > 1 && s.finalPosition > 0 ? 15f * (1f - (s.finalPosition - 1f) / (teamCount - 1f)) : 0f;
+            return Mathf.Round(ratingPart + appsPart + teamPart);
+        }
+
+        public static string Grade(float score)
+        {
+            if (score >= 85) return "S";
+            if (score >= 70) return "A";
+            if (score >= 55) return "B";
+            if (score >= 40) return "C";
+            if (score >= 25) return "D";
+            return "F";
+        }
+
+        // 부 차이에 따라 제안에 필요한 성적 점수 (위로 2단계, 1단계, 같은 부, 아래 1단계)
+        // 이 점수에서 제안 확률 50%, 10점 높으면 100%, 10점 낮으면 0%
+        static float OfferNeed(int divisionGap)
+        {
+            if (divisionGap <= -2) return 80f;
+            if (divisionGap == -1) return 62f;
+            if (divisionGap == 0) return 42f;
+            return 22f;
+        }
+
+        // 성적 등급별로 받을 수 있는 제안 수: S·A 3곳, B 2곳, C 1곳, D 절반 확률로 1곳, F 없음
+        static int MaxOffers(float score, System.Random rng)
+        {
+            if (score >= 70) return 3;
+            if (score >= 55) return 2;
+            if (score >= 40) return 1;
+            if (score >= 25) return rng.NextDouble() < 0.5 ? 1 : 0;
+            return 0;
+        }
+
+        public static float OfferChance(float score, int divisionGap)
+        {
+            return Mathf.Clamp01(0.5f + (score - OfferNeed(divisionGap)) / 20f);
+        }
+
+        // 시즌이 끝나면 최대 3곳에서 제안을 받습니다. 성적이 좋을수록 많은 팀이, 높은 부의 팀이 제안합니다.
+        // 성적이 나쁘면 제안이 하나도 없을 수 있습니다 (그러면 지금 팀에 남음). 새로 정했으면 true.
         public static bool EnsureOffers(SaveData save, MatchSettings ms, CareerSettings career)
         {
             if (!IsComplete(save)) return false;
@@ -338,26 +387,28 @@ namespace MyFootballCareer
             if (save.offersSeason == save.season.seasonNumber) return false;
             save.offers = new List<TransferOffer>();
             save.pendingTeamId = "";
+            save.transferDecided = false;
             save.offersSeason = save.season.seasonNumber;
 
             float rating = PlayerRating(save, ms, career);
+            float score = PerformanceScore(Summarize(save, ms), Standings(save, ms).Count);
+            save.offersScore = Mathf.RoundToInt(score);
             int myDivision = DivisionOf(save, ms, save.teamId);
             var rng = new System.Random(unchecked((int)DateTime.UtcNow.Ticks) ^ save.season.seasonNumber);
             var picks = new List<TeamDefinition>();
-            var sameDivision = new List<TeamDefinition>();
             if (ms.teams != null)
                 foreach (var t in ms.teams)
                 {
                     if (t == null || t.id == save.teamId) continue;
                     int d = DivisionOf(save, ms, t.id);
-                    if (d == myDivision) sameDivision.Add(t);
                     if (d < myDivision - 2 || d > myDivision + 1) continue;
-                    if (MatchSimulation.StartChance(t, rating) >= OfferMinStartChance) picks.Add(t);
+                    if (MatchSimulation.StartChance(t, rating) < OfferMinStartChance) continue;   // 선발로 못 뛸 팀은 제안하지 않음
+                    if (rng.NextDouble() < OfferChance(score, d - myDivision)) picks.Add(t);      // 성적을 보고 관심을 보인 팀만
                 }
-            if (picks.Count == 0) picks = sameDivision;   // 갈 만한 팀이 없으면 같은 부에서라도
             Shuffle(picks, rng);
             picks.Sort((a, b) => DivisionOf(save, ms, a.id).CompareTo(DivisionOf(save, ms, b.id)));   // 높은 부부터
-            for (int i = 0; i < picks.Count && save.offers.Count < 3; i++)
+            int maxOffers = MaxOffers(score, rng);
+            for (int i = 0; i < picks.Count && save.offers.Count < maxOffers; i++)
             {
                 var t = picks[i];
                 save.offers.Add(new TransferOffer
@@ -379,11 +430,46 @@ namespace MyFootballCareer
             }
         }
 
+        // 이적 제안 안내 한 줄 (이번 시즌 제안을 정하기 전이면 null)
+        public static string DescribeOffers(SaveData save)
+        {
+            if (!IsComplete(save) || save.offersSeason != save.season.seasonNumber) return null;
+            string grade = save.offersScore >= 0 ? "Season grade " + Grade(save.offersScore) + " (" + save.offersScore + "/100). " : "";
+            int n = save.offers != null ? save.offers.Count : 0;
+            if (n == 0) return grade + "No clubs made an offer. Play better next season.";
+            return grade + n + (n == 1 ? " club made an offer." : " clubs made offers.");
+        }
+
+        // 이번 제안에 대한 선택을 이미 확정했는지 (예전 저장에서 이적이 합의되어 있던 것도 확정으로 봄)
+        public static bool TransferDecided(SaveData save)
+        {
+            return save.transferDecided || !string.IsNullOrEmpty(save.pendingTeamId);
+        }
+
+        public static TransferOffer FindOffer(SaveData save, string teamId)
+        {
+            if (save.offers != null) foreach (var offer in save.offers) if (offer.teamId == teamId) return offer;
+            return null;
+        }
+
+        // 이 팀으로의 이적을 확정합니다. 이미 확정했거나 제안이 없으면 null (다시 고를 수 없음)
         public static TransferOffer SetPending(SaveData save, string teamId)
         {
-            foreach (var offer in save.offers)
-                if (offer.teamId == teamId) { save.pendingTeamId = teamId; return offer; }
-            return null;
+            if (TransferDecided(save)) return null;
+            var offer = FindOffer(save, teamId);
+            if (offer == null) return null;
+            save.pendingTeamId = teamId;
+            save.transferDecided = true;
+            return offer;
+        }
+
+        // 지금 팀에 남기로 확정합니다. 이미 확정했으면 false
+        public static bool ConfirmStay(SaveData save)
+        {
+            if (TransferDecided(save)) return false;
+            save.pendingTeamId = "";
+            save.transferDecided = true;
+            return true;
         }
 
         // 내 선수의 포지션 평점 (0~100)
@@ -600,6 +686,8 @@ namespace MyFootballCareer
             sb.Append("Your goals ").Append(t.playerGoals).Append("  assists ").Append(t.playerAssists)
               .Append("  avg rating ").Append(t.averageRating.ToString("0.0"))
               .Append("  apps ").Append(t.appearances).Append('/').Append(t.played);
+            string offers = DescribeOffers(save);
+            if (offers != null) sb.Append('\n').Append(offers).Append(save.offers.Count > 0 ? " See CAREER." : "");
             return sb.ToString();
         }
 

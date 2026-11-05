@@ -151,7 +151,8 @@ namespace MyFootballCareer
                          SeasonSystem.DescribeStandings(current, matchSettings),
                          SeasonSystem.DescribeHistory(current));
             var team = matchSettings.FindTeam(current.teamId);
-            ui.SetTransfer(current.offers, current.pendingTeamId, team != null ? team.displayName : current.teamId);
+            ui.SetTransfer(current.offers, current.pendingTeamId, team != null ? team.displayName : current.teamId, SeasonSystem.DescribeOffers(current),
+                           SeasonSystem.TransferDecided(current));
             RefreshMoneyUI();
             RefreshRebirthUI();
             RefreshFriendlyUI();
@@ -241,23 +242,40 @@ namespace MyFootballCareer
             ui.ShowPopup("REBIRTH COMPLETE", message, 170f);
         }
 
+        // 이적 제안을 고르면 한 번 더 묻고, 확정하면 저장합니다. 확정한 뒤에는 바꿀 수 없습니다.
         void ChooseOffer(string teamId)
         {
             if (blocked || current == null) return;
-            var offer = SeasonSystem.SetPending(current, teamId);
+            if (SeasonSystem.TransferDecided(current)) { ui.SetStatus("Your decision for this season is final."); return; }
+            var offer = SeasonSystem.FindOffer(current, teamId);
             if (offer == null) return;
-            saves.TrySave(current, out string message);
-            RefreshSeasonUI();
-            ui.SetStatus("Transfer agreed with " + offer.teamName + ". It starts next season. " + message);
+            string body = "Join " + offer.teamName + (offer.division > 0 ? " (Div " + offer.division + ")" : "") + " next season?"
+                + "\nStart chance " + Mathf.RoundToInt(offer.startChance * 100f) + "%"
+                + (offer.weeklyWage > 0 ? "   Wage " + SeasonSystem.Money(offer.weeklyWage) + " per week" : "")
+                + "\n\nThis cannot be changed later.";
+            ui.ShowConfirm("CONFIRM TRANSFER", body, 170f, "JOIN " + offer.teamName.ToUpperInvariant(), () =>
+            {
+                if (SeasonSystem.SetPending(current, teamId) == null) return;
+                saves.TrySave(current, out string message);
+                RefreshSeasonUI();
+                ui.SetStatus("Transfer to " + offer.teamName + " confirmed. It starts next season. " + message);
+            });
         }
 
         void StayWithTeam()
         {
             if (blocked || current == null) return;
-            current.pendingTeamId = "";
-            saves.TrySave(current, out string message);
-            RefreshSeasonUI();
-            ui.SetStatus("You will stay with your current team. " + message);
+            if (SeasonSystem.TransferDecided(current)) { ui.SetStatus("Your decision for this season is final."); return; }
+            var team = matchSettings.FindTeam(current.teamId);
+            string name = team != null ? team.displayName : current.teamId;
+            ui.ShowConfirm("CONFIRM STAY", "Turn down every offer and stay with " + name + " next season?\n\nThis cannot be changed later.", 150f,
+                "STAY WITH " + name.ToUpperInvariant(), () =>
+            {
+                if (!SeasonSystem.ConfirmStay(current)) return;
+                saves.TrySave(current, out string message);
+                RefreshSeasonUI();
+                ui.SetStatus("You will stay with " + name + ". " + message);
+            });
         }
 
         void PlayMatch()
@@ -288,7 +306,7 @@ namespace MyFootballCareer
                 RefreshSeasonUI();
                 System.Action afterResult = null;
                 if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
-                    afterResult = () => ui.ShowPopup("SEASON COMPLETE", SeasonSystem.DescribeSeasonEnd(current, matchSettings), 260f);
+                    afterResult = () => ui.ShowPopup("SEASON COMPLETE", SeasonSystem.DescribeSeasonEnd(current, matchSettings), 340f);
                 ui.ShowPopup("MATCH RESULT", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
             });
         }
