@@ -70,7 +70,7 @@ namespace MyFootballCareer
         Button[] upgradeButtons = new Button[5];
         Button rateButton;
         RectTransform[] statBars = new RectTransform[5];
-        Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText, friendlyText, trophyText;
+        Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText, friendlyText, trophyText, leadersText;
         Button friendlyButton;
         Button[] facilityButtons = new Button[FacilitySystem.Count];
         Text moneyText;
@@ -337,7 +337,7 @@ namespace MyFootballCareer
             Array.Clear(statBars, 0, statBars.Length);
             Array.Clear(upgradeButtons, 0, upgradeButtons.Length);
             rateButton = null;
-            trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = null;
+            trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
             friendlyButton = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
             moneyText = null;
@@ -444,6 +444,8 @@ namespace MyFootballCareer
             friendlyButton = PixelButton("PLAY FRIENDLY", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
             currentParent = Section(pages[1], "STANDINGS", true);
             standingsText = Label("", 22, 200);
+            currentParent = Section(pages[1], "LEAGUE LEADERS", true);
+            leadersText = Label("", 22, 60);
 
             // CAREER: 이적 제안, 이력, 환생
             currentParent = Section(pages[2], "MONEY", true);
@@ -544,6 +546,7 @@ namespace MyFootballCareer
         }
 
         public void SetTrophies(string text) { if (trophyText != null) SetLines(trophyText, text, 2); }
+        public void SetLeaders(string text) { if (leadersText != null) SetLines(leadersText, text, 2); }
 
         static void SetLines(Text t, string text, int minLines)
         {

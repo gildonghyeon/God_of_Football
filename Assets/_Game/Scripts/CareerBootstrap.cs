@@ -148,6 +148,7 @@ namespace MyFootballCareer
             bool awarded = AwardSystem.EnsureAwards(current, matchSettings, settings);   // 시상을 이적 제안보다 먼저
             if (SeasonSystem.EnsureOffers(current, matchSettings, settings) || awarded) saves.TrySave(current, out _);
             ui.SetTrophies(AwardSystem.DescribeTrophyRoom(current));
+            ui.SetLeaders(AwardSystem.DescribeLeaders(current, matchSettings, settings));
             ui.SetSeason(SeasonSystem.DescribeNext(current, matchSettings, settings),
                          SeasonSystem.DescribeLast(current, matchSettings),
                          SeasonSystem.IsComplete(current),
