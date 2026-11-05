@@ -19,6 +19,7 @@ MonoBehaviour:
   upgradeCostSpan: 32
   upgradeCostPower: 3.8
   minSuccessChance: 0.01
+  pityStepRatio: 0.01
   doubleShare: 0.5
   baseLevel: 10
   rateStepPercent: 15

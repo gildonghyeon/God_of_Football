@@ -41,7 +41,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 16;
+        public int version = 17;
         public PlayerData player;
         public string trainingId = "";      // v11 이전의 훈련 선택 (지금은 쓰지 않음)
         public float trainingCarrySeconds;  // v12의 지급 대기 시간 (지금은 쓰지 않음: 포인트는 1초마다 계속 늘어남)
@@ -70,6 +70,7 @@ namespace MyFootballCareer
         public long money;                                                 // 가진 돈
         public int weeklyWage;                                             // 지금 계약의 주급 (경기 한 번에 1주치)
         public List<int> facilityLevels = new List<int>();                 // 시설 레벨 (FacilityKind 순서)
+        public List<int> failStacks = new List<int>();                     // 능력치별 연속 실패 횟수 (강화 천장, AttributeKind 순서)
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
     }

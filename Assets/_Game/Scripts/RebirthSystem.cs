@@ -109,8 +109,9 @@ namespace MyFootballCareer
             save.leagueSeason = 0;
             save.money = 0;                   // 돈과 노력 포인트도 처음부터
             save.effortPoints = 0f;
-            save.effortRateLevel = 0;
-            save.facilityLevels = new System.Collections.Generic.List<int>();   // 시설도 처음부터         // 증가량 업그레이드도 처음부터 (환생 보너스는 남음)
+            save.effortRateLevel = 0;         // 증가량 업그레이드도 처음부터 (환생 보너스는 남음)
+            save.facilityLevels = new System.Collections.Generic.List<int>();   // 시설도 처음부터
+            save.failStacks = new System.Collections.Generic.List<int>();       // 강화 천장도 처음부터
             save.lastUpgraded = -1;
             save.weeklyWage = 0;
             SeasonSystem.Prepare(save, ms);   // 시작 팀과 첫 시즌을 다시 만듭니다.

@@ -29,8 +29,12 @@ namespace MyFootballCareer
             bool great = r.Outcome == UpgradeOutcome.GreatSuccess;
             bool success = great || r.Outcome == UpgradeOutcome.Success;
             string name = r.Attribute.ToString().ToUpperInvariant();
-            string sub = (success ? r.Before.ToString("0") + " -> " + r.After.ToString("0") : "Stays at " + r.Before.ToString("0"))
-                       + "   Chance " + Mathf.RoundToInt(r.Chance * 100f) + "%   -" + SeasonSystem.Money(r.Cost) + " points";
+            string chance = CareerPrototypeUI.ChanceText(r.Chance, r.FailStack > 0);
+            string sub = success
+                ? r.Before.ToString("0") + " -> " + r.After.ToString("0") + "   Chance " + chance
+                  + (r.FailStack > 0 ? " (after " + r.FailStack + " fails)" : "") + "   -" + SeasonSystem.Money(r.Cost) + " points"
+                : "Fail stack " + (r.FailStack + 1) + ": next " + CareerPrototypeUI.ChanceText(r.NextChance, true)
+                  + "   -" + SeasonSystem.Money(r.Cost) + " points";
             if (great) ShowBanner("GREAT SUCCESS!  " + name + " +2", sub, PixelTheme.AccentFill, PixelTheme.Accent, Gold, 1.4f, true);
             else if (success) ShowBanner(name + " +1", sub, PixelTheme.ButtonFill, PixelTheme.ButtonEdge, PixelTheme.Text, 0.9f, false);
             else ShowBanner(name + "  FAILED", sub, PixelTheme.QuietFill, PixelTheme.QuietEdge, PixelTheme.TextDim, 0.8f, false);

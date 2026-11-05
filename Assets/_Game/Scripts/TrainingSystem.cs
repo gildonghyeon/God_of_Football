@@ -8,8 +8,10 @@ namespace MyFootballCareer
     {
         public UpgradeOutcome Outcome;
         public AttributeKind Attribute;
-        public float Before, After, Chance;
+        public float Before, After, Chance;   // Chance: 천장 보너스를 더한 이번 확률
         public long Cost;
+        public int FailStack;                  // 이번 도전 전의 연속 실패 횟수
+        public float NextChance;               // 다음 도전 확률 (실패면 보너스가 한 단계 오른 값)
     }
 
     // 화면과 무관한 노력 포인트 규칙입니다. 오브젝트에 붙이지 않습니다.
@@ -100,7 +102,27 @@ namespace MyFootballCareer
             long baseCost = training.UpgradeCost(save.player.Get(kind));
             return System.Math.Max(1L, (long)Mathf.Round(baseCost * (1f - FacilitySystem.CoachDiscount(save, training))));
         }
-        public float Chance(AttributeKind kind) { return training.SuccessChance(save.player.Get(kind), career.attributeCap); }
+        // 원래 성공 확률 (천장 보너스 없이)
+        public float BaseChance(AttributeKind kind) { return training.SuccessChance(save.player.Get(kind), career.attributeCap); }
+
+        // 이번 성공 확률 = 원래 확률 × (1 + 연속 실패 × pityStepRatio)
+        public float Chance(AttributeKind kind)
+        {
+            return Mathf.Min(1f, BaseChance(kind) * (1f + training.pityStepRatio * FailStack(kind)));
+        }
+
+        public int FailStack(AttributeKind kind)
+        {
+            int i = (int)kind;
+            return save.failStacks != null && i < save.failStacks.Count ? Mathf.Max(0, save.failStacks[i]) : 0;
+        }
+
+        void SetFailStack(AttributeKind kind, int value)
+        {
+            if (save.failStacks == null) save.failStacks = new System.Collections.Generic.List<int>();
+            while (save.failStacks.Count <= (int)kind) save.failStacks.Add(0);
+            save.failStacks[(int)kind] = value;
+        }
         public bool IsMax(AttributeKind kind) { return save.player.Get(kind) >= career.attributeCap; }
         public bool CanAfford(AttributeKind kind) { return !IsMax(kind) && save.effortPoints >= Cost(kind); }
 
@@ -108,7 +130,7 @@ namespace MyFootballCareer
         // 성공 확률 중 doubleShare 몫(기본 절반)은 +2, 나머지는 +1입니다. (예전의 소수점 능력치는 정수로 버린 뒤 더함, 최대치는 넘지 않음)
         public UpgradeResult TryUpgrade(AttributeKind kind)
         {
-            var r = new UpgradeResult { Attribute = kind, Before = save.player.Get(kind), Cost = Cost(kind), Chance = Chance(kind) };
+            var r = new UpgradeResult { Attribute = kind, Before = save.player.Get(kind), Cost = Cost(kind), Chance = Chance(kind), FailStack = FailStack(kind) };
             r.After = r.Before;
             if (IsMax(kind)) { r.Outcome = UpgradeOutcome.Max; return r; }
             if (save.effortPoints < r.Cost) { r.Outcome = UpgradeOutcome.NotEnough; return r; }
@@ -121,8 +143,14 @@ namespace MyFootballCareer
                 r.After = Mathf.Min(career.attributeCap, Mathf.Floor(r.Before) + (great ? 2f : 1f));
                 save.player.Set(kind, r.After);
                 r.Outcome = great ? UpgradeOutcome.GreatSuccess : UpgradeOutcome.Success;
+                SetFailStack(kind, 0);   // 성공하면 천장 초기화
             }
-            else r.Outcome = UpgradeOutcome.Fail;
+            else
+            {
+                r.Outcome = UpgradeOutcome.Fail;
+                SetFailStack(kind, r.FailStack + 1);
+            }
+            r.NextChance = IsMax(kind) ? 0f : Chance(kind);
             return r;
         }
 

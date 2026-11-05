@@ -22,6 +22,7 @@ namespace MyFootballCareer
         [Min(1)] public float upgradeCostSpan = 32f;
         [Min(0)] public float upgradeCostPower = 3.8f;
         [Range(0, 1)] public float minSuccessChance = 0.01f; // 99 → 100 강화의 성공 확률 (10 → 11은 100%, 그 사이는 고르게 줄어듦)
+        [Range(0, 1)] public float pityStepRatio = 0.01f;   // 강화 천장: 실패할 때마다 원래 확률의 이 비율만큼 확률이 오름 (성공하면 초기화, 능력치별)
         [Range(0, 1)] public float doubleShare = 0.5f;      // 성공 확률 중 +2가 되는 몫 (0.5면 성공 확률의 절반 확률로 +2)
         [Min(0)] public float baseLevel = 10f;               // 비용·확률 계산의 시작 레벨
 

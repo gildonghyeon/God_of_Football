@@ -510,7 +510,8 @@ namespace MyFootballCareer
                 var kind = (AttributeKind)i;
                 bool max = training.IsMax(kind);
                 b.GetComponentInChildren<Text>().text = max ? "MAX"
-                    : SeasonSystem.Money(training.Cost(kind)) + "  " + Mathf.RoundToInt(training.Chance(kind) * 100f) + "%";
+                    : SeasonSystem.Money(training.Cost(kind)) + "  " + ChanceText(training.Chance(kind), training.FailStack(kind) > 0)
+                      + (training.FailStack(kind) > 0 ? " x" + training.FailStack(kind) : "");
                 ((Image)b.targetGraphic).color = training.CanAfford(kind) ? PixelTheme.ButtonFill : PixelTheme.QuietFill;
             }
             trainingText.text = "Effort points " + SeasonSystem.Money((long)training.Points)
@@ -531,6 +532,13 @@ namespace MyFootballCareer
             if (friendlyText == null) return;
             friendlyText.text = info;
             if (friendlyButton != null) ((Image)friendlyButton.targetGraphic).color = ready ? PixelTheme.AccentFill : PixelTheme.QuietFill;
+        }
+
+        // 확률 글자. 천장 보너스가 붙었거나 10% 미만이면 소수 한 자리까지
+        public static string ChanceText(float chance, bool precise)
+        {
+            float pct = chance * 100f;
+            return (precise || pct < 10f ? pct.ToString("0.0") : Mathf.RoundToInt(pct).ToString()) + "%";
         }
 
         static void SetLines(Text t, string text, int minLines)
