@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 17;
+        const int CurrentVersion = 18;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -149,6 +149,15 @@ namespace MyFootballCareer
                 data.failStacks = new List<int>();
                 upgraded = true;
             }
+            if (data.version == 17)
+            {
+                data.version = 18;   // 시즌 시상과 트로피 추가 (이미 끝난 시즌은 시상하지 않음)
+                data.trophies = new List<TrophyRecord>();
+                data.awardLines = new List<string>();
+                if (data.season != null && data.season.matches != null && data.season.matches.Count > 0
+                    && data.season.nextMatchIndex >= data.season.matches.Count) data.awardsSeason = data.season.seasonNumber;
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -162,6 +171,9 @@ namespace MyFootballCareer
             if (data.extraTrainingIds == null) data.extraTrainingIds = new List<string>();
             if (data.facilityLevels == null) data.facilityLevels = new List<int>();
             if (data.failStacks == null) data.failStacks = new List<int>();
+            if (data.trophies == null) data.trophies = new List<TrophyRecord>();
+            if (data.awardLines == null) data.awardLines = new List<string>();
+            if (data.season != null && data.season.topTeamIds == null) data.season.topTeamIds = new List<string>();
             if (data.money < 0) data.money = 0;
             if (data.multiTrainingLevel < 0) data.multiTrainingLevel = 0;
             if (float.IsNaN(data.effortPoints) || float.IsInfinity(data.effortPoints) || data.effortPoints < 0f) data.effortPoints = 0f;

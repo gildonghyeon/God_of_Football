@@ -102,6 +102,8 @@ namespace MyFootballCareer
             save.seasonHistory.Clear();
             save.offers.Clear();
             save.offersSeason = 0;
+            save.awardsSeason = 0;            // 시즌 번호가 1부터 다시 시작하므로 시상 기록도 처음부터 (트로피는 남음)
+            save.awardLines = new System.Collections.Generic.List<string>();
             save.pendingTeamId = "";
             save.transferDecided = false;
             save.transfers.Clear();

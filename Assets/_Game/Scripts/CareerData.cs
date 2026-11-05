@@ -5,6 +5,17 @@ namespace MyFootballCareer
     public enum Position { Forward, Midfielder, Defender }
     public enum Trait { Finisher, Playmaker, BallWinner }
     public enum AttributeKind { Shooting, Passing, Dribbling, Defending, Stamina }
+    public enum TrophyKind { LeagueTitle, Promotion, TopScorer, TopAssists, TopDefender, BestEleven, PlayerOfTheYear }
+
+    // 받은 트로피 하나. 환생해도 지우지 않습니다.
+    [Serializable] public class TrophyRecord
+    {
+        public TrophyKind kind;
+        public int career;          // 몇 번째 커리어에서 받았는지 (1부터)
+        public int season, division;
+        public string teamName;
+        public string detail;       // 예: "15 goals"
+    }
 
     [Serializable] public class PlayerData
     {
@@ -41,7 +52,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 17;
+        public int version = 18;
         public PlayerData player;
         public string trainingId = "";      // v11 이전의 훈련 선택 (지금은 쓰지 않음)
         public float trainingCarrySeconds;  // v12의 지급 대기 시간 (지금은 쓰지 않음: 포인트는 1초마다 계속 늘어남)
@@ -71,6 +82,9 @@ namespace MyFootballCareer
         public int weeklyWage;                                             // 지금 계약의 주급 (경기 한 번에 1주치)
         public List<int> facilityLevels = new List<int>();                 // 시설 레벨 (FacilityKind 순서)
         public List<int> failStacks = new List<int>();                     // 능력치별 연속 실패 횟수 (강화 천장, AttributeKind 순서)
+        public List<TrophyRecord> trophies = new List<TrophyRecord>();     // 받은 트로피 (환생해도 남음)
+        public int awardsSeason;                                           // 시상을 마친 시즌 번호
+        public List<string> awardLines = new List<string>();               // 그 시즌 시상 결과 안내
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
     }
@@ -116,6 +130,7 @@ namespace MyFootballCareer
         public List<LeagueGame> fixtures = new List<LeagueGame>();      // 같은 부 전체 일정 (다른 팀끼리 경기의 대진)
         public int seed;                                                // 다른 부 결과를 계산할 때 쓰는 값
         public int nextDivision;                                        // 승강 반영 뒤 내 팀의 부 (0이면 아직)
+        public List<string> topTeamIds = new List<string>();            // 이번 시즌 1부 팀들 (올해의 축구선수 계산용)
     }
 
     [Serializable] public class SeasonSummary

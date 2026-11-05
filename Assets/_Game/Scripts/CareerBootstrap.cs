@@ -145,7 +145,9 @@ namespace MyFootballCareer
 
         void RefreshSeasonUI()
         {
-            if (SeasonSystem.EnsureOffers(current, matchSettings, settings)) saves.TrySave(current, out _);
+            bool awarded = AwardSystem.EnsureAwards(current, matchSettings, settings);   // 시상을 이적 제안보다 먼저
+            if (SeasonSystem.EnsureOffers(current, matchSettings, settings) || awarded) saves.TrySave(current, out _);
+            ui.SetTrophies(AwardSystem.DescribeTrophyRoom(current));
             ui.SetSeason(SeasonSystem.DescribeNext(current, matchSettings, settings),
                          SeasonSystem.DescribeLast(current, matchSettings),
                          SeasonSystem.IsComplete(current),
@@ -215,6 +217,13 @@ namespace MyFootballCareer
             saves.TrySave(current, out _);
             ui.SetStatus("Effort rate Lv " + current.effortRateLevel + ": " + training.PointsPerSecond.ToString("0.00") + " per second.");
             ui.RefreshTraining(current.player, training);
+        }
+
+        // 시즌 결산 팝업 (시상 결과가 붙어 길이가 달라지므로 줄 수에 맞춰 높이를 정함)
+        void ShowSeasonEnd()
+        {
+            string text = SeasonSystem.DescribeSeasonEnd(current, matchSettings);
+            ui.ShowPopup("SEASON COMPLETE", text, Mathf.Clamp(text.Split('\n').Length * 29f + 16f, 260f, 760f));
         }
 
         void RefreshMoneyUI()
@@ -331,7 +340,7 @@ namespace MyFootballCareer
                 RefreshSeasonUI();
                 System.Action afterResult = null;
                 if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
-                    afterResult = () => ui.ShowPopup("SEASON COMPLETE", SeasonSystem.DescribeSeasonEnd(current, matchSettings), 340f);
+                    afterResult = () => ShowSeasonEnd();
                 ui.ShowPopup("MATCH RESULT", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
             });
         }

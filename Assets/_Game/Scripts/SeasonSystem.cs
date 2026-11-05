@@ -68,6 +68,8 @@ namespace MyFootballCareer
             return list;
         }
 
+        public static List<TeamDefinition> TeamsInDivision(SaveData save, MatchSettings ms, int division) { return TeamsIn(save, ms, division); }
+
         // ---------- 일정 ----------
         static void StartSeason(SaveData save, MatchSettings ms, int seasonNumber)
         {
@@ -79,6 +81,7 @@ namespace MyFootballCareer
 
             var season = new SeasonData { seasonNumber = seasonNumber, division = division, teamIds = ids, seed = rng.Next() };
             season.fixtures = DoubleRoundRobin(ids, rng);
+            foreach (var t in TeamsIn(save, ms, 1)) season.topTeamIds.Add(t.id);   // 시상(올해의 축구선수)용
             foreach (var f in season.fixtures)
             {
                 if (f.homeId != save.teamId && f.awayId != save.teamId) continue;
@@ -260,7 +263,12 @@ namespace MyFootballCareer
         // 내 팀이 없는 부의 한 시즌을 전력만으로 계산해 최종 순위(팀 ID)를 돌려줍니다. 같은 시즌이면 언제 계산해도 같습니다.
         static List<string> SimulateDivision(SaveData save, MatchSettings ms, int division)
         {
-            var teams = TeamsIn(save, ms, division);
+            return FinalOrder(save, ms, TeamsIn(save, ms, division), division);
+        }
+
+        // 이 팀들로 이 부의 시즌을 전력만으로 계산한 최종 순위 (승강 계산과 같은 결과)
+        public static List<string> FinalOrder(SaveData save, MatchSettings ms, List<TeamDefinition> teams, int division)
+        {
             var ids = new List<string>();
             foreach (var t in teams) ids.Add(t.id);
             var rng = new System.Random(save.season.seed ^ (division * 7919));
@@ -283,6 +291,7 @@ namespace MyFootballCareer
         public static string StartNextSeason(SaveData save, MatchSettings ms, CareerSettings career)
         {
             EnsureSeasonEnd(save, ms);
+            AwardSystem.EnsureAwards(save, ms, career);   // 시상을 건너뛰지 않도록
             save.seasonHistory.Add(Summarize(save, ms));
             int before = save.season.division;
             int oldWage = save.weeklyWage;
@@ -572,7 +581,7 @@ namespace MyFootballCareer
             }
         }
 
-        static string TeamName(SaveData save, MatchSettings ms)
+        public static string TeamName(SaveData save, MatchSettings ms)
         {
             var team = ms.FindTeam(save.teamId);
             return team != null ? team.displayName : save.teamId;
@@ -686,8 +695,10 @@ namespace MyFootballCareer
             sb.Append("Your goals ").Append(t.playerGoals).Append("  assists ").Append(t.playerAssists)
               .Append("  avg rating ").Append(t.averageRating.ToString("0.0"))
               .Append("  apps ").Append(t.appearances).Append('/').Append(t.played);
+            string awards = AwardSystem.DescribeAwards(save);
+            if (awards != null) sb.Append("\n\n").Append(awards);
             string offers = DescribeOffers(save);
-            if (offers != null) sb.Append('\n').Append(offers).Append(save.offers.Count > 0 ? " See CAREER." : "");
+            if (offers != null) sb.Append(awards != null ? "\n\n" : "\n").Append(offers).Append(save.offers.Count > 0 ? " See CAREER." : "");
             return sb.ToString();
         }
 
