@@ -89,6 +89,7 @@ namespace MyFootballCareer
             feed[0] = ""; feed[1] = "";
             BuildUi(parent);
             Feed(m.playerPlayed ? "0'  Kick-off" : "0'  Kick-off (you are on the bench)");
+            SoundFx.Play(Sfx.Whistle);
             Active = true;
             Tick(0f);
             return true;
@@ -287,6 +288,7 @@ namespace MyFootballCareer
                 finishing = true; finishT = 1.3f;
                 SnapStats();
                 ShowBanner("FULL TIME", PixelTheme.Text, 1.3f, 56);
+                SoundFx.Play(Sfx.FullTime);
                 Feed("90'  Full time");
             }
         }
@@ -363,6 +365,7 @@ namespace MyFootballCareer
         void OnGoal(ReplayEvent ev)
         {
             if (ev.type == ReplayEventType.GoalOurs) goalsFor++; else goalsAgainst++;
+            SoundFx.Play(ev.type == ReplayEventType.GoalOurs ? Sfx.Goal : Sfx.Conceded);
             scoreText.text = goalsFor + " - " + goalsAgainst;
             if (ev.type == ReplayEventType.GoalOurs)
             {
@@ -389,6 +392,7 @@ namespace MyFootballCareer
         {
             yourAssists++;
             Feed(Minute() + "  ASSIST! You set up the goal.");
+            SoundFx.Play(Sfx.Assist, 0.8f);
             ShowBanner("ASSIST!", PixelTheme.Accent, 1.3f, 72);
         }
 
@@ -403,6 +407,7 @@ namespace MyFootballCareer
         {
             yourTackles++;
             Feed(Minute() + "  Tackle! You won the ball.");
+            SoundFx.Play(Sfx.Tackle, 0.8f);
             ShowBanner("TACKLE!", new Color(.6f, 1f, .7f), 0.8f, 44);
         }
 

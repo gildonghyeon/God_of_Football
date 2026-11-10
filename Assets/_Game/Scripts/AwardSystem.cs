@@ -286,6 +286,16 @@ namespace MyFootballCareer
             return true;
         }
 
+        // 이번 시즌(지금 커리어)에 받은 트로피 (수여 연출용)
+        public static List<TrophyRecord> SeasonTrophies(SaveData save)
+        {
+            var list = new List<TrophyRecord>();
+            if (save.trophies == null || save.season == null) return list;
+            foreach (var t in save.trophies)
+                if (t.career == save.rebirthCount + 1 && t.season == save.season.seasonNumber) list.Add(t);
+            return list;
+        }
+
         // 시즌 종료 팝업에 붙일 시상 결과 (이번 시즌 계산 전이면 null)
         public static string DescribeAwards(SaveData save)
         {

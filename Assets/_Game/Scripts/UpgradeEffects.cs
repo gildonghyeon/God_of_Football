@@ -28,6 +28,7 @@ namespace MyFootballCareer
             if (r == null || root == null) return;
             bool great = r.Outcome == UpgradeOutcome.GreatSuccess;
             bool success = great || r.Outcome == UpgradeOutcome.Success;
+            SoundFx.Play(great ? Sfx.UpgradeGreat : success ? Sfx.UpgradeSuccess : Sfx.UpgradeFail);
             string name = r.Attribute.ToString().ToUpperInvariant();
             string chance = CareerPrototypeUI.ChanceText(r.Chance, r.FailStack > 0);
             string sub = success

@@ -79,6 +79,10 @@ namespace MyFootballCareer
         TrainingStageView stage;   // 훈련장 장면
         MatchReplayView matchView; // 경기 영상 화면
         UpgradeEffects upgradeFx;  // 강화 결과 연출
+        TrophyCeremony ceremony;   // 시즌 끝 트로피 수여 연출
+        Text offlineNumber;        // 오프라인 보상 창의 올라가는 숫자
+        float offlineTarget, offlineT;
+        const float OfflineCountTime = 1.4f;
 
         Transform Parent { get { return currentParent != null ? currentParent : content; } }
 
@@ -111,6 +115,7 @@ namespace MyFootballCareer
             safeRoot = NewRect("SafeArea", canvasGO.transform);
             FitSafeArea();
             upgradeFx = new UpgradeEffects(font, safeRoot);
+            ceremony = new TrophyCeremony(font, safeRoot);
             if (EventSystem.current == null)
             {
                 var events = new GameObject("CareerEventSystem", typeof(EventSystem));
@@ -176,6 +181,8 @@ namespace MyFootballCareer
             if (stage != null) stage.Tick(Time.unscaledDeltaTime);
             if (matchView != null) matchView.Tick(Time.unscaledDeltaTime);
             if (upgradeFx != null) upgradeFx.Tick(Time.unscaledDeltaTime);
+            if (ceremony != null) ceremony.Tick(Time.unscaledDeltaTime);
+            TickOfflineCount(Time.unscaledDeltaTime);
             if (safeRoot != null && (Screen.safeArea != lastSafe || Screen.width != lastWidth || Screen.height != lastHeight)) FitSafeArea();
         }
 
@@ -230,7 +237,7 @@ namespace MyFootballCareer
             var colors = button.colors;
             colors.highlightedColor = Color.white; colors.pressedColor = new Color(.7f, .7f, .7f, 1);
             button.colors = colors;
-            button.onClick.AddListener(() => action());
+            button.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); action(); });
             var text = TextNode(label, inner, 26); Stretch(text.rectTransform); text.alignment = TextAnchor.MiddleCenter;
             return button;
         }
@@ -430,7 +437,15 @@ namespace MyFootballCareer
             Height(systemRow.gameObject, 68);
             PixelButton("SAVE", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             PixelButton("LOOK", () => ShowLookDialog(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            Button soundButton = null;
+            soundButton = PixelButton(SoundFx.Enabled ? "SOUND ON" : "SOUND OFF", () =>
+            {
+                SoundFx.Enabled = !SoundFx.Enabled;
+                soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "SOUND ON" : "SOUND OFF";
+                SoundFx.Play(Sfx.Click);
+            }, systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             PixelButton("RESET SAVE", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            foreach (var t in systemRow.GetComponentsInChildren<Text>()) t.fontSize = 20;
             Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h", 22, 30).color = PixelTheme.TextDim;
 
             // MATCH: 시즌, 경기, 순위표
@@ -639,6 +654,50 @@ namespace MyFootballCareer
         }
 
         public void SetStatus(string message) { if (status != null) status.text = message; }
+
+        // 시즌 끝 트로피 수여 연출. 다 보면 done을 부릅니다.
+        public void ShowTrophyCeremony(List<TrophyRecord> trophies, string heading, Action done)
+        {
+            CloseDialog();
+            if (ceremony == null) { done?.Invoke(); return; }
+            ceremony.Show(trophies, heading, done);
+        }
+
+        // 돌아왔을 때의 보상 창: 받은 노력 포인트가 0부터 올라가는 숫자로 보이고, COLLECT로 닫습니다.
+        public void ShowOfflineReward(OfflineResult r)
+        {
+            if (r == null || !r.Granted) return;
+            float rate = r.CreditedSeconds > 0f ? r.Points / r.CreditedSeconds : 0f;
+            var inner = BuildDialog("WELCOME BACK!", "You were away " + IdleRewardSystem.FormatDuration(r.AwaySeconds) + ".\nYour player kept training.", 70f);
+            var caption = TextNode("EFFORT POINTS EARNED", inner, 22); caption.alignment = TextAnchor.MiddleCenter; caption.color = PixelTheme.TextDim; Height(caption.gameObject, 30);
+            offlineNumber = TextNode("+0", inner, 60); offlineNumber.alignment = TextAnchor.MiddleCenter; offlineNumber.color = PixelTheme.Accent; Height(offlineNumber.gameObject, 84);
+            var glow = offlineNumber.gameObject.AddComponent<Outline>(); glow.effectColor = new Color(.35f, .22f, 0f, 1f); glow.effectDistance = new Vector2(3, -3);
+            string detail = "Counted " + IdleRewardSystem.FormatDuration(r.CreditedSeconds)
+                + (r.Capped ? "  (cap " + IdleRewardSystem.FormatDuration(r.CapSeconds) + ")" : "")
+                + "   " + rate.ToString("0.00") + "/s\nNow " + SeasonSystem.Money((long)r.Total) + " points. Try upgrades on HOME.";
+            var info = TextNode(detail, inner, 20); info.alignment = TextAnchor.MiddleCenter; Height(info.gameObject, 64);
+            if (r.Capped)
+            {
+                var cap = TextNode("Offline time is capped. Come back sooner for more!", inner, 18); cap.alignment = TextAnchor.MiddleCenter; cap.color = PixelTheme.DangerEdge; Height(cap.gameObject, 28);
+            }
+            offlineTarget = r.Points; offlineT = 0f;
+            PixelButton("COLLECT", () => { SoundFx.Play(Sfx.Collect); offlineNumber = null; CloseDialog(); }, inner, 76f, PixelTheme.AccentFill, PixelTheme.Accent);
+        }
+
+        void TickOfflineCount(float dt)
+        {
+            if (offlineNumber == null) return;
+            if (overlay == null) { offlineNumber = null; return; }   // 창이 닫혔으면 그만
+            if (offlineT >= OfflineCountTime) return;
+            offlineT += dt;
+            float k = Mathf.Clamp01(offlineT / OfflineCountTime);
+            float ease = 1f - (1f - k) * (1f - k) * (1f - k);
+            offlineNumber.text = "+" + SeasonSystem.Money((long)Mathf.Round(offlineTarget * ease));
+            float s = k < 1f ? 1f : 1f;
+            if (k < 1f) SoundFx.Play(Sfx.Tick, 0.6f);
+            else { SoundFx.Play(Sfx.Collect, 0.8f); s = 1.15f; }
+            offlineNumber.rectTransform.localScale = new Vector3(s, s, 1f);
+        }
 
         // 강화 결과 연출 (결과 창 대신). 능력치 글자가 새 값으로 바뀐 뒤에 부릅니다.
         public void ShowUpgradeResult(UpgradeResult r)

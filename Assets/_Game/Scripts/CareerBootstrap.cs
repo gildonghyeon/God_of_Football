@@ -129,7 +129,7 @@ namespace MyFootballCareer
         void ShowOffline(OfflineResult offline)
         {
             if (offline == null || !offline.Granted) return;
-            ui.ShowPopup("WELCOME BACK", IdleRewardSystem.Describe(offline));
+            ui.ShowOfflineReward(offline);
         }
 
         // 모바일에서 앱이 백그라운드에서 돌아왔을 때도 같은 규칙으로 보상합니다.
@@ -215,9 +215,18 @@ namespace MyFootballCareer
             long cost = training.RateCost;
             if (cost < 0) { ui.SetStatus("Effort rate is at the max level."); return; }
             if (!training.BuyRate()) { ui.SetStatus("Not enough effort points: " + SeasonSystem.Money(cost) + " needed."); return; }
+            SoundFx.Play(Sfx.Buy);
             saves.TrySave(current, out _);
             ui.SetStatus("Effort rate Lv " + current.effortRateLevel + ": " + training.PointsPerSecond.ToString("0.00") + " per second.");
             ui.RefreshTraining(current.player, training);
+        }
+
+        // 받은 트로피가 있으면 수여 연출을 먼저 보여 주고, 그다음 시즌 결산 팝업
+        void ShowSeasonEndWithTrophies()
+        {
+            var won = AwardSystem.SeasonTrophies(current);
+            if (won.Count == 0) { ShowSeasonEnd(); return; }
+            ui.ShowTrophyCeremony(won, "SEASON " + current.season.seasonNumber + " AWARDS", ShowSeasonEnd);
         }
 
         // 시즌 결산 팝업 (시상 결과가 붙어 길이가 달라지므로 줄 수에 맞춰 높이를 정함)
@@ -250,6 +259,7 @@ namespace MyFootballCareer
             long cost = FacilitySystem.Cost(current, kind, trainingSettings);
             if (cost < 0) { ui.SetStatus(FacilitySystem.Name(kind) + " is at the max level."); return; }
             if (!FacilitySystem.Buy(current, kind, trainingSettings)) { ui.SetStatus("Not enough money: " + SeasonSystem.Money(cost) + " needed."); return; }
+            SoundFx.Play(Sfx.Buy);
             saves.TrySave(current, out _);
             ui.SetStatus(FacilitySystem.Name(kind) + " Lv " + FacilitySystem.Level(current, kind) + ": " + FacilitySystem.Effect(current, kind, trainingSettings, matchSettings));
             RefreshMoneyUI();
@@ -341,7 +351,7 @@ namespace MyFootballCareer
                 RefreshSeasonUI();
                 System.Action afterResult = null;
                 if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
-                    afterResult = () => ShowSeasonEnd();
+                    afterResult = ShowSeasonEndWithTrophies;
                 ui.ShowPopup("MATCH RESULT", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
             });
         }
