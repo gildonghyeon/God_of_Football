@@ -6,9 +6,9 @@ namespace MyFootballCareer
     // 머리 모양은 그림 자체이므로 바뀌지 않습니다. 새 머리색·피부색·유니폼을 늘리려면 아래 표에 한 줄씩 추가하면 됩니다.
     public static class PlayerLook
     {
-        public static readonly string[] HairNames = { "Brown", "Black", "Chestnut", "Blond", "Red", "Silver", "Blue" };
-        public static readonly string[] SkinNames = { "Light", "Tan", "Brown", "Dark" };
-        public static readonly string[] KitNames = { "Blue", "Red", "White", "Yellow", "Green", "Navy", "Sky Stripes", "Pink" };
+        public static readonly string[] HairNames = { "갈색", "검정", "밤색", "금발", "빨강", "은색", "파랑" };
+        public static readonly string[] SkinNames = { "밝은 톤", "황갈색", "갈색", "어두운 톤" };
+        public static readonly string[] KitNames = { "파랑", "빨강", "흰색", "노랑", "초록", "남색", "하늘 줄무늬", "분홍" };
 
         // 머리색: 색상(도), 채도, 기준 밝기. 첫 번째(원본)는 바꾸지 않습니다.
         static readonly float[] HairHue = { 0f, 20f, 22f, 44f, 13f, 220f, 214f };

@@ -20,15 +20,15 @@ MonoBehaviour:
   agentWagePercent: 5
   agentScorePerLevel: 1
   divisions:
-  - name: Division 1
+  - name: "1\uBD80 \uB9AC\uADF8"
     recommendedRating: 85
-  - name: Division 2
+  - name: "2\uBD80 \uB9AC\uADF8"
     recommendedRating: 60
-  - name: Division 3
+  - name: "3\uBD80 \uB9AC\uADF8"
     recommendedRating: 39
-  - name: Division 4
+  - name: "4\uBD80 \uB9AC\uADF8"
     recommendedRating: 23
-  - name: Division 5
+  - name: "5\uBD80 \uB9AC\uADF8"
     recommendedRating: 10
   teams:
   - id: crownhaven

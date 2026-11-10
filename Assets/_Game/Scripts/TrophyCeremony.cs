@@ -88,9 +88,9 @@ namespace MyFootballCareer
             trophyRect.GetComponent<Image>().sprite = Icon(tr.kind);
             kindText.text = AwardSystem.KindName(tr.kind).ToUpperInvariant();
             kindText.color = KindColor(tr.kind);
-            detailText.text = tr.detail + (tr.division > 0 ? "   Division " + tr.division : "") + "\n" + tr.teamName;
+            detailText.text = tr.detail + (tr.division > 0 ? "   " + tr.division + "부" : "") + "\n" + tr.teamName;
             counterText.text = (index + 1) + " / " + list.Count;
-            buttonText.text = index + 1 < list.Count ? "NEXT" : "CONTINUE";
+            buttonText.text = index + 1 < list.Count ? "다음" : "계속";
             foreach (var r in sparks) if (r != null) UnityEngine.Object.Destroy(r.gameObject);
             sparks.Clear(); sparkVel.Clear();
             var rng = new System.Random(index * 31 + 5);
@@ -149,7 +149,7 @@ namespace MyFootballCareer
             var fill = NewImage(er, PixelTheme.AccentFill);
             var fr = fill.rectTransform; fr.anchorMin = Vector2.zero; fr.anchorMax = Vector2.one; fr.offsetMin = new Vector2(4, 4); fr.offsetMax = new Vector2(-4, -4);
             var b = edge.gameObject.AddComponent<Button>(); b.targetGraphic = fill; b.onClick.AddListener(Next);
-            buttonText = NewText(fr, "NEXT", 28, PixelTheme.Text, Vector2.zero, Vector2.zero);
+            buttonText = NewText(fr, "다음", 28, PixelTheme.Text, Vector2.zero, Vector2.zero);
             var btr = buttonText.rectTransform; btr.anchorMin = Vector2.zero; btr.anchorMax = Vector2.one; btr.offsetMin = btr.offsetMax = Vector2.zero;
         }
 

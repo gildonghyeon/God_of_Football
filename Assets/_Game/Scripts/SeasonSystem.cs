@@ -304,23 +304,23 @@ namespace MyFootballCareer
                 {
                     string from = TeamName(save, ms);
                     save.transfers.Add(new TransferRecord { afterSeason = save.season.seasonNumber, fromTeamName = from, toTeamName = target.displayName });
-                    lines.Add("Transferred: " + from + " -> " + target.displayName);
+                    lines.Add("이적: " + from + " -> " + target.displayName);
                     save.teamId = target.id;
                     foreach (var o in save.offers) if (o.teamId == target.id && o.weeklyWage > 0) newWage = o.weeklyWage;
                 }
             }
             if (newWage <= 0) newWage = WageFor(save, ms, career, save.teamId);   // 남으면 지금 능력치로 재계약
             save.weeklyWage = newWage;
-            if (newWage != oldWage) lines.Add("New contract: " + Money(newWage) + " per week.");
+            if (newWage != oldWage) lines.Add("새 계약: 주급 " + Money(newWage));
             save.pendingTeamId = "";
             save.transferDecided = false;
             save.offers.Clear();
             StartSeason(save, ms, save.season.seasonNumber + 1);
             int after = save.season.division;
             if (before > 0 && after != before)
-                lines.Add((after < before ? "Up to " : "Down to ") + ms.DivisionName(after) + ".");
+                lines.Add(ms.DivisionName(after) + (after < before ? "로 승격!" : "로 강등."));
             else if (before == 0)
-                lines.Add("The league now has " + ms.DivisionCount + " divisions. You play in " + ms.DivisionName(after) + ".");
+                lines.Add("리그가 " + ms.DivisionCount + "개 부로 나뉩니다. " + ms.DivisionName(after) + "에서 뜁니다.");
             return lines.Count > 0 ? string.Join("\n", lines) : null;
         }
 
@@ -443,10 +443,10 @@ namespace MyFootballCareer
         public static string DescribeOffers(SaveData save)
         {
             if (!IsComplete(save) || save.offersSeason != save.season.seasonNumber) return null;
-            string grade = save.offersScore >= 0 ? "Season grade " + Grade(save.offersScore) + " (" + save.offersScore + "/100). " : "";
+            string grade = save.offersScore >= 0 ? "시즌 등급 " + Grade(save.offersScore) + " (" + save.offersScore + "/100). " : "";
             int n = save.offers != null ? save.offers.Count : 0;
-            if (n == 0) return grade + "No clubs made an offer. Play better next season.";
-            return grade + n + (n == 1 ? " club made an offer." : " clubs made offers.");
+            if (n == 0) return grade + "이적 제안이 없습니다. 다음 시즌에 더 활약해 보세요.";
+            return grade + n + "개 팀이 이적을 제안했습니다.";
         }
 
         // 이번 제안에 대한 선택을 이미 확정했는지 (예전 저장에서 이적이 합의되어 있던 것도 확정으로 봄)
@@ -571,13 +571,13 @@ namespace MyFootballCareer
         public static string Ordinal(int n)
         {
             int mod100 = n % 100;
-            if (mod100 >= 11 && mod100 <= 13) return n + "th";
+            if (mod100 >= 11 && mod100 <= 13) return n + "위";
             switch (n % 10)
             {
-                case 1: return n + "st";
-                case 2: return n + "nd";
-                case 3: return n + "rd";
-                default: return n + "th";
+                case 1: return n + "위";
+                case 2: return n + "위";
+                case 3: return n + "위";
+                default: return n + "위";
             }
         }
 
@@ -587,7 +587,7 @@ namespace MyFootballCareer
             return team != null ? team.displayName : save.teamId;
         }
 
-        static string ShortDivision(int division) { return "Div " + division; }
+        static string ShortDivision(int division) { return division + "부"; }
 
         public static string Money(long amount) { return amount.ToString("#,0"); }
 
@@ -596,62 +596,62 @@ namespace MyFootballCareer
         {
             var season = save.season;
             if (season.division <= 0 || season.nextDivision <= 0) return null;
-            if (season.nextDivision < season.division) return "Promoted to " + ms.DivisionName(season.nextDivision) + "!";
-            if (season.nextDivision > season.division) return "Relegated to " + ms.DivisionName(season.nextDivision) + ".";
-            return "Staying in " + ms.DivisionName(season.division) + ".";
+            if (season.nextDivision < season.division) return ms.DivisionName(season.nextDivision) + "로 승격!";
+            if (season.nextDivision > season.division) return ms.DivisionName(season.nextDivision) + "로 강등.";
+            return ms.DivisionName(season.division) + " 잔류.";
         }
 
         // ---------- 화면에 보여줄 글 ----------
         public static string DescribeNext(SaveData save, MatchSettings ms, CareerSettings career)
         {
             var season = save.season;
-            if (season.matches.Count == 0) return "No season available.";
-            string where = season.division > 0 ? ms.DivisionName(season.division) : "League";
+            if (season.matches.Count == 0) return "시즌 정보가 없습니다.";
+            string where = season.division > 0 ? ms.DivisionName(season.division) : "리그";
             if (IsComplete(save))
             {
                 var t = Summarize(save, ms);
                 var sb = new StringBuilder();
-                sb.Append("Season ").Append(season.seasonNumber).Append(" complete - ").Append(where).Append('\n')
-                  .Append(Ordinal(t.finalPosition)).Append(" of ").Append(Standings(save, ms).Count)
-                  .Append("   W").Append(t.wins).Append(" D").Append(t.draws).Append(" L").Append(t.losses)
-                  .Append("   Avg rating ").Append(t.averageRating.ToString("0.0"));
+                sb.Append("시즌 ").Append(season.seasonNumber).Append(" 종료 - ").Append(where).Append('\n')
+                  .Append(Ordinal(t.finalPosition)).Append(" / ").Append(Standings(save, ms).Count).Append("팀")
+                  .Append("   ").Append(t.wins).Append("승 ").Append(t.draws).Append("무 ").Append(t.losses).Append("패")
+                  .Append("   평균 평점 ").Append(t.averageRating.ToString("0.0"));
                 string move = MovementText(save, ms);
                 if (move != null) sb.Append('\n').Append(move);
                 return sb.ToString();
             }
             var next = season.matches[season.nextMatchIndex];
             var text = new StringBuilder();
-            text.Append("Season ").Append(season.seasonNumber).Append("   ").Append(where)
-                .Append("   Round ").Append(next.round).Append('/').Append(season.matches.Count)
-                .Append("\nNext: vs ").Append(next.opponentName).Append(next.home ? " (Home)" : " (Away)");
+            text.Append("시즌 ").Append(season.seasonNumber).Append("   ").Append(where)
+                .Append("   라운드 ").Append(next.round).Append('/').Append(season.matches.Count)
+                .Append("\n다음 상대: ").Append(next.opponentName).Append(next.home ? " (홈)" : " (원정)");
             if (season.division > 0)
-                text.Append("\nYour rating ").Append(PlayerRating(save, ms, career).ToString("0"))
-                    .Append("  /  recommended ").Append(ms.RecommendedRating(season.division).ToString("0"));
+                text.Append("\n내 평점 ").Append(PlayerRating(save, ms, career).ToString("0"))
+                    .Append("  /  권장 ").Append(ms.RecommendedRating(season.division).ToString("0"));
             return text.ToString();
         }
 
         public static string DescribeLast(SaveData save, MatchSettings ms)
         {
             var season = save.season;
-            if (season.nextMatchIndex <= 0 || season.nextMatchIndex > season.matches.Count) return "No matches played yet.";
+            if (season.nextMatchIndex <= 0 || season.nextMatchIndex > season.matches.Count) return "아직 치른 경기가 없습니다.";
             return DescribeResult(season.matches[season.nextMatchIndex - 1], save, ms);
         }
 
         public static string DescribeResult(MatchRecord m, SaveData save, MatchSettings ms)
         {
-            string outcome = m.goalsFor > m.goalsAgainst ? "WIN" : (m.goalsFor < m.goalsAgainst ? "LOSS" : "DRAW");
+            string outcome = m.goalsFor > m.goalsAgainst ? "승리" : (m.goalsFor < m.goalsAgainst ? "패배" : "무승부");
             int passPercent = m.passesAttempted > 0 ? Mathf.RoundToInt(100f * m.passesCompleted / m.passesAttempted) : 0;
             var sb = new StringBuilder();
-            sb.Append(m.round > 0 ? "Round " + m.round : "Friendly").Append(": ").Append(TeamName(save, ms)).Append(' ')
+            sb.Append(m.round > 0 ? m.round + "라운드" : "친선 경기").Append(": ").Append(TeamName(save, ms)).Append(' ')
               .Append(m.goalsFor).Append(" - ").Append(m.goalsAgainst).Append(' ').Append(m.opponentName)
               .Append("  (").Append(outcome).Append(")\n");
-            if (m.wage > 0) sb.Append("Wage +").Append(Money(m.wage)).Append('\n');
-            if (!m.playerPlayed) return sb.Append("You did not play (bench).").ToString();
-            sb.Append("Rating ").Append(m.rating.ToString("0.0")).Append('\n');
-            sb.Append("Goals ").Append(m.playerGoals).Append("  Assists ").Append(m.playerAssists)
-              .Append("  Shots ").Append(m.playerShots).Append('\n');
-            sb.Append("Passes ").Append(m.passesCompleted).Append('/').Append(m.passesAttempted)
-              .Append(" (").Append(passPercent).Append("%)  Defensive actions ").Append(m.defensiveActions);
+            if (m.wage > 0) sb.Append("주급 +").Append(Money(m.wage)).Append('\n');
+            if (!m.playerPlayed) return sb.Append("출전하지 못했습니다 (벤치).").ToString();
+            sb.Append("평점 ").Append(m.rating.ToString("0.0")).Append('\n');
+            sb.Append("골 ").Append(m.playerGoals).Append("  도움 ").Append(m.playerAssists)
+              .Append("  슈팅 ").Append(m.playerShots).Append('\n');
+            sb.Append("패스 ").Append(m.passesCompleted).Append('/').Append(m.passesAttempted)
+              .Append(" (").Append(passPercent).Append("%)  수비 ").Append(m.defensiveActions);
             return sb.ToString();
         }
 
@@ -659,7 +659,7 @@ namespace MyFootballCareer
         public static string DescribeStandings(SaveData save, MatchSettings ms)
         {
             var table = Standings(save, ms);
-            if (table.Count == 0) return "No teams.";
+            if (table.Count == 0) return "팀이 없습니다.";
             var season = save.season;
             int k = season.division > 0 ? Mathf.Min(ms.promotionSpots, table.Count / 2) : 0;
             bool canGoUp = season.division > 1, canGoDown = season.division > 0 && season.division < ms.DivisionCount;
@@ -668,13 +668,13 @@ namespace MyFootballCareer
             for (int i = 0; i < table.Count; i++)
             {
                 var r = table[i];
-                if (canGoDown && k > 0 && i == table.Count - k) sb.Append("---- relegation ----\n");
+                if (canGoDown && k > 0 && i == table.Count - k) sb.Append("---- 강등권 ----\n");
                 sb.Append(i + 1).Append(". ").Append(r.name).Append(r.id == save.teamId ? " *" : "")
-                  .Append("   W").Append(r.won).Append(" D").Append(r.drawn).Append(" L").Append(r.lost)
+                  .Append("   ").Append(r.won).Append("승 ").Append(r.drawn).Append("무 ").Append(r.lost).Append("패")
                   .Append("  ").Append(r.GoalDiff >= 0 ? "+" : "").Append(r.GoalDiff)
-                  .Append("  ").Append(r.Points).Append("pts");
+                  .Append("  ").Append(r.Points).Append("점");
                 if (i < table.Count - 1) sb.Append('\n');
-                if (canGoUp && k > 0 && i == k - 1) sb.Append("---- promotion ----\n");
+                if (canGoUp && k > 0 && i == k - 1) sb.Append("---- 승격권 ----\n");
             }
             return sb.ToString();
         }
@@ -685,40 +685,40 @@ namespace MyFootballCareer
             var t = Summarize(save, ms);
             int teams = Standings(save, ms).Count;
             var sb = new StringBuilder();
-            sb.Append("Season ").Append(t.seasonNumber).Append(" final: ").Append(Ordinal(t.finalPosition))
-              .Append(" of ").Append(teams).Append("  (").Append(t.points).Append(" pts)\n");
-            sb.Append(t.finalPosition == 1 ? "You are the champion!\n" : "Champion: " + t.champion + "\n");
+            sb.Append("시즌 ").Append(t.seasonNumber).Append(" 최종: ").Append(Ordinal(t.finalPosition))
+              .Append(" / ").Append(teams).Append("팀  (승점 ").Append(t.points).Append(")\n");
+            sb.Append(t.finalPosition == 1 ? "우승했습니다!\n" : "우승: " + t.champion + "\n");
             string move = MovementText(save, ms);
             if (move != null) sb.Append(move).Append('\n');
-            sb.Append("W").Append(t.wins).Append(" D").Append(t.draws).Append(" L").Append(t.losses)
-              .Append("   Goals ").Append(t.goalsFor).Append(" - ").Append(t.goalsAgainst).Append('\n');
-            sb.Append("Your goals ").Append(t.playerGoals).Append("  assists ").Append(t.playerAssists)
-              .Append("  avg rating ").Append(t.averageRating.ToString("0.0"))
-              .Append("  apps ").Append(t.appearances).Append('/').Append(t.played);
+            sb.Append(t.wins).Append("승 ").Append(t.draws).Append("무 ").Append(t.losses).Append("패")
+              .Append("   득실 ").Append(t.goalsFor).Append(" - ").Append(t.goalsAgainst).Append('\n');
+            sb.Append("내 기록: 골 ").Append(t.playerGoals).Append("  도움 ").Append(t.playerAssists)
+              .Append("  평균 평점 ").Append(t.averageRating.ToString("0.0"))
+              .Append("  출전 ").Append(t.appearances).Append('/').Append(t.played);
             string awards = AwardSystem.DescribeAwards(save);
             if (awards != null) sb.Append("\n\n").Append(awards);
             string offers = DescribeOffers(save);
-            if (offers != null) sb.Append(awards != null ? "\n\n" : "\n").Append(offers).Append(save.offers.Count > 0 ? " See CAREER." : "");
+            if (offers != null) sb.Append(awards != null ? "\n\n" : "\n").Append(offers).Append(save.offers.Count > 0 ? " 커리어 탭에서 확인하세요." : "");
             return sb.ToString();
         }
 
         public static string DescribeHistory(SaveData save)
         {
             var history = save.seasonHistory;
-            if (history.Count == 0) return "No completed seasons yet.";
+            if (history.Count == 0) return "아직 끝낸 시즌이 없습니다.";
             var sb = new StringBuilder();
             int shown = 0;
             for (int i = history.Count - 1; i >= 0 && shown < 3; i--, shown++)
             {
                 var h = history[i];
                 if (shown > 0) sb.Append('\n');
-                sb.Append("Season ").Append(h.seasonNumber).Append(": ");
+                sb.Append("시즌 ").Append(h.seasonNumber).Append(": ");
                 if (h.division > 0) sb.Append(ShortDivision(h.division)).Append(' ');
                 if (h.finalPosition > 0) sb.Append(Ordinal(h.finalPosition)).Append(", ");
                 if (!string.IsNullOrEmpty(h.teamName)) sb.Append(h.teamName).Append(", ");
-                sb.Append("W").Append(h.wins).Append(" D").Append(h.draws).Append(" L").Append(h.losses)
-                  .Append(", G").Append(h.playerGoals).Append(" A").Append(h.playerAssists)
-                  .Append(", avg ").Append(h.averageRating.ToString("0.0"));
+                sb.Append(h.wins).Append("승 ").Append(h.draws).Append("무 ").Append(h.losses).Append("패")
+                  .Append(", 골 ").Append(h.playerGoals).Append(" 도움 ").Append(h.playerAssists)
+                  .Append(", 평점 ").Append(h.averageRating.ToString("0.0"));
             }
             return sb.ToString();
         }

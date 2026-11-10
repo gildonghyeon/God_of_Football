@@ -17,9 +17,9 @@ namespace MyFootballCareer
         {
             switch (kind)
             {
-                case FacilityKind.TrainingGround: return "TRAINING GROUND";
-                case FacilityKind.Coach: return "PERSONAL COACH";
-                default: return "AGENT";
+                case FacilityKind.TrainingGround: return "훈련장";
+                case FacilityKind.Coach: return "전담 코치";
+                default: return "에이전트";
             }
         }
 
@@ -87,12 +87,12 @@ namespace MyFootballCareer
             switch (kind)
             {
                 case FacilityKind.TrainingGround:
-                    return "Effort points +" + Mathf.RoundToInt((EffortMultiplier(save, training) - 1f) * 100f) + "%  (+" + training.trainingGroundPercent.ToString("0.#") + "% per level)";
+                    return "노력 포인트 +" + Mathf.RoundToInt((EffortMultiplier(save, training) - 1f) * 100f) + "%  (+" + training.trainingGroundPercent.ToString("0.#") + "%/레벨)";
                 case FacilityKind.Coach:
-                    return "Upgrade cost -" + Mathf.RoundToInt(CoachDiscount(save, training) * 100f) + "%  (-" + training.coachDiscountPercent.ToString("0.#") + "% per level)";
+                    return "강화 비용 -" + Mathf.RoundToInt(CoachDiscount(save, training) * 100f) + "%  (-" + training.coachDiscountPercent.ToString("0.#") + "%/레벨)";
                 default:
-                    return "Wage +" + Mathf.RoundToInt((WageMultiplier(save, ms) - 1f) * 100f) + "%, season grade +" + ScoreBonus(save, ms).ToString("0")
-                         + "  (+" + ms.agentWagePercent.ToString("0.#") + "% / +" + ms.agentScorePerLevel.ToString("0.#") + " per level)";
+                    return "주급 +" + Mathf.RoundToInt((WageMultiplier(save, ms) - 1f) * 100f) + "%, 시즌 점수 +" + ScoreBonus(save, ms).ToString("0")
+                         + "  (+" + ms.agentWagePercent.ToString("0.#") + "% / +" + ms.agentScorePerLevel.ToString("0.#") + "/레벨)";
             }
         }
     }

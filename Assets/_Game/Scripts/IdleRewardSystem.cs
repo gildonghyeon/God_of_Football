@@ -50,11 +50,11 @@ namespace MyFootballCareer
         public static string Describe(OfflineResult r)
         {
             var sb = new StringBuilder();
-            sb.Append("Away: ").Append(FormatDuration(r.AwaySeconds)).Append('\n');
-            sb.Append("Counted: ").Append(FormatDuration(r.CreditedSeconds));
-            if (r.Capped) sb.Append(" (cap ").Append(FormatDuration(r.CapSeconds)).Append(')');
-            sb.Append("\nEffort points +").Append(SeasonSystem.Money((long)r.Points)).Append("  (now ").Append(SeasonSystem.Money((long)r.Total)).Append(')');
-            sb.Append("\nTry upgrades on the HOME tab.");
+            sb.Append("비운 시간: ").Append(FormatDuration(r.AwaySeconds)).Append('\n');
+            sb.Append("인정 시간: ").Append(FormatDuration(r.CreditedSeconds));
+            if (r.Capped) sb.Append(" (최대 ").Append(FormatDuration(r.CapSeconds)).Append(')');
+            sb.Append("\n노력 포인트 +").Append(SeasonSystem.Money((long)r.Points)).Append("  (보유 ").Append(SeasonSystem.Money((long)r.Total)).Append(')');
+            sb.Append("\n홈 탭에서 강화해 보세요.");
             return sb.ToString();
         }
 
@@ -62,9 +62,9 @@ namespace MyFootballCareer
         {
             int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
             int h = total / 3600, m = (total % 3600) / 60, s = total % 60;
-            if (h > 0) return h + "h " + m + "m";
-            if (m > 0) return m + "m " + s + "s";
-            return s + "s";
+            if (h > 0) return h + "시간 " + m + "분";
+            if (m > 0) return m + "분 " + s + "초";
+            return s + "초";
         }
     }
 }

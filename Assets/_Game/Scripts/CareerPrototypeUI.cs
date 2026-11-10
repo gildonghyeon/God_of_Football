@@ -166,7 +166,7 @@ namespace MyFootballCareer
             tabLayout.padding = new RectOffset(10, 10, 12, 10); tabLayout.spacing = 10;
             tabLayout.childControlWidth = true; tabLayout.childControlHeight = true;
             tabLayout.childForceExpandWidth = true; tabLayout.childForceExpandHeight = true;
-            string[] tabNames = { "HOME", "MATCH", "CAREER" };
+            string[] tabNames = { "홈", "경기", "커리어" };
             for (int i = 0; i < tabNames.Length; i++)
             {
                 int index = i;
@@ -357,12 +357,12 @@ namespace MyFootballCareer
         public void ShowCreation()
         {
             Clear();
-            Label("MY FOOTBALL CAREER", 33, 64).color = PixelTheme.Accent;
-            Label("Create your first player", 22, 44);
+            Label("나의 축구 커리어", 33, 64).color = PixelTheme.Accent;
+            Label("첫 선수를 만들어 보세요", 22, 44);
             newHair = 0; newSkin = 0; newKit = 0;
             var createPreview = AddPreview(content, 190f);
             ApplyPreview(createPreview);
-            Label("Player name", 22, 40).color = PixelTheme.TextDim;
+            Label("선수 이름", 22, 40).color = PixelTheme.TextDim;
 
             var inputOuter = NewRect("NameInput", content);
             inputOuter.gameObject.AddComponent<Image>().color = PixelTheme.PanelEdge;
@@ -376,24 +376,24 @@ namespace MyFootballCareer
             text.rectTransform.offsetMin = new Vector2(16, 6); text.rectTransform.offsetMax = new Vector2(-16, -6);
             nameInput.textComponent = text; nameInput.characterLimit = settings.maxNameLength;
             nameInput.lineType = InputField.LineType.SingleLine;
-            var placeholder = TextNode("Enter a name", inputFill, 26); Stretch(placeholder.rectTransform);
+            var placeholder = TextNode("이름 입력", inputFill, 26); Stretch(placeholder.rectTransform);
             placeholder.rectTransform.offsetMin = new Vector2(16, 6); placeholder.rectTransform.offsetMax = new Vector2(-16, -6);
             placeholder.color = PixelTheme.TextDim; nameInput.placeholder = placeholder;
 
             Button positionButton = null;
-            positionButton = PixelButton("Position: " + position, () => {
+            positionButton = PixelButton("포지션: " + Ko.Pos(position), () => {
                 position = (Position)(((int)position + 1) % 3);
-                positionButton.GetComponentInChildren<Text>().text = "Position: " + position;
+                positionButton.GetComponentInChildren<Text>().text = "포지션: " + Ko.Pos(position);
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             Button traitButton = null;
-            traitButton = PixelButton("Trait: " + trait, () => {
+            traitButton = PixelButton("특성: " + Ko.TraitName(trait), () => {
                 trait = (Trait)(((int)trait + 1) % 3);
-                traitButton.GetComponentInChildren<Text>().text = "Trait: " + trait;
+                traitButton.GetComponentInChildren<Text>().text = "특성: " + Ko.TraitName(trait);
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             AddLookButtons(content, createPreview);
-            Label("Finisher: Shooting / Playmaker: Passing\nBallWinner: Defending (bonus +" + settings.traitBonus + ")", 22, 76).color = PixelTheme.TextDim;
-            PixelButton("CREATE PLAYER", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit), content, 88f);
-            status = Label("Choose position and trait by tapping each button.", 22, 100);
+            Label("피니셔: 슈팅 / 플레이메이커: 패스\n볼 위너: 수비 (보너스 +" + settings.traitBonus + ")", 22, 76).color = PixelTheme.TextDim;
+            PixelButton("선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit), content, 88f);
+            status = Label("버튼을 눌러 포지션과 특성을 고르세요.", 22, 100);
             status.color = PixelTheme.TextDim;
         }
 
@@ -417,12 +417,12 @@ namespace MyFootballCareer
             Height(nameRow.gameObject, 36);
             var nameText = TextNode(p.playerName, nameRow, 26);
             nameText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
-            var infoText = TextNode(p.position + " / " + p.trait, nameRow, 22);
+            var infoText = TextNode(Ko.Pos(p.position) + " / " + Ko.TraitName(p.trait), nameRow, 22);
             infoText.alignment = TextAnchor.MiddleRight; infoText.color = PixelTheme.TextDim;
             infoText.gameObject.AddComponent<LayoutElement>().preferredWidth = 300;
             // 노력 포인트: 방치하면 쌓이고, 아래 능력치의 +1 버튼으로 씁니다.
             trainingText = Label("", 22, 64);
-            var rate = PixelButton("EFFORT RATE", () => { if (OnBuyEffortRate != null) OnBuyEffortRate(); }, Parent, 56f);
+            var rate = PixelButton("노력 증가량", () => { if (OnBuyEffortRate != null) OnBuyEffortRate(); }, Parent, 56f);
             rateButton = rate; rate.GetComponentInChildren<Text>().fontSize = 20;
             for (int i = 0; i < statTexts.Length; i++)
                 statBars[i] = MakeStatRow((AttributeKind)i, out statTexts[i], out upgradeButtons[i]);
@@ -435,53 +435,53 @@ namespace MyFootballCareer
             systemLayout.childControlWidth = true; systemLayout.childControlHeight = true;
             systemLayout.childForceExpandWidth = true; systemLayout.childForceExpandHeight = true;
             Height(systemRow.gameObject, 68);
-            PixelButton("SAVE", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            PixelButton("LOOK", () => ShowLookDialog(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("저장", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("외형", () => ShowLookDialog(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             Button soundButton = null;
-            soundButton = PixelButton(SoundFx.Enabled ? "SOUND ON" : "SOUND OFF", () =>
+            soundButton = PixelButton(SoundFx.Enabled ? "소리 켬" : "소리 끔", () =>
             {
                 SoundFx.Enabled = !SoundFx.Enabled;
-                soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "SOUND ON" : "SOUND OFF";
+                soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "소리 켬" : "소리 끔";
                 SoundFx.Play(Sfx.Click);
             }, systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            PixelButton("RESET SAVE", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            PixelButton("초기화", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
             foreach (var t in systemRow.GetComponentsInChildren<Text>()) t.fontSize = 20;
-            Label("Offline reward cap: " + trainingSettings.offlineCapHours.ToString("0.#") + "h", 22, 30).color = PixelTheme.TextDim;
+            Label("오프라인 보상은 최대 " + trainingSettings.offlineCapHours.ToString("0.#") + "시간까지", 22, 30).color = PixelTheme.TextDim;
 
             // MATCH: 시즌, 경기, 순위표
-            currentParent = Section(pages[1], "SEASON", true);
+            currentParent = Section(pages[1], "시즌", true);
             seasonText = Label("", 22, 64);
-            var play = PixelButton("PLAY NEXT MATCH", () => onPlayMatch(), Parent, 80f);
+            var play = PixelButton("다음 경기", () => onPlayMatch(), Parent, 80f);
             playLabel = play.GetComponentInChildren<Text>();
             resultText = Label("", 22, 130);
-            currentParent = Section(pages[1], "FRIENDLY", true);
+            currentParent = Section(pages[1], "친선 경기", true);
             friendlyText = Label("", 22, 64);
-            friendlyButton = PixelButton("PLAY FRIENDLY", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
-            currentParent = Section(pages[1], "STANDINGS", true);
+            friendlyButton = PixelButton("친선 경기 하기", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
+            currentParent = Section(pages[1], "순위표", true);
             standingsText = Label("", 22, 200);
-            currentParent = Section(pages[1], "LEAGUE LEADERS", true);
+            currentParent = Section(pages[1], "개인 순위", true);
             leadersText = Label("", 22, 60);
 
             // CAREER: 이적 제안, 이력, 환생
-            currentParent = Section(pages[2], "MONEY", true);
+            currentParent = Section(pages[2], "돈", true);
             moneyText = Label("", 22, 64);
             transferRoot = NewRect("TransferRoot", pages[2]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
-            currentParent = Section(pages[2], "FACILITIES", true);
-            Label("Spend money on permanent boosts. Reset on rebirth.", 20, 30).color = PixelTheme.TextDim;
+            currentParent = Section(pages[2], "시설", true);
+            Label("돈으로 시설을 올려 영구 효과를 얻습니다. 환생하면 초기화됩니다.", 20, 30).color = PixelTheme.TextDim;
             for (int i = 0; i < facilityButtons.Length; i++)
             {
                 int index = i;
                 facilityButtons[i] = PixelButton("", () => { if (OnBuyFacility != null) OnBuyFacility(index); }, Parent, 112f);
                 facilityButtons[i].GetComponentInChildren<Text>().fontSize = 20;
             }
-            currentParent = Section(pages[2], "TROPHY ROOM", true);
+            currentParent = Section(pages[2], "트로피 룸", true);
             trophyText = Label("", 22, 60);
-            currentParent = Section(pages[2], "HISTORY", true);
+            currentParent = Section(pages[2], "시즌 기록", true);
             historyText = Label("", 22, 60);
-            currentParent = Section(pages[2], "REBIRTH", true);
+            currentParent = Section(pages[2], "환생", true);
             rebirthText = Label("", 22, 120);
-            var rebirth = PixelButton("REBIRTH", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
+            var rebirth = PixelButton("환생하기", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
 
             currentParent = null;
@@ -492,12 +492,12 @@ namespace MyFootballCareer
         public void ShowError(string message, bool canRestore)
         {
             Clear();
-            Label("SAVE COULD NOT BE LOADED", 30, 90).color = PixelTheme.Accent;
-            status = Label(message + "\nYour save file was not changed.", 22, 180);
-            PixelButton("RETRY", () => { if (OnRetry != null) OnRetry(); }, content, 80f);
+            Label("저장을 불러올 수 없습니다", 30, 90).color = PixelTheme.Accent;
+            status = Label(message + "\n저장 파일은 바뀌지 않았습니다.", 22, 180);
+            PixelButton("다시 시도", () => { if (OnRetry != null) OnRetry(); }, content, 80f);
             if (canRestore)
-                PixelButton("RESTORE BACKUP", () => { if (OnRestoreBackup != null) OnRestoreBackup(); }, content, 80f, PixelTheme.AccentFill, PixelTheme.Accent);
-            PixelButton("START NEW GAME", () => { if (OnStartNew != null) OnStartNew(); }, content, 80f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+                PixelButton("백업 복구", () => { if (OnRestoreBackup != null) OnRestoreBackup(); }, content, 80f, PixelTheme.AccentFill, PixelTheme.Accent);
+            PixelButton("새 게임 시작", () => { if (OnStartNew != null) OnStartNew(); }, content, 80f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
         }
 
         // ---------- 갱신 ----------
@@ -509,7 +509,7 @@ namespace MyFootballCareer
                 if (statTexts[i] == null) continue;
                 var kind = (AttributeKind)i;
                 float value = p.Get(kind);
-                statTexts[i].text = kind + "  " + Mathf.Floor(value).ToString("0") + (value >= settings.attributeCap ? "  MAX" : "");
+                statTexts[i].text = Ko.Attr(kind) + "  " + Mathf.Floor(value).ToString("0") + (value >= settings.attributeCap ? "  최대" : "");
                 SetFill(statBars[i], value / cap);
             }
         }
@@ -528,19 +528,19 @@ namespace MyFootballCareer
                 if (b == null) continue;
                 var kind = (AttributeKind)i;
                 bool max = training.IsMax(kind);
-                b.GetComponentInChildren<Text>().text = max ? "MAX"
+                b.GetComponentInChildren<Text>().text = max ? "최대"
                     : SeasonSystem.Money(training.Cost(kind)) + "  " + ChanceText(training.Chance(kind), training.FailStack(kind) > 0)
                       + (training.FailStack(kind) > 0 ? " x" + training.FailStack(kind) : "");
                 ((Image)b.targetGraphic).color = training.CanAfford(kind) ? PixelTheme.ButtonFill : PixelTheme.QuietFill;
             }
-            trainingText.text = "Effort points " + SeasonSystem.Money((long)training.Points)
-                + "   +" + training.PointsPerSecond.ToString("0.00") + "/s  (league x" + training.DivisionMultiplier.ToString("0.##") + ")"
-                + "\nTap an attribute button to try an upgrade (cost / success chance).";
+            trainingText.text = "노력 포인트 " + SeasonSystem.Money((long)training.Points)
+                + "   +" + training.PointsPerSecond.ToString("0.00") + "/초  (리그 x" + training.DivisionMultiplier.ToString("0.##") + ")"
+                + "\n능력치 버튼을 누르면 강화에 도전합니다 (비용 / 성공 확률).";
             if (rateButton != null)
             {
                 long rc = training.RateCost;
-                rateButton.GetComponentInChildren<Text>().text = "EFFORT RATE Lv " + training.RateLevel
-                    + (rc < 0 ? "  (MAX)" : "   UPGRADE " + SeasonSystem.Money(rc));
+                rateButton.GetComponentInChildren<Text>().text = "노력 증가량 Lv " + training.RateLevel
+                    + (rc < 0 ? "  (최대)" : "   강화 " + SeasonSystem.Money(rc));
                 ((Image)rateButton.targetGraphic).color = rc >= 0 && training.Points >= rc ? PixelTheme.AccentFill : PixelTheme.QuietFill;
             }
         }
@@ -577,7 +577,7 @@ namespace MyFootballCareer
             SetLines(resultText, lastResult, 5);
             SetLines(standingsText, standings, 6);
             SetLines(historyText, history, 2);
-            playLabel.text = seasonComplete ? "START NEXT SEASON" : "PLAY NEXT MATCH";
+            playLabel.text = seasonComplete ? "다음 시즌 시작" : "다음 경기";
         }
 
         // 시즌이 끝나 이적 제안이 있을 때만 제안 목록을 보여줍니다.
@@ -590,27 +590,27 @@ namespace MyFootballCareer
             bool none = offers == null || offers.Count == 0;
             if (none && summary == null) return;
 
-            var body = Section(transferRoot, "TRANSFER OFFERS", true);
+            var body = Section(transferRoot, "이적 제안", true);
             if (summary != null) { var s = TextNode(summary, body, 22); s.horizontalOverflow = HorizontalWrapMode.Wrap; Height(s.gameObject, 64); }
             if (none) return;   // 제안이 없으면 지금 팀에 남습니다
-            string note = !decided ? "Pick a team to join next season, or stay. You decide only once."
-                : string.IsNullOrEmpty(pendingTeamId) ? "Decision final: you stay with " + currentTeamName + "."
-                : "Decision final: you join the marked team next season.";
+            string note = !decided ? "다음 시즌에 갈 팀을 고르거나 잔류하세요. 선택은 한 번뿐입니다."
+                : string.IsNullOrEmpty(pendingTeamId) ? "결정 완료: " + currentTeamName + "에 잔류합니다."
+                : "결정 완료: 표시된 팀으로 다음 시즌에 이적합니다.";
             var info = TextNode(note, body, 22); info.color = PixelTheme.TextDim; Height(info.gameObject, 34);
             foreach (var offer in offers)
             {
                 string id = offer.teamId;
                 bool agreed = id == pendingTeamId;
-                var button = PixelButton((agreed ? "[CONFIRMED] " : "") + offer.teamName + (offer.division > 0 ? "  (Div " + offer.division + ")" : "")
-                            + "\nStrength " + offer.teamStrength.ToString("0")
-                            + "   Start " + Mathf.RoundToInt(offer.startChance * 100f) + "%   Wants " + offer.focus
-                            + (offer.weeklyWage > 0 ? "\nWage " + SeasonSystem.Money(offer.weeklyWage) + " per week" : ""),
+                var button = PixelButton((agreed ? "[확정] " : "") + offer.teamName + (offer.division > 0 ? "  (" + offer.division + "부)" : "")
+                            + "\n전력 " + offer.teamStrength.ToString("0")
+                            + "   선발 확률 " + Mathf.RoundToInt(offer.startChance * 100f) + "%   중시 " + Ko.Attr(offer.focus)
+                            + (offer.weeklyWage > 0 ? "\n주급 " + SeasonSystem.Money(offer.weeklyWage) : ""),
                             () => onChooseOffer(id), body, offer.weeklyWage > 0 ? 120f : 92f,
                             agreed ? PixelTheme.AccentFill : decided ? PixelTheme.QuietFill : PixelTheme.ButtonFill,
                             agreed ? PixelTheme.Accent : decided ? PixelTheme.QuietEdge : PixelTheme.ButtonEdge);
                 if (decided) button.interactable = false;
             }
-            var stay = PixelButton((decided && string.IsNullOrEmpty(pendingTeamId) ? "[CONFIRMED] " : "") + "STAY WITH " + currentTeamName, () => onStay(), body, 68f,
+            var stay = PixelButton((decided && string.IsNullOrEmpty(pendingTeamId) ? "[확정] " : "") + currentTeamName + " 잔류", () => onStay(), body, 68f,
                 decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.AccentFill : PixelTheme.QuietFill,
                 decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.Accent : PixelTheme.QuietEdge);
             if (decided) stay.interactable = false;
@@ -621,8 +621,8 @@ namespace MyFootballCareer
         public void SetMoney(long money, int pay, int agentPercent)
         {
             if (moneyText == null) return;
-            moneyText.text = "Money " + SeasonSystem.Money(money) + "\nWage " + SeasonSystem.Money(pay) + " per match (1 week)"
-                + (agentPercent > 0 ? "  incl. agent +" + agentPercent + "%" : "");
+            moneyText.text = "돈 " + SeasonSystem.Money(money) + "\n경기당 " + SeasonSystem.Money(pay) + " (주급 1주치)"
+                + (agentPercent > 0 ? "  에이전트 +" + agentPercent + "% 포함" : "");
         }
 
         // 시설 버튼: 글자와 살 수 있는지 (살 수 있으면 강조)
@@ -668,20 +668,20 @@ namespace MyFootballCareer
         {
             if (r == null || !r.Granted) return;
             float rate = r.CreditedSeconds > 0f ? r.Points / r.CreditedSeconds : 0f;
-            var inner = BuildDialog("WELCOME BACK!", "You were away " + IdleRewardSystem.FormatDuration(r.AwaySeconds) + ".\nYour player kept training.", 70f);
-            var caption = TextNode("EFFORT POINTS EARNED", inner, 22); caption.alignment = TextAnchor.MiddleCenter; caption.color = PixelTheme.TextDim; Height(caption.gameObject, 30);
+            var inner = BuildDialog("다시 오셨군요!", "자리를 비운 시간 " + IdleRewardSystem.FormatDuration(r.AwaySeconds) + "\n그동안 선수는 계속 훈련했습니다.", 70f);
+            var caption = TextNode("얻은 노력 포인트", inner, 22); caption.alignment = TextAnchor.MiddleCenter; caption.color = PixelTheme.TextDim; Height(caption.gameObject, 30);
             offlineNumber = TextNode("+0", inner, 60); offlineNumber.alignment = TextAnchor.MiddleCenter; offlineNumber.color = PixelTheme.Accent; Height(offlineNumber.gameObject, 84);
             var glow = offlineNumber.gameObject.AddComponent<Outline>(); glow.effectColor = new Color(.35f, .22f, 0f, 1f); glow.effectDistance = new Vector2(3, -3);
-            string detail = "Counted " + IdleRewardSystem.FormatDuration(r.CreditedSeconds)
-                + (r.Capped ? "  (cap " + IdleRewardSystem.FormatDuration(r.CapSeconds) + ")" : "")
-                + "   " + rate.ToString("0.00") + "/s\nNow " + SeasonSystem.Money((long)r.Total) + " points. Try upgrades on HOME.";
+            string detail = "인정 시간 " + IdleRewardSystem.FormatDuration(r.CreditedSeconds)
+                + (r.Capped ? "  (최대 " + IdleRewardSystem.FormatDuration(r.CapSeconds) + ")" : "")
+                + "   초당 " + rate.ToString("0.00") + "\n보유 " + SeasonSystem.Money((long)r.Total) + " 포인트. 홈에서 강화해 보세요.";
             var info = TextNode(detail, inner, 20); info.alignment = TextAnchor.MiddleCenter; Height(info.gameObject, 64);
             if (r.Capped)
             {
-                var cap = TextNode("Offline time is capped. Come back sooner for more!", inner, 18); cap.alignment = TextAnchor.MiddleCenter; cap.color = PixelTheme.DangerEdge; Height(cap.gameObject, 28);
+                var cap = TextNode("오프라인 시간이 최대치에 걸렸어요. 더 자주 들러 주세요!", inner, 18); cap.alignment = TextAnchor.MiddleCenter; cap.color = PixelTheme.DangerEdge; Height(cap.gameObject, 28);
             }
             offlineTarget = r.Points; offlineT = 0f;
-            PixelButton("COLLECT", () => { SoundFx.Play(Sfx.Collect); offlineNumber = null; CloseDialog(); }, inner, 76f, PixelTheme.AccentFill, PixelTheme.Accent);
+            PixelButton("받기", () => { SoundFx.Play(Sfx.Collect); offlineNumber = null; CloseDialog(); }, inner, 76f, PixelTheme.AccentFill, PixelTheme.Accent);
         }
 
         void TickOfflineCount(float dt)
@@ -746,19 +746,19 @@ namespace MyFootballCareer
         void AddLookButtons(Transform parent, Image preview)
         {
             Button hairButton = null, skinButton = null, kitButton = null;
-            hairButton = PixelButton("Hair: " + PlayerLook.HairNames[newHair], () => {
+            hairButton = PixelButton("머리: " + PlayerLook.HairNames[newHair], () => {
                 newHair = (newHair + 1) % PlayerLook.HairCount;
-                hairButton.GetComponentInChildren<Text>().text = "Hair: " + PlayerLook.HairNames[newHair];
+                hairButton.GetComponentInChildren<Text>().text = "머리: " + PlayerLook.HairNames[newHair];
                 ApplyPreview(preview);
             }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            skinButton = PixelButton("Skin: " + PlayerLook.SkinNames[newSkin], () => {
+            skinButton = PixelButton("피부: " + PlayerLook.SkinNames[newSkin], () => {
                 newSkin = (newSkin + 1) % PlayerLook.SkinCount;
-                skinButton.GetComponentInChildren<Text>().text = "Skin: " + PlayerLook.SkinNames[newSkin];
+                skinButton.GetComponentInChildren<Text>().text = "피부: " + PlayerLook.SkinNames[newSkin];
                 ApplyPreview(preview);
             }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            kitButton = PixelButton("Kit: " + PlayerLook.KitNames[newKit], () => {
+            kitButton = PixelButton("유니폼: " + PlayerLook.KitNames[newKit], () => {
                 newKit = (newKit + 1) % PlayerLook.KitCount;
-                kitButton.GetComponentInChildren<Text>().text = "Kit: " + PlayerLook.KitNames[newKit];
+                kitButton.GetComponentInChildren<Text>().text = "유니폼: " + PlayerLook.KitNames[newKit];
                 ApplyPreview(preview);
             }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
@@ -766,12 +766,12 @@ namespace MyFootballCareer
         void ShowLookDialog()
         {
             newHair = lookHair; newSkin = lookSkin; newKit = lookKit;
-            var inner = BuildDialog("LOOK", "Choose hair, skin and kit color.", 36f);
+            var inner = BuildDialog("외형", "머리색, 피부색, 유니폼 색을 고르세요.", 36f);
             var preview = AddPreview(inner, 220f);
             ApplyPreview(preview);
             AddLookButtons(inner, preview);
-            PixelButton("APPLY", () => { CloseDialog(); DestroyPreview(); if (OnApplyLook != null) OnApplyLook(newHair, newSkin, newKit); }, inner, 76f);
-            PixelButton("CANCEL", () => { CloseDialog(); DestroyPreview(); }, inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("적용", () => { CloseDialog(); DestroyPreview(); if (OnApplyLook != null) OnApplyLook(newHair, newSkin, newKit); }, inner, 76f);
+            PixelButton("취소", () => { CloseDialog(); DestroyPreview(); }, inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         // 선수의 외형이 바뀌었을 때 훈련장 그림을 갱신합니다.
@@ -801,7 +801,7 @@ namespace MyFootballCareer
         public void ShowPopup(string title, string body, float bodyHeight = 190f, Action onClose = null)
         {
             var inner = BuildDialog(title, body, bodyHeight);
-            PixelButton("OK", () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 76f);
+            PixelButton("확인", () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 76f);
         }
 
         // 되돌릴 수 없는 선택 앞에서 한 번 더 확인합니다.
@@ -809,7 +809,7 @@ namespace MyFootballCareer
         {
             var inner = BuildDialog(title, body, bodyHeight);
             PixelButton(yesLabel, () => { CloseDialog(); if (onYes != null) onYes(); }, inner, 76f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
-            PixelButton("CANCEL", () => CloseDialog(), inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("취소", () => CloseDialog(), inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
     }
 }

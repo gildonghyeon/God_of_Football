@@ -54,11 +54,11 @@ namespace MyFootballCareer
         [Min(0)] public float agentScorePerLevel = 1f;
         public DivisionDefinition[] divisions = new DivisionDefinition[]
         {
-            new DivisionDefinition { name = "Division 1", recommendedRating = 85f },
-            new DivisionDefinition { name = "Division 2", recommendedRating = 60f },
-            new DivisionDefinition { name = "Division 3", recommendedRating = 39f },
-            new DivisionDefinition { name = "Division 4", recommendedRating = 23f },
-            new DivisionDefinition { name = "Division 5", recommendedRating = 10f },
+            new DivisionDefinition { name = "1부 리그", recommendedRating = 85f },
+            new DivisionDefinition { name = "2부 리그", recommendedRating = 60f },
+            new DivisionDefinition { name = "3부 리그", recommendedRating = 39f },
+            new DivisionDefinition { name = "4부 리그", recommendedRating = 23f },
+            new DivisionDefinition { name = "5부 리그", recommendedRating = 10f },
         };
 
         [Header("가상 팀 (부마다 강한 팀부터)")]

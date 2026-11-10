@@ -29,16 +29,16 @@ namespace MyFootballCareer
             bool great = r.Outcome == UpgradeOutcome.GreatSuccess;
             bool success = great || r.Outcome == UpgradeOutcome.Success;
             SoundFx.Play(great ? Sfx.UpgradeGreat : success ? Sfx.UpgradeSuccess : Sfx.UpgradeFail);
-            string name = r.Attribute.ToString().ToUpperInvariant();
+            string name = Ko.Attr(r.Attribute);
             string chance = CareerPrototypeUI.ChanceText(r.Chance, r.FailStack > 0);
             string sub = success
-                ? r.Before.ToString("0") + " -> " + r.After.ToString("0") + "   Chance " + chance
-                  + (r.FailStack > 0 ? " (after " + r.FailStack + " fails)" : "") + "   -" + SeasonSystem.Money(r.Cost) + " points"
-                : "Fail stack " + (r.FailStack + 1) + ": next " + CareerPrototypeUI.ChanceText(r.NextChance, true)
-                  + "   -" + SeasonSystem.Money(r.Cost) + " points";
-            if (great) ShowBanner("GREAT SUCCESS!  " + name + " +2", sub, PixelTheme.AccentFill, PixelTheme.Accent, Gold, 1.4f, true);
+                ? r.Before.ToString("0") + " -> " + r.After.ToString("0") + "   확률 " + chance
+                  + (r.FailStack > 0 ? " (" + r.FailStack + "연속 실패 후)" : "") + "   -" + SeasonSystem.Money(r.Cost) + " 포인트"
+                : "연속 실패 " + (r.FailStack + 1) + ": 다음 확률 " + CareerPrototypeUI.ChanceText(r.NextChance, true)
+                  + "   -" + SeasonSystem.Money(r.Cost) + " 포인트";
+            if (great) ShowBanner("대성공!  " + name + " +2", sub, PixelTheme.AccentFill, PixelTheme.Accent, Gold, 1.4f, true);
             else if (success) ShowBanner(name + " +1", sub, PixelTheme.ButtonFill, PixelTheme.ButtonEdge, PixelTheme.Text, 0.9f, false);
-            else ShowBanner(name + "  FAILED", sub, PixelTheme.QuietFill, PixelTheme.QuietEdge, PixelTheme.TextDim, 0.8f, false);
+            else ShowBanner(name + "  강화 실패", sub, PixelTheme.QuietFill, PixelTheme.QuietEdge, PixelTheme.TextDim, 0.8f, false);
 
             if (!success || label == null) return;
             if (punches.TryGetValue(label, out var old)) old.End();   // 같은 줄을 연달아 누르면 이전 연출을 끝내고 새로 시작

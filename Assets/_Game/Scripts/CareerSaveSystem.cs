@@ -197,7 +197,7 @@ namespace MyFootballCareer
             upgraded = false;
             var data = JsonUtility.FromJson<SaveData>(json);
             if (data != null && data.version > CurrentVersion)
-                throw new InvalidDataException("Unsupported save version. Original file preserved.");
+                throw new InvalidDataException("지원하지 않는 저장 버전입니다. 원본 파일은 그대로 둡니다.");
             upgraded = Migrate(data);
             return data;
         }
@@ -212,17 +212,17 @@ namespace MyFootballCareer
                     if (File.Exists(FilePath + ".bak"))
                     {
                         data = Parse(File.ReadAllText(FilePath + ".bak"), out _);
-                        if (!Valid(data)) throw new InvalidDataException("Backup is invalid.");
-                        message = "Backup loaded. Press Save to restore the main file.";
+                        if (!Valid(data)) throw new InvalidDataException("백업 파일이 올바르지 않습니다.");
+                        message = "백업을 불러왔습니다. 저장을 누르면 기본 파일이 복구됩니다.";
                     }
                     return true;
                 }
                 data = Parse(File.ReadAllText(FilePath), out bool upgraded);
-                if (!Valid(data)) throw new InvalidDataException("Invalid save. Original file preserved.");
-                if (upgraded) message = "Save upgraded to version 8.";
+                if (!Valid(data)) throw new InvalidDataException("저장 파일이 올바르지 않습니다. 원본 파일은 그대로 둡니다.");
+                if (upgraded) message = "저장 파일을 최신 버전으로 바꿨습니다.";
                 return true;
             }
-            catch (Exception e) { data = null; message = "Cannot load: " + e.Message; return false; }
+            catch (Exception e) { data = null; message = "불러올 수 없습니다: " + e.Message; return false; }
         }
 
         // ---------- 복구 도구 ----------
@@ -241,14 +241,14 @@ namespace MyFootballCareer
         {
             try
             {
-                if (!HasValidBackup()) { message = "No valid backup found."; return false; }
+                if (!HasValidBackup()) { message = "쓸 수 있는 백업이 없습니다."; return false; }
                 string stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
                 if (File.Exists(FilePath)) File.Move(FilePath, FilePath + ".broken-" + stamp);
                 File.Copy(FilePath + ".bak", FilePath);
-                message = "Backup restored.";
+                message = "백업을 복구했습니다.";
                 return true;
             }
-            catch (Exception e) { message = "Restore failed: " + e.Message; return false; }
+            catch (Exception e) { message = "복구 실패: " + e.Message; return false; }
         }
 
         // 새로 시작하기 전에 기존 저장 파일을 지우지 않고 .archived- 이름으로 옆으로 옮깁니다.
@@ -264,27 +264,27 @@ namespace MyFootballCareer
                     File.Move(path, path + ".archived-" + stamp);
                     moved++;
                 }
-                message = moved > 0 ? "Old save moved aside." : "No save file to move.";
+                message = moved > 0 ? "이전 저장을 옆으로 옮겼습니다." : "옮길 저장 파일이 없습니다.";
                 return true;
             }
-            catch (Exception e) { message = "Could not move the old save: " + e.Message; return false; }
+            catch (Exception e) { message = "이전 저장을 옮기지 못했습니다: " + e.Message; return false; }
         }
 
         public bool TrySave(SaveData data, out string message)
         {
             try
             {
-                if (!Valid(data)) throw new InvalidDataException("Invalid player data.");
+                if (!Valid(data)) throw new InvalidDataException("선수 정보가 올바르지 않습니다.");
                 Directory.CreateDirectory(Application.persistentDataPath);
                 data.lastSeenUtcTicks = DateTime.UtcNow.Ticks;
                 string temp = FilePath + ".tmp";
                 File.WriteAllText(temp, JsonUtility.ToJson(data, true), new UTF8Encoding(false));
                 if (File.Exists(FilePath)) File.Replace(temp, FilePath, FilePath + ".bak");
                 else File.Move(temp, FilePath);
-                message = "Saved locally.";
+                message = "저장했습니다.";
                 return true;
             }
-            catch (Exception e) { message = "Save failed: " + e.Message; return false; }
+            catch (Exception e) { message = "저장 실패: " + e.Message; return false; }
         }
     }
 }

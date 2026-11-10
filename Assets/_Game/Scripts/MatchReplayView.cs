@@ -88,7 +88,7 @@ namespace MyFootballCareer
             yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
             feed[0] = ""; feed[1] = "";
             BuildUi(parent);
-            Feed(m.playerPlayed ? "0'  Kick-off" : "0'  Kick-off (you are on the bench)");
+            Feed(m.playerPlayed ? "0'  킥오프" : "0'  킥오프 (벤치 대기)");
             SoundFx.Play(Sfx.Whistle);
             Active = true;
             Tick(0f);
@@ -186,7 +186,7 @@ namespace MyFootballCareer
             var ballImage = ballRect.gameObject.AddComponent<Image>();
             ballImage.sprite = ballSprite; ballImage.raycastTarget = false;
             youLabel = NewRect("YouLabel", pitchRect);
-            var youText = TextNode("YOU", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
+            var youText = TextNode("나", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
             Anchored(youText.rectTransform, 0, 0, 1, 1);
             youLabel.gameObject.SetActive(youSlot >= 0);
 
@@ -218,7 +218,7 @@ namespace MyFootballCareer
             var skipButton = skip.gameObject.AddComponent<Button>();
             skipButton.targetGraphic = skip.GetChild(0).GetComponent<Image>();
             skipButton.onClick.AddListener(Skip);
-            var skipText = TextNode("SKIP", skip.GetChild(0), 26, TextAnchor.MiddleCenter, PixelTheme.Text);
+            var skipText = TextNode("건너뛰기", skip.GetChild(0), 26, TextAnchor.MiddleCenter, PixelTheme.Text);
             Anchored(skipText.rectTransform, 0, 0, 1, 1);
 
             // 골망 장면 (평소에는 숨김)
@@ -234,7 +234,7 @@ namespace MyFootballCareer
             Anchored(goalLayer, 0, 0, 1, 1);
             closeupImage = goalLayer.gameObject.AddComponent<Image>();
             closeupImage.sprite = goalFrames[0]; closeupImage.raycastTarget = false;
-            closeupText = TextNode("GOAL!", closeup, 96, TextAnchor.MiddleCenter, PixelTheme.Accent);
+            closeupText = TextNode("골!", closeup, 96, TextAnchor.MiddleCenter, PixelTheme.Accent);
             closeupText.rectTransform.anchorMin = closeupText.rectTransform.anchorMax = new Vector2(.5f, .5f);
             closeupText.rectTransform.sizeDelta = new Vector2(700, 140);
             closeupText.rectTransform.anchoredPosition = new Vector2(0, 330);
@@ -287,9 +287,9 @@ namespace MyFootballCareer
             {
                 finishing = true; finishT = 1.3f;
                 SnapStats();
-                ShowBanner("FULL TIME", PixelTheme.Text, 1.3f, 56);
+                ShowBanner("경기 종료", PixelTheme.Text, 1.3f, 56);
                 SoundFx.Play(Sfx.FullTime);
-                Feed("90'  Full time");
+                Feed("90'  경기 종료");
             }
         }
 
@@ -337,13 +337,13 @@ namespace MyFootballCareer
         void UpdateStatsLine(float progress)
         {
             string line;
-            if (youSlot < 0) line = "You are on the bench";
+            if (youSlot < 0) line = "벤치 대기 중";
             else
             {
                 int attempted = Mathf.RoundToInt(record.passesAttempted * progress);
                 int completed = Mathf.Min(attempted, Mathf.RoundToInt(record.passesCompleted * progress));
-                line = "GOAL " + yourGoals + "   ASSIST " + yourAssists + "   SHOT " + yourShots
-                     + "   PASS " + completed + "/" + attempted + "   TACKLE " + yourTackles;
+                line = "골 " + yourGoals + "   도움 " + yourAssists + "   슈팅 " + yourShots
+                     + "   패스 " + completed + "/" + attempted + "   태클 " + yourTackles;
             }
             if (line == lastStatsLine) return;
             lastStatsLine = line;
@@ -372,33 +372,33 @@ namespace MyFootballCareer
                 if (ev.youScore)
                 {
                     yourGoals++;
-                    Feed(Minute() + "  GOAL! You scored!");
+                    Feed(Minute() + "  골! 직접 넣었습니다!");
                     StartCloseup();
                 }
                 else
                 {
-                    Feed(Minute() + (ev.youAssist ? "  Goal! Your assist paid off." : "  Goal for " + ownName + "."));
-                    ShowBanner("GOAL!", new Color(.55f, .75f, 1f), 1.0f, 56);
+                    Feed(Minute() + (ev.youAssist ? "  골! 내 도움이 골로 이어졌습니다." : "  " + ownName + " 골!"));
+                    ShowBanner("골!", new Color(.55f, .75f, 1f), 1.0f, 56);
                 }
             }
             else
             {
-                Feed(Minute() + "  " + oppName + " scores.");
-                ShowBanner("CONCEDED", new Color(1f, .5f, .5f), 1.0f, 52);
+                Feed(Minute() + "  " + oppName + " 득점.");
+                ShowBanner("실점", new Color(1f, .5f, .5f), 1.0f, 52);
             }
         }
 
         void OnAssist(ReplayEvent ev)
         {
             yourAssists++;
-            Feed(Minute() + "  ASSIST! You set up the goal.");
+            Feed(Minute() + "  도움! 골을 만들어 냈습니다.");
             SoundFx.Play(Sfx.Assist, 0.8f);
-            ShowBanner("ASSIST!", PixelTheme.Accent, 1.3f, 72);
+            ShowBanner("도움!", PixelTheme.Accent, 1.3f, 72);
         }
 
         void OnShot(ReplayEvent ev)
         {
-            Feed(Minute() + (ev.saved ? "  Your shot is saved." : "  Your shot goes wide."));
+            Feed(Minute() + (ev.saved ? "  슈팅이 막혔습니다." : "  슈팅이 빗나갔습니다."));
         }
 
         void OnShotTaken(ReplayEvent ev) { yourShots++; }
@@ -406,9 +406,9 @@ namespace MyFootballCareer
         void OnTackle(ReplayEvent ev)
         {
             yourTackles++;
-            Feed(Minute() + "  Tackle! You won the ball.");
+            Feed(Minute() + "  태클! 공을 빼앗았습니다.");
             SoundFx.Play(Sfx.Tackle, 0.8f);
-            ShowBanner("TACKLE!", new Color(.6f, 1f, .7f), 0.8f, 44);
+            ShowBanner("태클!", new Color(.6f, 1f, .7f), 0.8f, 44);
         }
 
         void StartCloseup()
