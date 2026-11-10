@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d29c523b4308119459d66a050e0954ec, type: 3}
   m_Name: RebirthSettings
   m_EditorClassIdentifier: Assembly-CSharp::MyFootballCareer.RebirthSettings
-  requiredSeasons: 2
-  requiredBestAttribute: 20
+  requiredDivision: 1
+  requiredSeasons: 0
+  requiredBestAttribute: 0
   baseBonusPercent: 10
   bonusPerSeasonPercent: 5
   maxBonusSeasons: 10

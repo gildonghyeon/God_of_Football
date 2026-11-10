@@ -35,9 +35,31 @@ namespace MyFootballCareer
             return points;
         }
 
+        // 이번 커리어에서 올라가 본 가장 높은 부 (1이 가장 높음, 없으면 0)
+        // 뛰었던 시즌의 부와, 시즌이 끝나 다음 시즌에 뛸 부(승격 확정)를 함께 봅니다.
+        public static int BestDivisionReached(SaveData save)
+        {
+            int best = 0;
+            void Take(int d) { if (d > 0 && (best == 0 || d < best)) best = d; }
+            if (save.seasonHistory != null) foreach (var h in save.seasonHistory) Take(h.division);
+            if (save.season != null)
+            {
+                Take(save.season.division);
+                if (SeasonSystem.IsComplete(save)) Take(save.season.nextDivision);
+            }
+            return best;
+        }
+
+        static bool DivisionOk(SaveData save, RebirthSettings rs)
+        {
+            if (rs.requiredDivision <= 0) return true;
+            int best = BestDivisionReached(save);
+            return best > 0 && best <= rs.requiredDivision;
+        }
+
         public static bool CanRebirth(SaveData save, RebirthSettings rs)
         {
-            return CompletedSeasons(save) >= rs.requiredSeasons && BestAttribute(save.player) >= rs.requiredBestAttribute;
+            return DivisionOk(save, rs) && CompletedSeasons(save) >= rs.requiredSeasons && BestAttribute(save.player) >= rs.requiredBestAttribute;
         }
 
         // 이번 환생으로 새로 얻을 보너스(%). 누적 상한을 넘지 않습니다.
@@ -131,10 +153,18 @@ namespace MyFootballCareer
             var sb = new StringBuilder();
             sb.Append("Rebirths ").Append(save.rebirthCount).Append("   Effort bonus +")
               .Append(save.rebirthBonusPercent.ToString("0.#")).Append("%\n");
-            sb.Append("Seasons completed ").Append(seasons).Append('/').Append(rs.requiredSeasons)
-              .Append(seasons >= rs.requiredSeasons ? "  OK" : "").Append('\n');
-            sb.Append("Best attribute ").Append(best.ToString("0.0")).Append('/').Append(rs.requiredBestAttribute.ToString("0.#"))
-              .Append(best >= rs.requiredBestAttribute ? "  OK" : "");
+            // 조건 (값이 0인 조건은 보여 주지 않음)
+            var conditions = new List<string>();
+            if (rs.requiredDivision > 0)
+            {
+                int reached = BestDivisionReached(save);
+                conditions.Add("Reach Division " + rs.requiredDivision + ": best " + (reached > 0 ? "Div " + reached : "-") + (DivisionOk(save, rs) ? "  OK" : ""));
+            }
+            if (rs.requiredSeasons > 0)
+                conditions.Add("Seasons completed " + seasons + "/" + rs.requiredSeasons + (seasons >= rs.requiredSeasons ? "  OK" : ""));
+            if (rs.requiredBestAttribute > 0)
+                conditions.Add("Best attribute " + best.ToString("0.0") + "/" + rs.requiredBestAttribute.ToString("0.#") + (best >= rs.requiredBestAttribute ? "  OK" : ""));
+            sb.Append(conditions.Count > 0 ? string.Join("\n", conditions) : "No conditions.");
             int shown = 0;
             for (int i = save.careers.Count - 1; i >= 0 && shown < 1; i--, shown++)
             {
@@ -159,8 +189,8 @@ namespace MyFootballCareer
             var sb = new StringBuilder();
             sb.Append("Resets: attributes");
             if (rs.keepProgressRatio > 0f) sb.Append(" (keep ").Append(Mathf.RoundToInt(rs.keepProgressRatio * 100f)).Append("% of progress)");
-            sb.Append(", training, season, standings, team, transfers, money, effort points, effort rate.\n");
-            sb.Append("Keeps: name, position, trait, rebirth count, bonus, career records.\n\n");
+            sb.Append(", season, standings, team, transfers, money, effort points, effort rate, facilities.\n");
+            sb.Append("Keeps: name, position, trait, rebirth count, bonus, career records, trophies.\n\n");
             sb.Append("Bonus gained: +").Append(gain.ToString("0.#")).Append("%\n");
             sb.Append("Effort point speed: x").Append(TrainingMultiplier(save).ToString("0.00"))
               .Append(" -> x").Append((1f + total / 100f).ToString("0.00"));

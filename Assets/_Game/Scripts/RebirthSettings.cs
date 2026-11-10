@@ -5,9 +5,10 @@ namespace MyFootballCareer
     [CreateAssetMenu(menuName = "Football Career/Rebirth Settings", fileName = "RebirthSettings")]
     public class RebirthSettings : ScriptableObject
     {
-        [Header("환생 조건 (모두 만족해야 함)")]
-        [Min(0)] public int requiredSeasons = 2;              // 이 커리어에서 끝낸 시즌 수
-        [Min(0)] public float requiredBestAttribute = 20f;    // 가장 높은 능력치
+        [Header("환생 조건 (모두 만족해야 함, 0이면 그 조건 없음)")]
+        [Min(0)] public int requiredDivision = 1;             // 이번 커리어에서 이 부(또는 더 높은 부)에 올라가야 함. 1 = 1부
+        [Min(0)] public int requiredSeasons = 0;              // 이 커리어에서 끝낸 시즌 수
+        [Min(0)] public float requiredBestAttribute = 0f;     // 가장 높은 능력치
 
         [Header("영구 보너스: 훈련 성장 속도 증가율(%)")]
         public float baseBonusPercent = 10f;                  // 환생할 때마다 기본으로 얻는 보너스
