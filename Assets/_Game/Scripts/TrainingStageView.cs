@@ -18,11 +18,13 @@ namespace MyFootballCareer
     public class StageDrill
     {
         public float duration = 1f;
+        public bool loop = true;   // false면 한 번만 하고 리프팅(idle)으로 돌아갑니다
         public bool ballFollows;   // 공이 선수 발 앞을 따라다니는지
         public StageKey[] player, gk, attacker, mate, ball;
     }
 
-    // 경기장 위쪽(골대와 페널티 박스)을 훈련장으로 쓰는 화면. 선택한 훈련에 따라 선수가 해당 구역으로 걸어가 훈련합니다.
+    // 경기장 위쪽(골대와 페널티 박스) 띠를 훈련장으로 쓰는 화면. 내 선수는 제자리에서 리프팅을 하고,
+    // 강화를 누르면 그 능력치의 짧은 동작과 결과 반응(+1 세리머니, +2 점프, 실패 넘어짐)을 보여 줍니다.
     //   Resources/Art/Chars/ 폴더: training_bg(배경), <팀>_<동작>_<방향>_<번호>(선수 프레임), ball, shadow
     //   팀: blue(내 선수) red(상대·동료) gold(골키퍼), 동작: idle run dribble shoot (방향 front side back), jump cheer fall (방향 x)
     //   동선 데이터는 TrainingStageDrills.cs에 있습니다.
@@ -33,7 +35,7 @@ namespace MyFootballCareer
         const float BallDiameter = 23f;           // 선수 그림 속 공의 지름(선수 그림 픽셀)
         const float BaseRow = 118f;               // 선수 그림에서 발바닥이 있는 줄
         const float StepPx = 8f;                  // 달리기 그림이 한 장 넘어가는 이동 거리
-        const float WalkSpeed = 70f;              // 훈련 구역으로 이동하는 속도 (그림 픽셀/초)
+        const float WalkSpeed = 240f;             // 동작이 끊겼을 때 시작 자리로 돌아가는 속도 (그림 픽셀/초)
         const float StepBob = 3f;                 // 달릴 때 걸음마다 몸이 들썩이는 높이 (선수 그림 픽셀). 그림자는 땅에 그대로 둡니다.
         const float StrideStepPx = 9f;            // 보강한 달리기 그림이 한 장 넘어가는 이동 거리
         const float StrideBob = 2f;               // 보강한 달리기 그림에서 다리가 모일 때 몸이 떠오르는 높이
@@ -113,7 +115,74 @@ namespace MyFootballCareer
             foreach (string anim in new[] { "jump", "cheer", "fall" })
                 LoadLookStrip("blue_" + anim + "_x", hair, skin, kit);
             LoadStrideStrips();
+            BuildJuggleStrip();
             lookHair = hair; lookSkin = skin; lookKit = kit;
+        }
+
+        // ---------- 리프팅 그림 ----------
+        // 리프팅 중 공을 찰 때 보여 줄 '발 들기' 그림 2장(blue_juggle_x)을 만듭니다: 0 오른발, 1 왼발(0을 좌우로 뒤집음).
+        // 정면 슈팅 그림에서 발 옆의 공을 지우고, 서 있는 그림과 키가 같도록 발을 기준으로 키웁니다(슈팅 그림이 약 10% 작음).
+        // 평소에는 두 발로 선 기본 그림을 쓰고, 공이 발에 닿는 순간에만 이 그림을 잠깐 보여 줍니다. 그림을 읽을 수 없으면 만들지 않습니다.
+        const float JuggleFootX = 50f, JuggleFootY = 119f, JuggleScale = 113f / 103f;
+        void BuildJuggleStrip()
+        {
+            strips.Remove("blue_juggle_x");
+            var src = Find("blue_shoot_front");
+            if (src == null || src.Length < 2) return;
+            var liftPx = WithoutBall(src[1], 75f, 108f, 63);
+            if (liftPx == null) return;
+            int w = src[1].texture.width, h = src[1].texture.height;
+            liftPx = ScaleAboutFoot(liftPx, w, h);
+            var mirrored = new Color32[liftPx.Length];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++) mirrored[y * w + x] = liftPx[y * w + (w - 1 - x)];
+            strips["blue_juggle_x"] = new[] { MakeSprite(liftPx, w, h), MakeSprite(mirrored, w, h) };
+        }
+
+        // 발 위치(JuggleFoot)를 기준으로 그림을 JuggleScale배 키웁니다 (가장 가까운 픽셀)
+        static Color32[] ScaleAboutFoot(Color32[] src, int w, int h)
+        {
+            var dst = new Color32[src.Length];
+            for (int row = 0; row < h; row++)
+            {
+                int y = h - 1 - row;   // 그림 좌표 (위가 0)
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = (int)(JuggleFootX + (x + 0.5f - JuggleFootX) / JuggleScale);
+                    int sy = (int)(JuggleFootY + (y + 0.5f - JuggleFootY) / JuggleScale);
+                    if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
+                    dst[row * w + x] = src[(h - 1 - sy) * w + sx];
+                }
+            }
+            return dst;
+        }
+
+        // 그림 좌표(왼쪽 위 0,0)의 원(반지름 14) 안 픽셀 중 minX보다 오른쪽만 지웁니다 (공만 지우고 다리는 남김)
+        static Color32[] WithoutBall(Sprite sprite, float cx, float cy, int minX)
+        {
+            var tex = sprite.texture;
+            if (!tex.isReadable) return null;
+            int w = tex.width, h = tex.height;
+            var px = tex.GetPixels32();
+            for (int row = 0; row < h; row++)
+            {
+                int y = h - 1 - row;   // 텍스처는 아래 줄부터 저장
+                for (int x = minX; x < w; x++)
+                {
+                    float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+                    if (dx * dx + dy * dy <= 14f * 14f) px[row * w + x] = new Color32(0, 0, 0, 0);
+                }
+            }
+            return px;
+        }
+
+        Sprite MakeSprite(Color32[] px, int w, int h)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels32(px); tex.Apply(false, false);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f), 100f);
+            lookObjects.Add(tex); lookObjects.Add(sprite);
+            return sprite;
         }
 
         // ---------- 보강한 달리기 그림 (StrideFrames) ----------
@@ -235,7 +304,7 @@ namespace MyFootballCareer
             var frameGo = new GameObject("StageFrame", typeof(RectTransform));
             frameGo.transform.SetParent(parent, false);
             frameGo.AddComponent<Image>().color = PixelTheme.PanelEdge;
-            float height = bgH * Scale + 8f;
+            float height = (TrainingStageDrills.BandBottom - TrainingStageDrills.BandTop) * Scale + 8f;   // 위쪽 띠만 보여 줌
             var layout = frameGo.AddComponent<LayoutElement>();
             layout.minHeight = height; layout.preferredHeight = height;
 
@@ -308,7 +377,7 @@ namespace MyFootballCareer
         }
 
         // ---------- 동작 바꾸기 ----------
-        // 훈련이 바뀌면 선수가 새 훈련 구역으로 걸어간 뒤 그 훈련을 반복합니다.
+        // 반복 장면으로 바꿉니다 (지금은 리프팅 "idle" 하나). 시작 자리와 다르면 먼저 그곳으로 돌아갑니다.
         public void Play(string key)
         {
             if (!drills.ContainsKey(key)) key = "idle";
@@ -318,12 +387,26 @@ namespace MyFootballCareer
             drillTime = 0f;
         }
 
+        // 강화 한 번: 능력치 동작 → 결과 반응 → 리프팅. 동작 중에 또 누르면 새 동작으로 바로 바꿉니다.
+        public void PlayUpgrade(AttributeKind kind, UpgradeOutcome outcome)
+        {
+            if (outcome != UpgradeOutcome.Success && outcome != UpgradeOutcome.GreatSuccess && outcome != UpgradeOutcome.Fail) return;
+            string react = outcome == UpgradeOutcome.GreatSuccess ? "jump" : outcome == UpgradeOutcome.Success ? "cheer" : "dive";
+            drills["action"] = TrainingStageDrills.Action(AnimationFor(kind), react, outcome != UpgradeOutcome.Fail);
+            currentKey = "action";
+            walking = true;   // 시작 자리에 이미 있으면 바로 시작
+            drillTime = 0f;
+        }
+
         // ---------- 매 프레임 ----------
         public void Tick(float deltaSeconds)
         {
             if (world == null || player == null || player.root == null) return;
             float dt = Mathf.Min(deltaSeconds, 0.1f);
             clock += dt;
+            // 배경의 위쪽 띠(BandTop~BandBottom)만 보이도록 아래로 내립니다.
+            float worldH = world.rect.height;
+            if (worldH > 0f) world.anchoredPosition = new Vector2(0f, -(bgH - TrainingStageDrills.BandBottom) / bgH * worldH);
             StageDrill drill = drills[currentKey];
 
             // 선수
@@ -354,7 +437,15 @@ namespace MyFootballCareer
             else
             {
                 drillTime += dt;
-                if (drillTime >= drill.duration) drillTime -= drill.duration * Mathf.Floor(drillTime / drill.duration);
+                if (drillTime >= drill.duration)
+                {
+                    if (drill.loop) drillTime -= drill.duration * Mathf.Floor(drillTime / drill.duration);
+                    else
+                    {
+                        // 한 번 하는 장면이 끝나면 리프팅으로
+                        currentKey = "idle"; drill = drills[currentKey]; drillTime = 0f;
+                    }
+                }
                 float sx, sy, sz;
                 Sample(drill.player, drillTime, player.face, out sx, out sy, out sz, out pose, out face);
                 player.x = sx; player.y = sy;
@@ -503,6 +594,19 @@ namespace MyFootballCareer
                 case "cheer":
                     key = a.team + "_cheer_x"; flip = false;
                     strip = Find(key); index = strip == null ? 0 : ((int)(a.poseTime * 5f)) % strip.Length; break;
+                case "juggleR":
+                case "juggleL":
+                    // 리프팅 중 공을 차는 순간: 0 오른발, 1 왼발 (그림이 없으면 서 있는 그림)
+                    strip = Find(a.team + "_juggle_x"); flip = false; key = "";
+                    index = a.pose == "juggleL" ? 1 : 0;
+                    if (strip == null) { strip = Find(a.team + "_idle_front"); index = ((int)(clock * 4f) + a.phase) % (strip != null ? strip.Length : 1); }
+                    break;
+                case "jump":
+                    // 대성공: 점프 그림 + 몸을 띄움
+                    key = a.team + "_jump_x"; flip = false;
+                    strip = Find(key); index = strip == null ? 0 : Mathf.Min(strip.Length - 1, (int)(a.poseTime * 5f));
+                    lift = Mathf.Sin(Mathf.Clamp01(a.poseTime / 0.6f) * Mathf.PI) * 22f;
+                    break;
                 case "dive":
                     key = a.team + "_fall_x";
                     strip = Find(key); index = strip == null ? 0 : Mathf.Min(strip.Length - 1, (int)(a.poseTime * 6f)); break;

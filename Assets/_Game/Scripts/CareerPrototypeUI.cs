@@ -523,8 +523,6 @@ namespace MyFootballCareer
             if (trainingText == null || p == null) return;
             UpdateStats(p);
             // 훈련장: 마지막으로 강화한 능력치의 훈련 장면 (아직 없으면 대기)
-            if (stage != null && stage.Available)
-                stage.Play(training.LastUpgraded < 0 ? "idle" : TrainingStageView.AnimationFor((AttributeKind)training.LastUpgraded));
             for (int i = 0; i < upgradeButtons.Length; i++)
             {
                 var b = upgradeButtons[i];
@@ -715,6 +713,7 @@ namespace MyFootballCareer
         {
             if (upgradeFx == null || r == null) return;
             int i = (int)r.Attribute;
+            if (stage != null && stage.Available) stage.PlayUpgrade(r.Attribute, r.Outcome);   // 훈련장 선수가 그 능력치 동작과 결과 반응
             upgradeFx.Play(r, i >= 0 && i < statTexts.Length ? statTexts[i] : null, trainingSettings != null ? trainingSettings.doubleShare : 0.5f);
         }
 
