@@ -64,8 +64,8 @@ namespace MyFootballCareer
         Trait trait;
 
         // 플레이어 화면
-        RectTransform[] pages = new RectTransform[3];
-        Image[] tabFills = new Image[3];
+        RectTransform[] pages = new RectTransform[4];   // 홈 / 경기 / 커리어 / 설정
+        Image[] tabFills = new Image[4];
         Text[] statTexts = new Text[5];
         Button[] upgradeButtons = new Button[5];
         Button rateButton;
@@ -73,7 +73,7 @@ namespace MyFootballCareer
         Text trainingText, seasonText, resultText, playLabel, standingsText, historyText, rebirthText, friendlyText, trophyText, leadersText;
         Button friendlyButton;
         Button[] facilityButtons = new Button[FacilitySystem.Count];
-        Text moneyText;
+        Text moneyText, facilityMoneyText;
         RectTransform transferRoot;
         Image rebirthFill;
         TrainingStageView stage;   // 훈련장 장면
@@ -166,7 +166,7 @@ namespace MyFootballCareer
             tabLayout.padding = new RectOffset(10, 10, 12, 10); tabLayout.spacing = 10;
             tabLayout.childControlWidth = true; tabLayout.childControlHeight = true;
             tabLayout.childForceExpandWidth = true; tabLayout.childForceExpandHeight = true;
-            string[] tabNames = { "홈", "경기", "커리어" };
+            string[] tabNames = { "홈", "경기", "커리어", "설정" };
             for (int i = 0; i < tabNames.Length; i++)
             {
                 int index = i;
@@ -347,7 +347,7 @@ namespace MyFootballCareer
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
             friendlyButton = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
-            moneyText = null;
+            moneyText = facilityMoneyText = null;
             transferRoot = null; rebirthFill = null;
             SetChrome(false);
             DestroyPreview();
@@ -403,7 +403,7 @@ namespace MyFootballCareer
             SetChrome(true);
             status = stripText;
 
-            pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("CareerPage");
+            pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("CareerPage"); pages[3] = NewPage("SettingsPage");
             lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor;
             stage.SetLook(lookHair, lookSkin, lookKit);               // 내 선수 그림을 외형에 맞게 준비
             if (stage.Available) stage.Create(pages[0]);   // HOME 맨 위에 훈련장 장면
@@ -428,25 +428,17 @@ namespace MyFootballCareer
                 statBars[i] = MakeStatRow((AttributeKind)i, out statTexts[i], out upgradeButtons[i]);
             UpdateStats(p);
 
-            currentParent = Section(pages[0], "", true);
-            var systemRow = NewRect("SystemRow", Parent);
-            var systemLayout = systemRow.gameObject.AddComponent<HorizontalLayoutGroup>();
-            systemLayout.spacing = 8;
-            systemLayout.childControlWidth = true; systemLayout.childControlHeight = true;
-            systemLayout.childForceExpandWidth = true; systemLayout.childForceExpandHeight = true;
-            Height(systemRow.gameObject, 68);
-            PixelButton("저장", () => onSave(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            PixelButton("외형", () => ShowLookDialog(), systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            Button soundButton = null;
-            soundButton = PixelButton(SoundFx.Enabled ? "소리 켬" : "소리 끔", () =>
+            // 시설: 돈으로 올리는 영구 효과 (홈에서 바로 올릴 수 있게)
+            currentParent = Section(pages[0], "시설", true);
+            facilityMoneyText = Label("", 22, 30);
+            facilityMoneyText.color = PixelTheme.Accent;
+            for (int i = 0; i < facilityButtons.Length; i++)
             {
-                SoundFx.Enabled = !SoundFx.Enabled;
-                soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "소리 켬" : "소리 끔";
-                SoundFx.Play(Sfx.Click);
-            }, systemRow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            PixelButton("초기화", () => { if (OnResetSave != null) OnResetSave(); }, systemRow, 0f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
-            foreach (var t in systemRow.GetComponentsInChildren<Text>()) t.fontSize = 20;
-            Label("오프라인 보상은 최대 " + trainingSettings.offlineCapHours.ToString("0.#") + "시간까지", 22, 30).color = PixelTheme.TextDim;
+                int index = i;
+                facilityButtons[i] = PixelButton("", () => { if (OnBuyFacility != null) OnBuyFacility(index); }, Parent, 112f);
+                facilityButtons[i].GetComponentInChildren<Text>().fontSize = 20;
+            }
+            Label("환생하면 시설은 초기화됩니다.", 20, 30).color = PixelTheme.TextDim;
 
             // MATCH: 시즌, 경기, 순위표
             currentParent = Section(pages[1], "시즌", true);
@@ -467,14 +459,9 @@ namespace MyFootballCareer
             moneyText = Label("", 22, 64);
             transferRoot = NewRect("TransferRoot", pages[2]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
-            currentParent = Section(pages[2], "시설", true);
-            Label("돈으로 시설을 올려 영구 효과를 얻습니다. 환생하면 초기화됩니다.", 20, 30).color = PixelTheme.TextDim;
-            for (int i = 0; i < facilityButtons.Length; i++)
-            {
-                int index = i;
-                facilityButtons[i] = PixelButton("", () => { if (OnBuyFacility != null) OnBuyFacility(index); }, Parent, 112f);
-                facilityButtons[i].GetComponentInChildren<Text>().fontSize = 20;
-            }
+            currentParent = Section(pages[2], "외형", true);
+            Label("머리색, 피부색, 유니폼 색을 바꿉니다.", 20, 30).color = PixelTheme.TextDim;
+            PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             currentParent = Section(pages[2], "트로피 룸", true);
             trophyText = Label("", 22, 60);
             currentParent = Section(pages[2], "시즌 기록", true);
@@ -483,6 +470,22 @@ namespace MyFootballCareer
             rebirthText = Label("", 22, 120);
             var rebirth = PixelButton("환생하기", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
+
+            // 설정: 소리, 저장 안내, 초기화
+            currentParent = Section(pages[3], "소리", true);
+            Button soundButton = null;
+            soundButton = PixelButton(SoundFx.Enabled ? "효과음 켬" : "효과음 끔", () =>
+            {
+                SoundFx.Enabled = !SoundFx.Enabled;
+                soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "효과음 켬" : "효과음 끔";
+                SoundFx.Play(Sfx.Click);
+            }, Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            currentParent = Section(pages[3], "저장", true);
+            Label("진행 상황은 자동으로 저장됩니다.\n(행동할 때마다, 30초마다, 앱을 닫거나 내릴 때)", 20, 64).color = PixelTheme.TextDim;
+            Label("오프라인 보상은 최대 " + trainingSettings.offlineCapHours.ToString("0.#") + "시간까지 인정됩니다.", 20, 30).color = PixelTheme.TextDim;
+            currentParent = Section(pages[3], "초기화", true);
+            Label("지금 선수와 진행 상황을 지우고 처음부터 시작합니다.", 20, 30).color = PixelTheme.TextDim;
+            PixelButton("저장 초기화", () => { if (OnResetSave != null) OnResetSave(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
 
             currentParent = null;
             SetPage(0);
@@ -628,6 +631,7 @@ namespace MyFootballCareer
         public void SetMoney(long money, int pay, int agentPercent)
         {
             if (moneyText == null) return;
+            if (facilityMoneyText != null) facilityMoneyText.text = "보유 돈 " + SeasonSystem.Money(money);
             moneyText.text = "돈 " + SeasonSystem.Money(money) + "\n경기당 " + SeasonSystem.Money(pay) + " (주급 1주치)"
                 + (agentPercent > 0 ? "  에이전트 +" + agentPercent + "% 포함" : "");
         }

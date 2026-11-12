@@ -213,7 +213,7 @@ namespace MyFootballCareer
                     {
                         data = Parse(File.ReadAllText(FilePath + ".bak"), out _);
                         if (!Valid(data)) throw new InvalidDataException("백업 파일이 올바르지 않습니다.");
-                        message = "백업을 불러왔습니다. 저장을 누르면 기본 파일이 복구됩니다.";
+                        message = "백업을 불러왔습니다. 다음 자동 저장 때 기본 파일이 복구됩니다.";
                     }
                     return true;
                 }
