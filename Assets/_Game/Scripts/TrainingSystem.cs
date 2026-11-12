@@ -11,6 +11,7 @@ namespace MyFootballCareer
         public float Before, After, Chance;   // Chance: 천장 보너스를 더한 이번 확률
         public long Cost;
         public int FailStack;                  // 이번 도전 전의 연속 실패 횟수
+        public float BaseChance;               // 천장 보너스 없는 원래 확률 (이번 도전 레벨 기준)
         public float NextChance;               // 다음 도전 확률 (실패면 보너스가 한 단계 오른 값)
     }
 
@@ -130,7 +131,7 @@ namespace MyFootballCareer
         // 성공 확률 중 doubleShare 몫(기본 절반)은 +2, 나머지는 +1입니다. (예전의 소수점 능력치는 정수로 버린 뒤 더함, 최대치는 넘지 않음)
         public UpgradeResult TryUpgrade(AttributeKind kind)
         {
-            var r = new UpgradeResult { Attribute = kind, Before = save.player.Get(kind), Cost = Cost(kind), Chance = Chance(kind), FailStack = FailStack(kind) };
+            var r = new UpgradeResult { Attribute = kind, Before = save.player.Get(kind), Cost = Cost(kind), Chance = Chance(kind), FailStack = FailStack(kind), BaseChance = BaseChance(kind) };
             r.After = r.Before;
             if (IsMax(kind)) { r.Outcome = UpgradeOutcome.Max; return r; }
             if (save.effortPoints < r.Cost) { r.Outcome = UpgradeOutcome.NotEnough; return r; }

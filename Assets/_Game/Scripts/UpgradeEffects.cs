@@ -33,8 +33,8 @@ namespace MyFootballCareer
             string chance = CareerPrototypeUI.ChanceText(r.Chance, r.FailStack > 0);
             string sub = success
                 ? r.Before.ToString("0") + " -> " + r.After.ToString("0") + "   확률 " + chance
-                  + (r.FailStack > 0 ? " (" + r.FailStack + "연속 실패 후)" : "") + "   -" + SeasonSystem.Money(r.Cost) + " 포인트"
-                : "연속 실패 " + (r.FailStack + 1) + ": 다음 확률 " + CareerPrototypeUI.ChanceText(r.NextChance, true)
+                  + CareerPrototypeUI.BonusText(r.Chance - r.BaseChance) + "   -" + SeasonSystem.Money(r.Cost) + " 포인트"
+                : "다음 확률 " + CareerPrototypeUI.ChanceText(r.NextChance, true) + CareerPrototypeUI.BonusText(r.NextChance - r.BaseChance)
                   + "   -" + SeasonSystem.Money(r.Cost) + " 포인트";
             if (great) ShowBanner("대성공!  " + name + " +2", sub, PixelTheme.AccentFill, PixelTheme.Accent, Gold, 1.4f, true);
             else if (success) ShowBanner(name + " +1", sub, PixelTheme.ButtonFill, PixelTheme.ButtonEdge, PixelTheme.Text, 0.9f, false);

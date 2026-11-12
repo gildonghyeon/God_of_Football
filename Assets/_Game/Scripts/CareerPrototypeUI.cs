@@ -529,8 +529,7 @@ namespace MyFootballCareer
                 var kind = (AttributeKind)i;
                 bool max = training.IsMax(kind);
                 b.GetComponentInChildren<Text>().text = max ? "최대"
-                    : SeasonSystem.Money(training.Cost(kind)) + "  " + ChanceText(training.Chance(kind), training.FailStack(kind) > 0)
-                      + (training.FailStack(kind) > 0 ? " x" + training.FailStack(kind) : "");
+                    : SeasonSystem.Money(training.Cost(kind)) + "  " + ChanceText(training.Chance(kind), training.FailStack(kind) > 0);   // 칸이 좁아 비용과 확률만
                 ((Image)b.targetGraphic).color = training.CanAfford(kind) ? PixelTheme.ButtonFill : PixelTheme.QuietFill;
             }
             trainingText.text = "노력 포인트 " + SeasonSystem.Money((long)training.Points)
@@ -558,6 +557,14 @@ namespace MyFootballCareer
         {
             float pct = chance * 100f;
             return (precise || pct < 10f ? pct.ToString("0.0") : Mathf.RoundToInt(pct).ToString()) + "%";
+        }
+
+        // 강화 천장으로 오른 확률(%p). 오르지 않았으면 빈 글자. 아주 작으면 소수 둘째 자리까지
+        public static string BonusText(float bonus)
+        {
+            float pct = bonus * 100f;
+            if (pct < 0.005f) return "";
+            return " (+" + (pct < 0.1f ? pct.ToString("0.00") : pct.ToString("0.0")) + "%)";
         }
 
         public void SetTrophies(string text) { if (trophyText != null) SetLines(trophyText, text, 2); }
