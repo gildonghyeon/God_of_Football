@@ -8,7 +8,7 @@ namespace MyFootballCareer
     // Unknown versions and corrupt saves are never silently overwritten.
     public class CareerSaveSystem
     {
-        const int CurrentVersion = 18;
+        const int CurrentVersion = 19;
         public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
 
         static bool Valid(SaveData data)
@@ -158,6 +158,13 @@ namespace MyFootballCareer
                     && data.season.nextMatchIndex >= data.season.matches.Count) data.awardsSeason = data.season.seasonNumber;
                 upgraded = true;
             }
+            if (data.version == 18)
+            {
+                data.version = 19;   // 일일 미션과 출석 보상 추가 (오늘 바로 받을 수 있는 상태로 시작)
+                data.dailyDate = ""; data.dailyMissions = new List<DailyMission>(); data.dailyBonusClaimed = false;
+                data.attendanceCount = 0; data.attendanceLastDate = "";
+                upgraded = true;
+            }
             if (data.trainingId == null) data.trainingId = "";
             if (data.teamId == null) data.teamId = "";
             if (data.season == null) data.season = new SeasonData();
@@ -172,6 +179,9 @@ namespace MyFootballCareer
             if (data.facilityLevels == null) data.facilityLevels = new List<int>();
             if (data.failStacks == null) data.failStacks = new List<int>();
             if (data.trophies == null) data.trophies = new List<TrophyRecord>();
+            if (data.dailyDate == null) data.dailyDate = "";
+            if (data.dailyMissions == null) data.dailyMissions = new List<DailyMission>();
+            if (data.attendanceLastDate == null) data.attendanceLastDate = "";
             if (data.awardLines == null) data.awardLines = new List<string>();
             if (data.season != null && data.season.topTeamIds == null) data.season.topTeamIds = new List<string>();
             if (data.money < 0) data.money = 0;

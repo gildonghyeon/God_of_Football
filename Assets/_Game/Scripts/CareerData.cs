@@ -52,7 +52,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 18;
+        public int version = 19;
         public PlayerData player;
         public string trainingId = "";      // v11 이전의 훈련 선택 (지금은 쓰지 않음)
         public float trainingCarrySeconds;  // v12의 지급 대기 시간 (지금은 쓰지 않음: 포인트는 1초마다 계속 늘어남)
@@ -85,6 +85,11 @@ namespace MyFootballCareer
         public List<TrophyRecord> trophies = new List<TrophyRecord>();     // 받은 트로피 (환생해도 남음)
         public int awardsSeason;                                           // 시상을 마친 시즌 번호
         public List<string> awardLines = new List<string>();               // 그 시즌 시상 결과 안내
+        public string dailyDate = "";                                      // 일일 미션을 뽑은 날짜 (yyyyMMdd, 현지)
+        public List<DailyMission> dailyMissions = new List<DailyMission>(); // 오늘의 미션 3개
+        public bool dailyBonusClaimed;                                     // 오늘 미션 보너스를 받았는지
+        public int attendanceCount;                                        // 지금까지 출석한 날 수 (7일마다 보상 순환)
+        public string attendanceLastDate = "";                             // 마지막 출석 날짜 (yyyyMMdd, 현지)
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
     }

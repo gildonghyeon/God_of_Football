@@ -53,6 +53,7 @@ namespace MyFootballCareer
             ui.OnBuyEffortRate = BuyEffortRate;
             ui.OnPlayFriendly = PlayFriendly;
             ui.OnBuyFacility = BuyFacility;
+            ui.OnClaimAttendance = ClaimAttendance; ui.OnClaimMission = ClaimMission; ui.OnClaimBonus = ClaimDailyBonus;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -201,6 +202,9 @@ namespace MyFootballCareer
                 ui.SetStatus("노력 포인트가 부족합니다: " + Ko.Attr(kind) + " 강화에 " + SeasonSystem.Money(r.Cost) + " 필요");
                 return;
             }
+            long nowTicks = System.DateTime.UtcNow.Ticks;
+            DailySystem.Count(current, MissionKind.Upgrade, 1, nowTicks);
+            if (r.Outcome != UpgradeOutcome.Fail) DailySystem.Count(current, MissionKind.UpgradeSuccess, 1, nowTicks);
             saves.TrySave(current, out _);
             ui.SetStatus(r.Outcome == UpgradeOutcome.Fail ? Ko.Attr(kind) + " 강화 실패." : Ko.Attr(kind) + " +" + (r.After - r.Before).ToString("0") + "!");
             ui.RefreshTraining(current.player, training);   // 새 값을 먼저 그린 뒤 연출
@@ -216,6 +220,7 @@ namespace MyFootballCareer
             if (cost < 0) { ui.SetStatus("노력 증가량이 최대 레벨입니다."); return; }
             if (!training.BuyRate()) { ui.SetStatus("노력 포인트가 부족합니다: " + SeasonSystem.Money(cost) + " 필요"); return; }
             SoundFx.Play(Sfx.Buy);
+            DailySystem.Count(current, MissionKind.Purchase, 1, System.DateTime.UtcNow.Ticks);
             saves.TrySave(current, out _);
             ui.SetStatus("노력 증가량 Lv " + current.effortRateLevel + ": 초당 " + training.PointsPerSecond.ToString("0.00"));
             ui.RefreshTraining(current.player, training);
@@ -251,6 +256,83 @@ namespace MyFootballCareer
             }
         }
 
+        // ---------- 일일 미션·출석 ----------
+        void CountMatchMissions(MatchRecord record, bool league)
+        {
+            long now = System.DateTime.UtcNow.Ticks;
+            if (league)
+            {
+                DailySystem.Count(current, MissionKind.LeagueMatch, 1, now);
+                if (record.goalsFor > record.goalsAgainst) DailySystem.Count(current, MissionKind.LeagueWin, 1, now);
+            }
+            else DailySystem.Count(current, MissionKind.Friendly, 1, now);
+            if (record.playerPlayed) DailySystem.Count(current, MissionKind.AttackPoint, record.playerGoals + record.playerAssists, now);
+        }
+
+        void RefreshDailyUI()
+        {
+            if (current == null || current.player == null) return;
+            long now = System.DateTime.UtcNow.Ticks;
+            if (DailySystem.Ensure(current, now)) saves.TrySave(current, out _);   // 날짜가 바뀌어 새 미션
+            int day = DailySystem.AttendDay(current);                 // 다음에 받을 날 (1~7)
+            bool canAttend = DailySystem.CanAttend(current, now);
+            int claimed = canAttend ? day - 1 : (day == 1 ? 7 : day - 1);   // 이번 7일 중 이미 받은 날 수
+            var cardRewards = new string[7];
+            for (int d = 1; d <= 7; d++) cardRewards[d - 1] = DailySystem.AttendShort(d);
+            ui.SetAttendance(canAttend ? day + "일차 출석 보상을 받을 수 있어요!" : "오늘 출석 완료! 내일 또 만나요",
+                claimed, canAttend ? day : 0, cardRewards,
+                (canAttend ? "오늘 보상: " : "내일(" + day + "일차) 보상: ") + DailySystem.AttendReward(current, trainingSettings, matchSettings, day),
+                "강화 1회 = 평균 능력치 Lv " + TrainingSystem.AverageLevel(current.player).ToString("0") + "에서 강화 1번 할 노력 포인트 ("
+                    + SeasonSystem.Money(DailySystem.Points(current, trainingSettings, 1)) + ")"
+                    + "\n수당 1주 = 지금 경기 수당 1주치 (" + SeasonSystem.Money(DailySystem.Money(current, matchSettings, 1)) + ")"
+                    + "\n레벨과 주급이 오를수록 보상도 커집니다.",
+                canAttend);
+            string missionReward = DailySystem.RewardText(current, trainingSettings, matchSettings, DailySystem.MissionUpgrades, DailySystem.MissionWeeks);
+            for (int i = 0; i < 3; i++)
+            {
+                if (i >= current.dailyMissions.Count) { ui.SetMission(i, "", "", false); continue; }
+                var m = current.dailyMissions[i];
+                string state = m.claimed ? "받음" : m.Done ? "받기" : m.progress + " / " + m.target;
+                ui.SetMission(i, DailySystem.Describe(m) + "   " + m.progress + "/" + m.target + "\n" + missionReward, state, m.Done && !m.claimed);
+            }
+            bool bonus = DailySystem.BonusReady(current);
+            ui.SetDailyBonus("새 미션까지 " + IdleRewardSystem.FormatDuration(DailySystem.SecondsToReset(now)),
+                "모두 완료 보너스: " + DailySystem.RewardText(current, trainingSettings, matchSettings, DailySystem.BonusUpgrades, DailySystem.BonusWeeks),
+                current.dailyBonusClaimed ? "보너스 받음" : bonus ? "보너스 받기" : "미션 3개를 모두 받으면 열림", bonus);
+            ui.SetMissionBadge(DailySystem.AnyClaimable(current, now));
+        }
+
+        void AfterDailyClaim(string text, string title)
+        {
+            if (text == null) return;
+            SoundFx.Play(Sfx.Collect);
+            saves.TrySave(current, out _);
+            ui.SetStatus(title + ": " + text);
+            RefreshDailyUI();
+            RefreshMoneyUI();
+            ui.RefreshTraining(current.player, training);
+        }
+
+        void ClaimAttendance()
+        {
+            if (blocked || current == null) return;
+            string text = DailySystem.ClaimAttendance(current, trainingSettings, matchSettings, System.DateTime.UtcNow.Ticks);
+            if (text == null) { ui.SetStatus("오늘 출석 보상은 이미 받았습니다."); return; }
+            AfterDailyClaim(text, "출석");
+        }
+
+        void ClaimMission(int index)
+        {
+            if (blocked || current == null) return;
+            AfterDailyClaim(DailySystem.ClaimMission(current, index, trainingSettings, matchSettings, System.DateTime.UtcNow.Ticks), "미션 보상");
+        }
+
+        void ClaimDailyBonus()
+        {
+            if (blocked || current == null) return;
+            AfterDailyClaim(DailySystem.ClaimBonus(current, trainingSettings, matchSettings, System.DateTime.UtcNow.Ticks), "미션 보너스");
+        }
+
         // 돈으로 시설 레벨을 올립니다.
         void BuyFacility(int index)
         {
@@ -260,6 +342,7 @@ namespace MyFootballCareer
             if (cost < 0) { ui.SetStatus(FacilitySystem.Name(kind) + " 최대 레벨입니다."); return; }
             if (!FacilitySystem.Buy(current, kind, trainingSettings)) { ui.SetStatus("돈이 부족합니다: " + SeasonSystem.Money(cost) + " 필요"); return; }
             SoundFx.Play(Sfx.Buy);
+            DailySystem.Count(current, MissionKind.Purchase, 1, System.DateTime.UtcNow.Ticks);
             saves.TrySave(current, out _);
             ui.SetStatus(FacilitySystem.Name(kind) + " Lv " + FacilitySystem.Level(current, kind) + ": " + FacilitySystem.Effect(current, kind, trainingSettings, matchSettings));
             RefreshMoneyUI();
@@ -341,6 +424,7 @@ namespace MyFootballCareer
 
             var record = SeasonSystem.PlayNext(current, matchSettings, settings);
             if (record == null) { ui.SetStatus("경기를 할 수 없습니다: 팀 정보가 없습니다."); return; }
+            CountMatchMissions(record, true);
             saves.TrySave(current, out string message);   // 결과를 바로 저장해 다시 불러와도 바뀌지 않게 합니다.
             ui.SetStatus(message);
             var ownTeam = matchSettings.FindTeam(current.teamId);
@@ -367,6 +451,7 @@ namespace MyFootballCareer
             var record = SeasonSystem.PlayFriendly(current, matchSettings, settings, new System.Random(unchecked((int)now)));
             if (record == null) { ui.SetStatus("친선 경기를 할 수 없습니다: 상대 팀이 없습니다."); return; }
             long reward = TrainingSystem.CountFriendly(current, trainingSettings, now);
+            CountMatchMissions(record, false);
             saves.TrySave(current, out string message);
             ui.SetStatus(message);
             int every = Mathf.Max(1, trainingSettings.friendlyRewardEvery);
@@ -406,7 +491,7 @@ namespace MyFootballCareer
             if (autoSaveTimer >= 30f) { autoSaveTimer = 0f; saves.TrySave(current, out _); }
 
             refreshTimer += Time.unscaledDeltaTime;
-            if (refreshTimer >= 0.2f) { refreshTimer = 0f; ui.RefreshTraining(current.player, training); RefreshRebirthUI(); RefreshFriendlyUI(); }
+            if (refreshTimer >= 0.2f) { refreshTimer = 0f; ui.RefreshTraining(current.player, training); RefreshRebirthUI(); RefreshFriendlyUI(); RefreshDailyUI(); }
         }
 
         void Save()

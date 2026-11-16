@@ -48,6 +48,8 @@ namespace MyFootballCareer
         public Action OnBuyEffortRate;              // 노력 포인트 증가량을 올리는 동작
         public Action OnPlayFriendly;               // 친선 경기를 하는 동작
         public Action<int> OnBuyFacility;           // 시설 레벨을 올리는 동작 (FacilityKind 번호)
+        public Action OnClaimAttendance, OnClaimBonus;   // 출석 보상, 일일 미션 보너스 받기
+        public Action<int> OnClaimMission;          // 일일 미션 보상 받기 (0~2)
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -64,8 +66,14 @@ namespace MyFootballCareer
         Trait trait;
 
         // 플레이어 화면
-        RectTransform[] pages = new RectTransform[4];   // 홈 / 경기 / 커리어 / 설정
-        Image[] tabFills = new Image[4];
+        RectTransform[] pages = new RectTransform[5];   // 홈 / 경기 / 미션 / 커리어 / 설정
+        Image[] tabFills = new Image[5];
+        Text[] tabLabels = new Text[5];
+        Text attendText, attendDetail, attendNote, resetText, bonusText;
+        AttendanceCards attendCards;   // 출석 7일 카드
+        Button attendButton, bonusButton;
+        readonly Text[] missionTexts = new Text[3];
+        readonly Button[] missionButtons = new Button[3];
         Text[] statTexts = new Text[5];
         Button[] upgradeButtons = new Button[5];
         Button rateButton;
@@ -166,12 +174,13 @@ namespace MyFootballCareer
             tabLayout.padding = new RectOffset(10, 10, 12, 10); tabLayout.spacing = 10;
             tabLayout.childControlWidth = true; tabLayout.childControlHeight = true;
             tabLayout.childForceExpandWidth = true; tabLayout.childForceExpandHeight = true;
-            string[] tabNames = { "홈", "경기", "커리어", "설정" };
+            string[] tabNames = { "홈", "경기", "미션", "커리어", "설정" };
             for (int i = 0; i < tabNames.Length; i++)
             {
                 int index = i;
                 var tab = PixelButton(tabNames[i], () => SetPage(index), tabBar, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
                 tabFills[i] = (Image)tab.targetGraphic;
+                tabLabels[i] = tab.GetComponentInChildren<Text>();
             }
             tabBar.gameObject.SetActive(false);
         }
@@ -182,6 +191,7 @@ namespace MyFootballCareer
             if (matchView != null) matchView.Tick(Time.unscaledDeltaTime);
             if (upgradeFx != null) upgradeFx.Tick(Time.unscaledDeltaTime);
             if (ceremony != null) ceremony.Tick(Time.unscaledDeltaTime);
+            if (attendCards != null) attendCards.Tick(Time.unscaledDeltaTime);
             TickOfflineCount(Time.unscaledDeltaTime);
             if (safeRoot != null && (Screen.safeArea != lastSafe || Screen.width != lastWidth || Screen.height != lastHeight)) FitSafeArea();
         }
@@ -347,6 +357,8 @@ namespace MyFootballCareer
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
             friendlyButton = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
+            Array.Clear(missionTexts, 0, missionTexts.Length); Array.Clear(missionButtons, 0, missionButtons.Length);
+            attendText = attendDetail = attendNote = resetText = bonusText = null; attendButton = bonusButton = null; attendCards = null;
             moneyText = facilityMoneyText = null;
             transferRoot = null; rebirthFill = null;
             SetChrome(false);
@@ -403,7 +415,7 @@ namespace MyFootballCareer
             SetChrome(true);
             status = stripText;
 
-            pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("CareerPage"); pages[3] = NewPage("SettingsPage");
+            pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("MissionPage"); pages[3] = NewPage("CareerPage"); pages[4] = NewPage("SettingsPage");
             lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor;
             stage.SetLook(lookHair, lookSkin, lookKit);               // 내 선수 그림을 외형에 맞게 준비
             if (stage.Available) stage.Create(pages[0]);   // HOME 맨 위에 훈련장 장면
@@ -455,24 +467,44 @@ namespace MyFootballCareer
             leadersText = Label("", 22, 60);
 
             // CAREER: 이적 제안, 이력, 환생
-            currentParent = Section(pages[2], "돈", true);
+            currentParent = Section(pages[3], "돈", true);
             moneyText = Label("", 22, 64);
-            transferRoot = NewRect("TransferRoot", pages[2]);
+            transferRoot = NewRect("TransferRoot", pages[3]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
-            currentParent = Section(pages[2], "외형", true);
+            currentParent = Section(pages[3], "외형", true);
             Label("머리색, 피부색, 유니폼 색을 바꿉니다.", 20, 30).color = PixelTheme.TextDim;
             PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            currentParent = Section(pages[2], "트로피 룸", true);
+            currentParent = Section(pages[3], "트로피 룸", true);
             trophyText = Label("", 22, 60);
-            currentParent = Section(pages[2], "시즌 기록", true);
+            currentParent = Section(pages[3], "시즌 기록", true);
             historyText = Label("", 22, 60);
-            currentParent = Section(pages[2], "환생", true);
+            currentParent = Section(pages[3], "환생", true);
             rebirthText = Label("", 22, 120);
             var rebirth = PixelButton("환생하기", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
 
+            // 미션: 출석 보상, 일일 미션
+            currentParent = Section(pages[2], "출석 보상", true);
+            attendText = Label("", 22, 34); attendText.alignment = TextAnchor.MiddleCenter;
+            attendCards = new AttendanceCards(font);
+            attendCards.Build(Parent);
+            attendNote = Label("", 18, 76); attendNote.alignment = TextAnchor.MiddleCenter; attendNote.color = PixelTheme.TextDim;   // 카드의 '강화 n회 / 수당 n주' 뜻
+            attendDetail = Label("", 20, 30); attendDetail.alignment = TextAnchor.MiddleCenter; attendDetail.color = PixelTheme.Text;
+            attendButton = PixelButton("출석 보상 받기", () => { if (OnClaimAttendance != null) OnClaimAttendance(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
+            currentParent = Section(pages[2], "일일 미션", true);
+            resetText = Label("", 20, 30); resetText.color = PixelTheme.TextDim;
+            for (int i = 0; i < missionTexts.Length; i++)
+            {
+                int index = i;
+                missionTexts[i] = Label("", 22, 60);
+                missionButtons[i] = PixelButton("받기", () => { if (OnClaimMission != null) OnClaimMission(index); }, Parent, 56f);
+                missionButtons[i].GetComponentInChildren<Text>().fontSize = 20;
+            }
+            bonusText = Label("", 22, 34);
+            bonusButton = PixelButton("보너스 받기", () => { if (OnClaimBonus != null) OnClaimBonus(); }, Parent, 64f, PixelTheme.AccentFill, PixelTheme.Accent);
+
             // 설정: 소리, 저장 안내, 초기화
-            currentParent = Section(pages[3], "소리", true);
+            currentParent = Section(pages[4], "소리", true);
             Button soundButton = null;
             soundButton = PixelButton(SoundFx.Enabled ? "효과음 켬" : "효과음 끔", () =>
             {
@@ -480,10 +512,10 @@ namespace MyFootballCareer
                 soundButton.GetComponentInChildren<Text>().text = SoundFx.Enabled ? "효과음 켬" : "효과음 끔";
                 SoundFx.Play(Sfx.Click);
             }, Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            currentParent = Section(pages[3], "저장", true);
+            currentParent = Section(pages[4], "저장", true);
             Label("진행 상황은 자동으로 저장됩니다.\n(행동할 때마다, 30초마다, 앱을 닫거나 내릴 때)", 20, 64).color = PixelTheme.TextDim;
             Label("오프라인 보상은 최대 " + trainingSettings.offlineCapHours.ToString("0.#") + "시간까지 인정됩니다.", 20, 30).color = PixelTheme.TextDim;
-            currentParent = Section(pages[3], "초기화", true);
+            currentParent = Section(pages[4], "초기화", true);
             Label("지금 선수와 진행 상황을 지우고 처음부터 시작합니다.", 20, 30).color = PixelTheme.TextDim;
             PixelButton("저장 초기화", () => { if (OnResetSave != null) OnResetSave(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
 
@@ -569,6 +601,51 @@ namespace MyFootballCareer
         }
 
         public void SetTrophies(string text) { if (trophyText != null) SetLines(trophyText, text, 2); }
+
+        // ---------- 미션 탭 ----------
+        static void SetButton(Button b, string label, bool ready, Color fill, Color quiet)
+        {
+            if (b == null) return;
+            b.GetComponentInChildren<Text>().text = label;
+            ((Image)b.targetGraphic).color = ready ? fill : quiet;
+        }
+
+        // header: 위 안내, claimed: 이번 7일 중 받은 날 수, today: 오늘 받을 날(1~7, 없으면 0), rewards: 카드 7장의 보상 글, detail: 아래 보상 설명
+        // note: 카드의 보상 단위 안내 (강화 1회·수당 1주가 지금 얼마인지)
+        public void SetAttendance(string header, int claimed, int today, string[] rewards, string detail, string note, bool ready)
+        {
+            if (attendText == null) return;
+            attendText.text = header;
+            attendText.color = ready ? PixelTheme.Accent : PixelTheme.Text;
+            if (attendCards != null) attendCards.Set(claimed, today, rewards);
+            attendDetail.text = detail;
+            attendNote.text = note;
+            SetButton(attendButton, ready ? "출석 보상 받기" : "오늘은 받았어요", ready, PixelTheme.AccentFill, PixelTheme.QuietFill);
+        }
+
+        // 미션 한 줄: 설명·진행도·보상, 버튼 (받을 수 있음 / 진행 중 / 받음)
+        public void SetMission(int index, string info, string button, bool ready)
+        {
+            if (index < 0 || index >= missionTexts.Length || missionTexts[index] == null) return;
+            missionTexts[index].text = info;
+            SetButton(missionButtons[index], button, ready, PixelTheme.ButtonFill, PixelTheme.QuietFill);
+        }
+
+        public void SetDailyBonus(string reset, string info, string button, bool ready)
+        {
+            if (bonusText == null) return;
+            resetText.text = reset;
+            bonusText.text = info;
+            SetButton(bonusButton, button, ready, PixelTheme.AccentFill, PixelTheme.QuietFill);
+        }
+
+        // 받을 보상이 있으면 미션 탭 이름에 ! 표시
+        public void SetMissionBadge(bool on)
+        {
+            if (tabLabels[2] == null) return;
+            tabLabels[2].text = on ? "미션 !" : "미션";
+            tabLabels[2].color = on ? PixelTheme.Accent : PixelTheme.Text;
+        }
         public void SetLeaders(string text) { if (leadersText != null) SetLines(leadersText, text, 2); }
 
         static void SetLines(Text t, string text, int minLines)
