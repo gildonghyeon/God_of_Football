@@ -6,8 +6,9 @@ namespace MyFootballCareer
     // 시즌 시상. 시즌이 끝나면 한 번만 계산하고, 받은 트로피는 환생 뒤에도 남습니다 (보상은 트로피뿐).
     //  리그 우승 / 승격 / 득점왕 / 도움왕 / 수비왕 / 베스트 11 : 내가 뛴 리그 기준
     //  올해의 축구선수 : 모든 리그 통틀어 한 명 (높은 리그일수록 유리)
-    // 다른 팀 선수는 저장하지 않으므로, 각 팀의 포지션별 주전 '경쟁자'를 시즌 번호로 고정된 난수로 만들어
-    // 실제 경기 계산(MatchSimulation)으로 한 시즌을 치르게 한 뒤 내 기록과 비교합니다. 같은 시즌이면 언제 계산해도 같습니다.
+    // 각 팀 선수단(SquadSystem)의 주전 필드 선수 10명이 실제 경기 계산(MatchSimulation)으로 한 시즌을 치른 기록을
+    // 시즌 시드로 고정해 만들고 내 기록과 비교합니다. 같은 시즌이면 언제 계산해도 같습니다.
+    // 내 팀 동료의 골·도움은 내 경기 기록에 남은 득점자(GoalNote)로 셉니다. 내 자리의 주전은 내가 대신합니다.
     public static class AwardSystem
     {
         static readonly Position[] Positions = { Position.Forward, Position.Midfielder, Position.Defender };
@@ -16,14 +17,6 @@ namespace MyFootballCareer
         const float StatAwardBonus = 4f;        // 올해의 축구선수 점수: 득점·도움·수비왕 하나당
         const float TitleBonus = 5f;            // 올해의 축구선수 점수: 리그 우승
 
-        static readonly string Initials = "ABCDEFGHJKLMNOPRSTVW";
-        static readonly string[] Surnames =
-        {
-            "Moreno", "Hart", "Silva", "Novak", "Okafor", "Brandt", "Costa", "Lindqvist", "Ruiz", "Becker",
-            "Duarte", "Kovac", "Mensah", "Fischer", "Rossi", "Haaland", "Petrov", "Tanaka", "Walsh", "Dubois",
-            "Santos", "Muller", "Varga", "Ibrahim", "Larsen", "Romero", "Kane", "Bianchi", "Nilsen", "Ortega",
-            "Sato", "Keller", "Mbeki", "Andersen", "Quinn", "Ferreira", "Hughes", "Vidal", "Kim", "Zielinski",
-        };
 
         // 경쟁자 한 경기의 기록 (시즌 도중 순위표용)
         struct MatchLine { public bool played; public int goals, assists, defense; public float rating; }
@@ -51,9 +44,8 @@ namespace MyFootballCareer
             }
         }
 
-        // 같은 시즌 경쟁자 계산을 다시 하지 않도록 마지막 결과를 기억합니다 (시즌 도중 화면 갱신마다 부르므로)
-        static string cacheKey;
-        static List<Rival> cache;
+        // 같은 시즌 경쟁자 계산을 다시 하지 않도록 결과를 기억합니다 (시즌 도중 화면 갱신마다 부르므로)
+        static readonly Dictionary<string, List<Rival>> cache = new Dictionary<string, List<Rival>>();
 
         public static string KindName(TrophyKind kind)
         {
@@ -71,24 +63,25 @@ namespace MyFootballCareer
 
         static int BestElevenSlots(Position p) { return p == Position.Defender ? 4 : 3; }   // 4-3-3
 
-        // 이 팀들의 포지션별 경쟁자가 한 시즌(서로 홈·원정)을 치른 기록. skipTeam의 skipPosition 자리는 내 선수라 비웁니다.
+        // 이 팀들의 주전 필드 선수(영상 자리 1~10)가 한 시즌(서로 홈·원정)을 치른 기록. skipTeam의 skipSlot 자리는 내 선수라 비웁니다.
         static List<Rival> SimulateRivals(SaveData save, MatchSettings ms, CareerSettings career, List<TeamDefinition> teams, int division,
-                                          string skipTeam, Position skipPosition)
+                                          string skipTeam, int skipSlot)
         {
-            var key = save.season.seed + "|" + save.season.seasonNumber + "|" + division + "|" + skipTeam + "|" + skipPosition + "|" + career.attributeCap;
+            var key = save.season.seed + "|" + save.season.seasonNumber + "|" + division + "|" + skipTeam + "|" + skipSlot + "|" + career.attributeCap + "|sq" + save.squadSeason;
             foreach (var t in teams) key += "|" + t.id + ":" + t.requiredRating + ":" + t.strength;
-            if (key == cacheKey && cache != null) return cache;
-            var rng = new System.Random(unchecked(save.season.seed ^ (division * 104729) ^ 0x2545F491));
+            if (cache.TryGetValue(key, out var hit)) return hit;
             var list = new List<Rival>();
-            var used = new HashSet<string>();
             foreach (var team in teams)
-                foreach (var pos in Positions)
+            {
+                var xi = SquadSystem.Starters(save, ms, team.id);
+                for (int slot = 1; slot < xi.Length; slot++)
                 {
-                    float rating = Mathf.Clamp(team.requiredRating + rng.Next(0, 13), 1f, career.attributeCap);   // 그 팀 요구 수준보다 조금 높은 주전
-                    string name;
-                    do name = Initials[rng.Next(Initials.Length)] + ". " + Surnames[rng.Next(Surnames.Length)]; while (!used.Add(name) && used.Count < 400);
-                    int seed = rng.Next();
-                    if (team.id == skipTeam && pos == skipPosition) continue;
+                    var sp = xi[slot];
+                    if (sp == null || (team.id == skipTeam && slot == skipSlot)) continue;
+                    var pos = SquadSystem.ToPosition(sp.role);
+                    float rating = Mathf.Clamp(sp.rating, 1f, career.attributeCap);
+                    int seed = unchecked(save.season.seed ^ (division * 104729) ^ (sp.id * 7919) ^ 0x2545F491);
+                    string name = sp.name;
                     var r = new Rival { name = name, teamId = team.id, position = pos, division = division };
                     var p = new PlayerData { playerName = name, position = pos, shooting = rating, passing = rating, dribbling = rating, defending = rating, stamina = rating };
                     var mr = new System.Random(seed);
@@ -108,8 +101,71 @@ namespace MyFootballCareer
                     }
                     list.Add(r);
                 }
-            cacheKey = key; cache = list;
+            }
+            if (cache.Count > 8) cache.Clear();
+            cache[key] = list;
             return list;
+        }
+
+        // 앞의 games경기까지 자른 복사본. 내 팀 동료의 골·도움은 내 경기 기록의 득점자로 셉니다.
+        static List<Rival> Snapshot(List<Rival> src, int games, SaveData save)
+        {
+            var list = new List<Rival>(src.Count);
+            Dictionary<string, int> goals = null, assists = null;
+            foreach (var r in src)
+            {
+                var c = r.Upto(games);
+                if (r.teamId == save.teamId)
+                {
+                    if (goals == null) TallyOwnTeam(save, games, out goals, out assists);
+                    c.goals = goals.TryGetValue(c.name, out int g) ? g : 0;
+                    c.assists = assists.TryGetValue(c.name, out int a) ? a : 0;
+                }
+                list.Add(c);
+            }
+            return list;
+        }
+
+        static void TallyOwnTeam(SaveData save, int games, out Dictionary<string, int> goals, out Dictionary<string, int> assists)
+        {
+            goals = new Dictionary<string, int>(); assists = new Dictionary<string, int>();
+            var matches = save.season.matches;
+            for (int i = 0; i < games && i < matches.Count; i++)
+            {
+                if (matches[i].goalNotes == null) continue;
+                foreach (var n in matches[i].goalNotes)
+                {
+                    if (!n.ours) continue;
+                    if (!string.IsNullOrEmpty(n.scorer)) goals[n.scorer] = (goals.TryGetValue(n.scorer, out int g) ? g : 0) + 1;
+                    if (!string.IsNullOrEmpty(n.assist)) assists[n.assist] = (assists.TryGetValue(n.assist, out int a) ? a : 0) + 1;
+                }
+            }
+        }
+
+        // 팀 정보 화면용: 이 팀 주전들의 이번 시즌 기록 (이름 → 기록)
+        public static Dictionary<string, SeasonLine> TeamSeasonStats(SaveData save, MatchSettings ms, CareerSettings career, string teamId, out int division)
+        {
+            var result = new Dictionary<string, SeasonLine>();
+            var season = save.season;
+            division = SeasonSystem.DivisionOf(save, ms, teamId);
+            if (season == null) return result;
+            int games = Mathf.Min(season.nextMatchIndex, season.matches.Count);
+            List<TeamDefinition> teams;
+            string skipTeam = null;
+            int div;
+            if (season.teamIds != null && season.teamIds.Contains(teamId))
+            {
+                teams = new List<TeamDefinition>();
+                foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
+                div = season.division; skipTeam = save.teamId; division = season.division;
+            }
+            else { div = division; teams = SeasonSystem.TeamsInDivision(save, ms, div); }
+            if (games <= 0 || teams.Count < 2) return result;
+            var rivals = Snapshot(SimulateRivals(save, ms, career, teams, div, skipTeam, MatchReplayPlan.YouSlot(save.player.position)), games, save);
+            foreach (var r in rivals)
+                if (r.teamId == teamId)
+                    result[r.name] = new SeasonLine { goals = r.goals, assists = r.assists, apps = r.apps, avg = r.Avg };
+            return result;
         }
 
         // ---------- 시즌 도중 개인 순위표 ----------
@@ -125,7 +181,7 @@ namespace MyFootballCareer
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
             var pos = save.player.position;
             var now = new List<Rival>();
-            foreach (var r in SimulateRivals(save, ms, career, teams, season.division, save.teamId, pos)) now.Add(r.Upto(games));
+            now.AddRange(Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, MatchReplayPlan.YouSlot(pos)), games, save));
 
             var me = new Rival { name = save.player.playerName, teamId = save.teamId, position = pos };
             for (int i = 0; i < games; i++)
@@ -151,6 +207,62 @@ namespace MyFootballCareer
               .Append(", " + me.name + " ").Append(me.apps > 0 ? me.Avg.ToString("0.0") : "-")
               .Append(!enough ? "  (출전 부족)" : me.Avg >= cut ? "  선정권" : "  탈락권");
             return sb.ToString();
+        }
+
+        // 경기 탭 표용: 득점·도움·수비 순위 (상위 3명 + 3위 밖이면 내 줄), header는 진행 라운드, footer는 베스트 11 기준
+        public static List<LeaderBlockView> LeadersView(SaveData save, MatchSettings ms, CareerSettings career, out string header, out string footer)
+        {
+            footer = null;
+            var season = save.season;
+            if (season == null || season.teamIds == null || season.teamIds.Count < 2) { header = "리그 정보가 없습니다."; return null; }
+            int games = Mathf.Min(season.nextMatchIndex, season.matches.Count);
+            if (games <= 0) { header = "첫 경기를 치르면 순위가 나옵니다."; return null; }
+            var teams = new List<TeamDefinition>();
+            foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
+            var pos = save.player.position;
+            var now = Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, MatchReplayPlan.YouSlot(pos)), games, save);
+            var me = new Rival { name = save.player.playerName, teamId = save.teamId, position = pos };
+            for (int i = 0; i < games; i++)
+            {
+                var m = season.matches[i]; me.played++;
+                if (!m.played || !m.playerPlayed) continue;
+                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; me.defense += m.defensiveActions;
+            }
+            header = season.matches.Count + "라운드 중 " + games + "라운드 진행";
+            var blocks = new List<LeaderBlockView> {
+                Block(ms, "득점", now, me, r => r.goals), Block(ms, "도움", now, me, r => r.assists), Block(ms, "수비 (수비 횟수)", now, me, r => r.defense) };
+            int slots = BestElevenSlots(pos);
+            var same = new List<Rival>();
+            foreach (var r in now) if (r.position == pos && r.played > 0 && r.apps >= BestElevenMinApps * r.played) same.Add(r);
+            same.Sort((a, b) => b.Avg.CompareTo(a.Avg));
+            float cut = same.Count >= slots ? same[slots - 1].Avg : 0f;
+            bool enough = me.apps >= BestElevenMinApps * me.played;
+            footer = "베스트 11 (" + Ko.Pos(pos) + ")  기준 평점 " + cut.ToString("0.0") + "  ·  내 평점 " + (me.apps > 0 ? me.Avg.ToString("0.0") : "-")
+                   + (!enough ? "  (출전 부족)" : me.Avg >= cut ? "  → 선정권" : "  → 탈락권");
+            return blocks;
+        }
+
+        static LeaderBlockView Block(MatchSettings ms, string title, List<Rival> rivals, Rival me, System.Func<Rival, int> value)
+        {
+            var all = new List<Rival>(rivals) { me };
+            all.Sort((a, b) =>
+            {
+                int c = value(b).CompareTo(value(a));
+                if (c != 0) return c;
+                if (a == me) return -1;
+                if (b == me) return 1;
+                return string.CompareOrdinal(a.name, b.name);
+            });
+            var block = new LeaderBlockView { title = title };
+            void Add(int rank, Rival r, bool gap)
+            {
+                var t = ms.FindTeam(r.teamId);
+                block.rows.Add(new LeaderRowView { rank = rank, name = r.name, team = t != null ? t.displayName : r.teamId, value = value(r), me = r == me, gap = gap });
+            }
+            for (int i = 0; i < all.Count && i < 3; i++) Add(i + 1, all[i], false);
+            int myRank = all.IndexOf(me) + 1;
+            if (myRank > 3) Add(myRank, me, true);
+            return block;
         }
 
         // 순위 상위 3명 + 3위 밖이면 내 순위. 같은 기록이면 내가 앞 (시상도 동률이면 수상)
@@ -224,7 +336,7 @@ namespace MyFootballCareer
             // 같은 리그 경쟁자
             var leagueTeams = new List<TeamDefinition>();
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) leagueTeams.Add(t); }
-            var rivals = SimulateRivals(save, ms, career, leagueTeams, div, save.teamId, pos);
+            var rivals = Snapshot(SimulateRivals(save, ms, career, leagueTeams, div, save.teamId, MatchReplayPlan.YouSlot(pos)), int.MaxValue, save);
 
             int statWins = 0;
             void StatAward(TrophyKind kind, string label, string unit, int myValue, System.Func<Rival, int> value)
@@ -261,7 +373,7 @@ namespace MyFootballCareer
             List<Rival> topRivals;
             List<string> topOrder;
             if (div == 1) { topRivals = rivals; topOrder = new List<string>(); foreach (var row in table) topOrder.Add(row.id); }
-            else { topRivals = SimulateRivals(save, ms, career, topTeams, 1, null, pos); topOrder = SeasonSystem.FinalOrder(save, ms, topTeams, 1); }
+            else { topRivals = Snapshot(SimulateRivals(save, ms, career, topTeams, 1, null, -1), int.MaxValue, save); topOrder = SeasonSystem.FinalOrder(save, ms, topTeams, 1); }
             var topGoals = Best(topRivals, r => r.goals); var topAssists = Best(topRivals, r => r.assists); var topDefense = Best(topRivals, r => r.defense);
             Rival poty = null; float potyScore = 0f;
             foreach (var r in topRivals)

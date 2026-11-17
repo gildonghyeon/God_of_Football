@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 namespace MyFootballCareer
@@ -31,11 +32,31 @@ namespace MyFootballCareer
         readonly RectTransform[] dotRects = new RectTransform[22];
         RectTransform ballRect;
         Image closeupImage;
-        Text scoreText, clockText, bannerText, feedText, closeupText, statsText;
-        readonly string[] feed = new string[2];
+        Text scoreText, clockText, closeupText, benchText;
+        // 사건 카드 (골, 실점, 도움, 태클, 경기 종료): 경기장 위쪽에 잠깐 내려왔다 사라짐
+        RectTransform eventCard;
+        Image eventFill, eventEdge;
+        Text eventTitle, eventSub;
+        // 진행 기록: 최근 3개 (분 배지 + 내용), 아래가 최신
+        const int FeedRows = 3;
+        readonly Image[] feedBadges = new Image[FeedRows];
+        readonly Text[] feedMinutes = new Text[FeedRows], feedLines = new Text[FeedRows];
+        readonly List<(string minute, string text, Color color)> feedItems = new List<(string, string, Color)>();
+        // 내 기록 칩
+        readonly Text[] chipValues = new Text[5];
+        RectTransform chipRow;
+        float scorePulse;
+        Color scoreFlash = Color.white;
+
+        static readonly Color OurGoalColor = new Color(.30f, .50f, .90f, 1f);
+        static readonly Color TheirGoalColor = new Color(.80f, .30f, .30f, 1f);
+        static readonly Color AssistColor = new Color(.85f, .65f, .15f, 1f);
+        static readonly Color TackleColor = new Color(.25f, .65f, .40f, 1f);
+        static readonly Color NeutralColor = new Color(.35f, .40f, .52f, 1f);
 
         float clock, bannerT, bannerDur, closeupT, closeupElapsed, finishT;
         int goalsFor, goalsAgainst, youSlot;
+        int ourNote, theirNote;   // 다음에 보여 줄 골 기록 (GoalNote) 순서
         int yourGoals, yourAssists, yourShots, yourTackles;
         float waitT;
         string lastStatsLine = "";
@@ -84,11 +105,11 @@ namespace MyFootballCareer
             engine.stats = stats;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
             engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken;
-            clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; closeupT = 0f; finishing = false;
+            clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; closeupT = 0f; finishing = false; ourNote = 0; theirNote = 0;
             yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
-            feed[0] = ""; feed[1] = "";
+            feedItems.Clear(); scorePulse = 0f;
             BuildUi(parent);
-            Feed(m.playerPlayed ? "0'  킥오프" : "0'  킥오프 (벤치 대기)");
+            Feed("0'", m.playerPlayed ? "킥오프" : "킥오프 (벤치 대기)", NeutralColor);
             SoundFx.Play(Sfx.Whistle);
             Active = true;
             Tick(0f);
@@ -116,6 +137,14 @@ namespace MyFootballCareer
             t.font = font; t.fontSize = size; t.text = value; t.color = color;
             t.alignment = anchor; t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Overflow;
+            return t;
+        }
+
+        // 칸보다 긴 글자는 칸에 맞게 작아지게 (팀 이름 등)
+        static Text Fit(Text t, int min)
+        {
+            t.resizeTextForBestFit = true; t.resizeTextMinSize = min; t.resizeTextMaxSize = t.fontSize;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
             return t;
         }
 
@@ -190,12 +219,21 @@ namespace MyFootballCareer
             Anchored(youText.rectTransform, 0, 0, 1, 1);
             youLabel.gameObject.SetActive(youSlot >= 0);
 
-            // 큰 글자 알림 (ASSIST!, GOAL! 등)
-            bannerText = TextNode("", area, 64, TextAnchor.MiddleCenter, Color.white);
-            Anchored(bannerText.rectTransform, 0, .60f, 1, .80f);
-            var outline = bannerText.gameObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0, 0, 0, .9f); outline.effectDistance = new Vector2(4, -4);
-            bannerText.gameObject.SetActive(false);
+            // 사건 카드 (골!, 실점, 도움!, 태클!, 경기 종료): 테두리 있는 띠에 큰 제목과 설명
+            eventCard = NewRect("EventCard", area);
+            eventCard.anchorMin = new Vector2(.06f, .66f); eventCard.anchorMax = new Vector2(.94f, .86f);
+            eventCard.offsetMin = eventCard.offsetMax = Vector2.zero;
+            eventEdge = eventCard.gameObject.AddComponent<Image>(); eventEdge.raycastTarget = false;
+            var fillRect = NewRect("Fill", eventCard); Anchored(fillRect, 0, 0, 1, 1);
+            fillRect.offsetMin = new Vector2(4, 4); fillRect.offsetMax = new Vector2(-4, -4);
+            eventFill = fillRect.gameObject.AddComponent<Image>(); eventFill.raycastTarget = false;
+            eventTitle = TextNode("", fillRect, 44, TextAnchor.MiddleCenter, Color.white);
+            Anchored(eventTitle.rectTransform, 0, .4f, 1, 1);
+            var titleOutline = eventTitle.gameObject.AddComponent<Outline>();
+            titleOutline.effectColor = new Color(0, 0, 0, .8f); titleOutline.effectDistance = new Vector2(3, -3);
+            eventSub = TextNode("", fillRect, 20, TextAnchor.MiddleCenter, Color.white);
+            Anchored(eventSub.rectTransform, .02f, .02f, .98f, .42f);
+            eventCard.gameObject.SetActive(false);
 
             // 아래쪽: 내 선수 기록, 진행 기록, 건너뛰기 (경기장 가장자리 위에 반투명 띠를 깔아 글자가 잘 보이게 함)
             var bottomBand = NewRect("BottomBand", rootRect);
@@ -204,14 +242,46 @@ namespace MyFootballCareer
             bottomBand.offsetMin = Vector2.zero; bottomBand.offsetMax = new Vector2(0, 146);
             bottomBand.gameObject.AddComponent<Image>().color = new Color(0.03f, 0.05f, 0.09f, .78f);
             bottomBand.gameObject.GetComponent<Image>().raycastTarget = false;
-            statsText = TextNode("", rootRect, 20, TextAnchor.MiddleLeft, PixelTheme.Accent);
-            statsText.rectTransform.anchorMin = new Vector2(0, 0); statsText.rectTransform.anchorMax = new Vector2(1, 0);
-            statsText.rectTransform.pivot = new Vector2(0, 0);
-            statsText.rectTransform.offsetMin = new Vector2(24, 104); statsText.rectTransform.offsetMax = new Vector2(-24, 138);
-            feedText = TextNode("", rootRect, 22, TextAnchor.MiddleLeft, PixelTheme.Text);
-            feedText.rectTransform.anchorMin = new Vector2(0, 0); feedText.rectTransform.anchorMax = new Vector2(1, 0);
-            feedText.rectTransform.pivot = new Vector2(0, 0);
-            feedText.rectTransform.offsetMin = new Vector2(24, 16); feedText.rectTransform.offsetMax = new Vector2(-190, 96);
+            // 내 기록 칩: 골 / 도움 / 슈팅 / 패스 / 태클
+            chipRow = NewRect("Chips", rootRect);
+            chipRow.anchorMin = new Vector2(0, 0); chipRow.anchorMax = new Vector2(1, 0); chipRow.pivot = new Vector2(0, 0);
+            chipRow.offsetMin = new Vector2(16, 102); chipRow.offsetMax = new Vector2(-16, 140);
+            var chipLayout = chipRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            chipLayout.spacing = 6; chipLayout.childControlWidth = true; chipLayout.childControlHeight = true;
+            chipLayout.childForceExpandWidth = true; chipLayout.childForceExpandHeight = true;
+            string[] chipNames = { "골", "도움", "슈팅", "패스", "태클" };
+            for (int i = 0; i < chipNames.Length; i++)
+            {
+                var chip = NewRect("Chip", chipRow);
+                chip.gameObject.AddComponent<Image>().color = new Color(.12f, .16f, .25f, .95f);
+                var label = TextNode(chipNames[i], chip, 16, TextAnchor.MiddleLeft, PixelTheme.TextDim);
+                Anchored(label.rectTransform, .07f, 0, .45f, 1);
+                chipValues[i] = Fit(TextNode("0", chip, 22, TextAnchor.MiddleRight, PixelTheme.Accent), 14);
+                Anchored(chipValues[i].rectTransform, .45f, .05f, .94f, .95f);
+            }
+            benchText = TextNode("벤치 대기 중", rootRect, 20, TextAnchor.MiddleCenter, PixelTheme.TextDim);
+            benchText.rectTransform.anchorMin = new Vector2(0, 0); benchText.rectTransform.anchorMax = new Vector2(1, 0); benchText.rectTransform.pivot = new Vector2(0, 0);
+            benchText.rectTransform.offsetMin = new Vector2(16, 102); benchText.rectTransform.offsetMax = new Vector2(-16, 140);
+            chipRow.gameObject.SetActive(youSlot >= 0); benchText.gameObject.SetActive(youSlot < 0);
+            // 진행 기록: 분 배지 + 내용, 3줄
+            for (int i = 0; i < FeedRows; i++)
+            {
+                var row = NewRect("FeedRow", rootRect);
+                row.anchorMin = new Vector2(0, 0); row.anchorMax = new Vector2(1, 0); row.pivot = new Vector2(0, 0);
+                float y = 12f + (FeedRows - 1 - i) * 29f;   // 0번이 맨 위(오래됨), 마지막이 맨 아래(최신)
+                row.offsetMin = new Vector2(16, y); row.offsetMax = new Vector2(-188, y + 26f);
+                var badge = NewRect("Minute", row);
+                badge.anchorMin = new Vector2(0, 0); badge.anchorMax = new Vector2(0, 1); badge.pivot = new Vector2(0, .5f);
+                badge.sizeDelta = new Vector2(52, 0); badge.anchoredPosition = Vector2.zero;
+                feedBadges[i] = badge.gameObject.AddComponent<Image>(); feedBadges[i].raycastTarget = false;
+                feedMinutes[i] = TextNode("", badge, 17, TextAnchor.MiddleCenter, Color.white);
+                Anchored(feedMinutes[i].rectTransform, 0, 0, 1, 1);
+                feedLines[i] = TextNode("", row, 19, TextAnchor.MiddleLeft, PixelTheme.Text);
+                Anchored(feedLines[i].rectTransform, 0, 0, 1, 1);
+                feedLines[i].rectTransform.offsetMin = new Vector2(60, 0);
+                Fit(feedLines[i], 13);
+                row.gameObject.SetActive(false);
+            }
             var skip = Box(rootRect, PixelTheme.QuietEdge, PixelTheme.QuietFill);
             skip.anchorMin = skip.anchorMax = new Vector2(1, 0); skip.pivot = new Vector2(1, 0);
             skip.anchoredPosition = new Vector2(-16, 16); skip.sizeDelta = new Vector2(160, 76);
@@ -249,6 +319,14 @@ namespace MyFootballCareer
             if (!Active) return;
             float dt = Mathf.Min(deltaSeconds, 0.1f);
             UpdateBanner(dt);
+            if (scorePulse > 0f)   // 골이 나면 점수가 커지며 팀 색으로 번쩍
+            {
+                scorePulse -= dt;
+                float k = Mathf.Clamp01(scorePulse / 0.8f);
+                float s = 1f + 0.35f * k;
+                scoreText.rectTransform.localScale = new Vector3(s, s, 1f);
+                scoreText.color = Color.Lerp(PixelTheme.Text, scoreFlash, k);
+            }
 
             if (closeupT > 0f)   // 골 장면 동안 경기는 멈춤
             {
@@ -287,9 +365,9 @@ namespace MyFootballCareer
             {
                 finishing = true; finishT = 1.3f;
                 SnapStats();
-                ShowBanner("경기 종료", PixelTheme.Text, 1.3f, 56);
+                ShowEvent("경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName, NeutralColor, 1.3f);
                 SoundFx.Play(Sfx.FullTime);
-                Feed("90'  경기 종료");
+                Feed("90'", "경기 종료", NeutralColor);
             }
         }
 
@@ -336,18 +414,14 @@ namespace MyFootballCareer
         // 내 선수의 기록. 패스는 최종 기록을 향해 경기 진행에 맞춰 늘어납니다.
         void UpdateStatsLine(float progress)
         {
-            string line;
-            if (youSlot < 0) line = "벤치 대기 중";
-            else
-            {
-                int attempted = Mathf.RoundToInt(record.passesAttempted * progress);
-                int completed = Mathf.Min(attempted, Mathf.RoundToInt(record.passesCompleted * progress));
-                line = "골 " + yourGoals + "   도움 " + yourAssists + "   슈팅 " + yourShots
-                     + "   패스 " + completed + "/" + attempted + "   태클 " + yourTackles;
-            }
+            if (youSlot < 0 || chipValues[0] == null) return;
+            int attempted = Mathf.RoundToInt(record.passesAttempted * progress);
+            int completed = Mathf.Min(attempted, Mathf.RoundToInt(record.passesCompleted * progress));
+            string line = yourGoals + "|" + yourAssists + "|" + yourShots + "|" + completed + "/" + attempted + "|" + yourTackles;
             if (line == lastStatsLine) return;
             lastStatsLine = line;
-            statsText.text = line;
+            var parts = line.Split('|');
+            for (int i = 0; i < chipValues.Length; i++) chipValues[i].text = parts[i];
         }
 
         // 경기 끝에 내 선수의 기록을 저장된 결과와 똑같이 맞춥니다.
@@ -362,43 +436,57 @@ namespace MyFootballCareer
         // ---------- 사건 ----------
         string Minute() { return Mathf.FloorToInt(Mathf.Min(clock, 90f)) + "'"; }
 
+        // 경기 기록에 남은 득점자 이름 (없으면 null). 영상과 같은 계산으로 만든 기록이라 순서가 같습니다.
+        GoalNote NextNote(bool ours)
+        {
+            if (record.goalNotes == null) return null;
+            int want = ours ? ourNote++ : theirNote++, k = 0;
+            foreach (var n in record.goalNotes)
+                if (n.ours == ours) { if (k == want) return n; k++; }
+            return null;
+        }
+
         void OnGoal(ReplayEvent ev)
         {
+            var note = NextNote(ev.type == ReplayEventType.GoalOurs);
             if (ev.type == ReplayEventType.GoalOurs) goalsFor++; else goalsAgainst++;
             SoundFx.Play(ev.type == ReplayEventType.GoalOurs ? Sfx.Goal : Sfx.Conceded);
             scoreText.text = goalsFor + " - " + goalsAgainst;
             if (ev.type == ReplayEventType.GoalOurs)
             {
+                scorePulse = 0.8f; scoreFlash = new Color(.55f, .75f, 1f);
+                string who = note != null ? note.scorer + (string.IsNullOrEmpty(note.assist) ? "" : "  (도움 " + note.assist + ")") : ownName;
                 if (ev.youScore)
                 {
                     yourGoals++;
-                    Feed(Minute() + "  골! 직접 넣었습니다!");
+                    Feed(Minute(), "골! 내가 넣었다!" + (note != null && !string.IsNullOrEmpty(note.assist) ? "  (도움 " + note.assist + ")" : ""), OurGoalColor);
                     StartCloseup();
                 }
                 else
                 {
-                    Feed(Minute() + (ev.youAssist ? "  골! 내 도움이 골로 이어졌습니다." : "  " + ownName + " 골!"));
-                    ShowBanner("골!", new Color(.55f, .75f, 1f), 1.0f, 56);
+                    Feed(Minute(), "골! " + who + (ev.youAssist ? "  ← 내 도움" : ""), OurGoalColor);
+                    ShowEvent("골!", Minute() + "  " + who, OurGoalColor, 1.3f);
                 }
             }
             else
             {
-                Feed(Minute() + "  " + oppName + " 득점.");
-                ShowBanner("실점", new Color(1f, .5f, .5f), 1.0f, 52);
+                scorePulse = 0.8f; scoreFlash = new Color(1f, .5f, .5f);
+                string who = note != null ? note.scorer : oppName;
+                Feed(Minute(), "실점  " + oppName + " " + who, TheirGoalColor);
+                ShowEvent("실점", Minute() + "  " + oppName + "  " + who, TheirGoalColor, 1.2f);
             }
         }
 
         void OnAssist(ReplayEvent ev)
         {
             yourAssists++;
-            Feed(Minute() + "  도움! 골을 만들어 냈습니다.");
             SoundFx.Play(Sfx.Assist, 0.8f);
-            ShowBanner("도움!", PixelTheme.Accent, 1.3f, 72);
+            ShowEvent("도움!", Minute() + "  내 패스가 골로 이어졌다", AssistColor, 1.4f);
         }
 
         void OnShot(ReplayEvent ev)
         {
-            Feed(Minute() + (ev.saved ? "  슈팅이 막혔습니다." : "  슈팅이 빗나갔습니다."));
+            Feed(Minute(), ev.saved ? "내 슈팅, 골키퍼 선방" : "내 슈팅, 골문을 벗어남", NeutralColor);
         }
 
         void OnShotTaken(ReplayEvent ev) { yourShots++; }
@@ -406,9 +494,9 @@ namespace MyFootballCareer
         void OnTackle(ReplayEvent ev)
         {
             yourTackles++;
-            Feed(Minute() + "  태클! 공을 빼앗았습니다.");
+            Feed(Minute(), "태클! 공을 빼앗았다", TackleColor);
             SoundFx.Play(Sfx.Tackle, 0.8f);
-            ShowBanner("태클!", new Color(.6f, 1f, .7f), 0.8f, 44);
+            ShowEvent("태클!", Minute() + "  공을 빼앗았다", TackleColor, 0.9f);
         }
 
         void StartCloseup()
@@ -416,32 +504,54 @@ namespace MyFootballCareer
             closeupT = 2.0f; closeupElapsed = 0f;
             closeupImage.sprite = goalFrames[0];
             closeupRoot.SetActive(true);
-            bannerT = 0f; bannerText.gameObject.SetActive(false);
+            bannerT = 0f; eventCard.gameObject.SetActive(false);
         }
 
-        void ShowBanner(string text, Color color, float seconds, int size)
+        // 사건 카드: 팀 색 띠에 큰 제목과 한 줄 설명. 위에서 톡 떨어지듯 나타났다가 흐려지며 사라집니다.
+        void ShowEvent(string title, string sub, Color color, float seconds)
         {
-            bannerText.text = text; bannerText.color = color; bannerText.fontSize = size;
+            eventTitle.text = title; eventSub.text = sub;
+            eventEdge.color = Color.Lerp(color, Color.white, 0.35f);
+            eventFill.color = new Color(color.r * 0.55f, color.g * 0.55f, color.b * 0.55f, 0.92f);
             bannerDur = seconds; bannerT = seconds;
-            bannerText.gameObject.SetActive(true);
+            eventCard.gameObject.SetActive(true);
+            UpdateBanner(0f);
         }
 
         void UpdateBanner(float dt)
         {
-            if (bannerT <= 0f) return;
+            if (bannerT <= 0f || eventCard == null) return;
             bannerT -= dt;
-            if (bannerT <= 0f) { bannerText.gameObject.SetActive(false); return; }
+            if (bannerT <= 0f) { eventCard.gameObject.SetActive(false); return; }
             float elapsed = bannerDur - bannerT;
-            float punch = 1f + 0.5f * Mathf.Clamp01(1f - elapsed / 0.25f);   // 처음에 크게 나타났다가 줄어듦
-            bannerText.rectTransform.localScale = new Vector3(punch, punch, 1f);
-            var c = bannerText.color; c.a = Mathf.Clamp01(bannerT / 0.3f);
-            bannerText.color = c;
+            float k = Mathf.Clamp01(elapsed / 0.2f);
+            float s = 1f + 0.25f * (1f - k);                                  // 처음엔 크게
+            eventCard.localScale = new Vector3(s, s, 1f);
+            eventCard.anchoredPosition = new Vector2(0f, 30f * (1f - k));     // 위에서 내려옴
+            float a = Mathf.Clamp01(bannerT / 0.3f);                          // 끝에 흐려짐
+            SetAlpha(eventEdge, a); SetAlpha(eventFill, a * 0.92f); SetAlpha(eventTitle, a); SetAlpha(eventSub, a);
         }
 
-        void Feed(string line)
+        static void SetAlpha(Graphic g, float a) { var c = g.color; c.a = a; g.color = c; }
+
+        // 진행 기록에 한 줄 추가 (분 배지 색 = 사건 종류)
+        void Feed(string minute, string text, Color color)
         {
-            feed[0] = feed[1]; feed[1] = line;
-            feedText.text = (string.IsNullOrEmpty(feed[0]) ? "" : feed[0] + "\n") + feed[1];
+            feedItems.Add((minute, text, color));
+            while (feedItems.Count > FeedRows) feedItems.RemoveAt(0);
+            for (int i = 0; i < FeedRows; i++)
+            {
+                int item = i - (FeedRows - feedItems.Count);   // 맨 아래 줄이 최신
+                var row = feedLines[i].transform.parent.gameObject;
+                if (item < 0) { row.SetActive(false); continue; }
+                row.SetActive(true);
+                var f = feedItems[item];
+                float fade = i == FeedRows - 1 ? 1f : (i == FeedRows - 2 ? 0.75f : 0.5f);
+                feedBadges[i].color = new Color(f.color.r, f.color.g, f.color.b, fade);
+                feedMinutes[i].text = f.minute;
+                feedLines[i].text = f.text;
+                feedLines[i].color = new Color(PixelTheme.Text.r, PixelTheme.Text.g, PixelTheme.Text.b, fade);
+            }
         }
 
         // ---------- 끝내기 ----------

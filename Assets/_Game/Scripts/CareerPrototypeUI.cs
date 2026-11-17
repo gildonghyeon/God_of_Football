@@ -50,6 +50,8 @@ namespace MyFootballCareer
         public Action<int> OnBuyFacility;           // 시설 레벨을 올리는 동작 (FacilityKind 번호)
         public Action OnClaimAttendance, OnClaimBonus;   // 출석 보상, 일일 미션 보너스 받기
         public Action<int> OnClaimMission;          // 일일 미션 보상 받기 (0~2)
+        public Action OnOpenSquads;                 // 순위표의 '팀 선수단 보기'
+        public Action<string> OnShowSquad;          // 이 팀의 선수단 보기 (팀 ID)
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -87,6 +89,7 @@ namespace MyFootballCareer
         TrainingStageView stage;   // 훈련장 장면
         MatchReplayView matchView; // 경기 영상 화면
         UpgradeEffects upgradeFx;  // 강화 결과 연출
+        MatchPageView matchPage;   // 경기 탭의 카드와 표
         TrophyCeremony ceremony;   // 시즌 끝 트로피 수여 연출
         Text offlineNumber;        // 오프라인 보상 창의 올라가는 숫자
         float offlineTarget, offlineT;
@@ -353,7 +356,7 @@ namespace MyFootballCareer
             Array.Clear(statTexts, 0, statTexts.Length);
             Array.Clear(statBars, 0, statBars.Length);
             Array.Clear(upgradeButtons, 0, upgradeButtons.Length);
-            rateButton = null;
+            rateButton = null; matchPage = null;
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
             friendlyButton = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
@@ -453,18 +456,21 @@ namespace MyFootballCareer
             Label("환생하면 시설은 초기화됩니다.", 20, 30).color = PixelTheme.TextDim;
 
             // MATCH: 시즌, 경기, 순위표
+            matchPage = new MatchPageView(font);
             currentParent = Section(pages[1], "시즌", true);
-            seasonText = Label("", 22, 64);
+            matchPage.BuildNext(Parent);
             var play = PixelButton("다음 경기", () => onPlayMatch(), Parent, 80f);
             playLabel = play.GetComponentInChildren<Text>();
-            resultText = Label("", 22, 130);
+            matchPage.BuildResult(Parent);
             currentParent = Section(pages[1], "친선 경기", true);
             friendlyText = Label("", 22, 64);
             friendlyButton = PixelButton("친선 경기 하기", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
             currentParent = Section(pages[1], "순위표", true);
-            standingsText = Label("", 22, 200);
+            matchPage.BuildTable(Parent);
+            PixelButton("팀 선수단 보기", () => { if (OnOpenSquads != null) OnOpenSquads(); }, Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                .GetComponentInChildren<Text>().fontSize = 22;
             currentParent = Section(pages[1], "개인 순위", true);
-            leadersText = Label("", 22, 60);
+            matchPage.BuildLeaders(Parent);
 
             // CAREER: 이적 제안, 이력, 환생
             currentParent = Section(pages[3], "돈", true);
@@ -655,14 +661,23 @@ namespace MyFootballCareer
             t.GetComponent<LayoutElement>().preferredHeight = lines * 30f + 8f;
         }
 
-        public void SetSeason(string info, string lastResult, bool seasonComplete, string standings, string history)
+        public void SetSeason(bool seasonComplete, string history)
         {
-            if (seasonText == null) return;
-            SetLines(seasonText, info, 2);
-            SetLines(resultText, lastResult, 5);
-            SetLines(standingsText, standings, 6);
-            SetLines(historyText, history, 2);
+            if (playLabel == null) return;
+            if (historyText != null) SetLines(historyText, history, 2);
             playLabel.text = seasonComplete ? "다음 시즌 시작" : "다음 경기";
+        }
+
+        // 경기 탭: 다음 경기 카드, 지난 경기 카드, 순위표
+        public void SetMatchPage(NextMatchView next, ResultView last, List<TableRowView> table)
+        {
+            if (matchPage == null) return;
+            matchPage.SetNext(next); matchPage.SetResult(last); matchPage.SetTable(table);
+        }
+
+        public void SetLeaderBoard(string header, List<LeaderBlockView> blocks, string footer)
+        {
+            if (matchPage != null) matchPage.SetLeaders(header, blocks, footer);
         }
 
         // 시즌이 끝나 이적 제안이 있을 때만 제안 목록을 보여줍니다.
@@ -694,6 +709,8 @@ namespace MyFootballCareer
                             agreed ? PixelTheme.AccentFill : decided ? PixelTheme.QuietFill : PixelTheme.ButtonFill,
                             agreed ? PixelTheme.Accent : decided ? PixelTheme.QuietEdge : PixelTheme.ButtonEdge);
                 if (decided) button.interactable = false;
+                PixelButton("선수단 보기", () => { if (OnShowSquad != null) OnShowSquad(id); }, body, 48f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                    .GetComponentInChildren<Text>().fontSize = 20;
             }
             var stay = PixelButton((decided && string.IsNullOrEmpty(pendingTeamId) ? "[확정] " : "") + currentTeamName + " 잔류", () => onStay(), body, 68f,
                 decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.AccentFill : PixelTheme.QuietFill,
@@ -868,7 +885,7 @@ namespace MyFootballCareer
             if (stage != null) stage.SetLook(lookHair, lookSkin, lookKit);
         }
 
-        Transform BuildDialog(string title, string body, float bodyHeight)
+        Transform BuildDialog(string title, string body, float bodyHeight, int bodyFont = 24)
         {
             if (overlay != null) Destroy(overlay);
             var root = NewRect("Dialog", safeRoot); Stretch(root); overlay = root.gameObject;
@@ -879,16 +896,49 @@ namespace MyFootballCareer
             ConfigureStack(holder.gameObject, 0, 0, 0, 0, 0);
             holder.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var inner = Section(holder, title);
-            var b = TextNode(body, inner, 24); Height(b.gameObject, bodyHeight);
+            var b = TextNode(body, inner, bodyFont); Height(b.gameObject, bodyHeight);
             return inner;
         }
 
         void CloseDialog() { if (overlay != null) Destroy(overlay); overlay = null; }
 
-        public void ShowPopup(string title, string body, float bodyHeight = 190f, Action onClose = null)
+        public void ShowPopup(string title, string body, float bodyHeight = 190f, Action onClose = null, int bodyFont = 24)
         {
-            var inner = BuildDialog(title, body, bodyHeight);
+            var inner = BuildDialog(title, body, bodyHeight, bodyFont);
             PixelButton("확인", () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 76f);
+        }
+
+        // 경기 결과 창: 결과 배지·큰 점수, 골 타임라인, 내 기록 타일, 보상 줄
+        public void ShowMatchResult(string title, MatchResultData data, Action onClose)
+        {
+            var inner = BuildDialog(title, "", 0f);
+            var body = NewRect("ResultBody", inner);
+            ConfigureStack(body.gameObject, 0, 0, 0, 0, 4);
+            MatchResultDialog.Build(body, font, data);
+            PixelButton("확인", () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 72f);
+        }
+
+        // 선수단 창: 팀 요약 카드, 주전(4-4-2)과 교체 선수 표
+        public void ShowSquad(string title, SquadView view)
+        {
+            var inner = BuildDialog(title, "", 0f);
+            var body = NewRect("SquadBody", inner);
+            ConfigureStack(body.gameObject, 0, 0, 0, 0, 3);
+            SquadDialog.Build(body, font, view);
+            PixelButton("닫기", () => CloseDialog(), inner, 64f);
+        }
+
+        // 팀 고르기 창: 팀 이름 버튼들 (누르면 그 팀 선수단)
+        public void ShowTeamPicker(List<KeyValuePair<string, string>> teams, string title)
+        {
+            var inner = BuildDialog(title, "선수단을 볼 팀을 고르세요.", 34f, 22);
+            foreach (var t in teams)
+            {
+                string id = t.Key;
+                PixelButton(t.Value, () => { CloseDialog(); if (OnShowSquad != null) OnShowSquad(id); }, inner, 52f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                    .GetComponentInChildren<Text>().fontSize = 22;
+            }
+            PixelButton("닫기", () => CloseDialog(), inner, 60f);
         }
 
         // 되돌릴 수 없는 선택 앞에서 한 번 더 확인합니다.

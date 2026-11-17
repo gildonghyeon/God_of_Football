@@ -52,7 +52,7 @@ namespace MyFootballCareer
 
     [Serializable] public class SaveData
     {
-        public int version = 19;
+        public int version = 20;
         public PlayerData player;
         public string trainingId = "";      // v11 이전의 훈련 선택 (지금은 쓰지 않음)
         public float trainingCarrySeconds;  // v12의 지급 대기 시간 (지금은 쓰지 않음: 포인트는 1초마다 계속 늘어남)
@@ -90,6 +90,9 @@ namespace MyFootballCareer
         public bool dailyBonusClaimed;                                     // 오늘 미션 보너스를 받았는지
         public int attendanceCount;                                        // 지금까지 출석한 날 수 (7일마다 보상 순환)
         public string attendanceLastDate = "";                             // 마지막 출석 날짜 (yyyyMMdd, 현지)
+        public List<TeamSquad> squads = new List<TeamSquad>();             // 모든 팀의 선수단 (환생해도 이어짐)
+        public int squadSeason;                                            // 선수단이 나이를 먹은 횟수
+        public int nextSquadPlayerId;                                      // 새 선수 번호
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
     }
@@ -116,6 +119,15 @@ namespace MyFootballCareer
         public bool playerPlayed = true;   // false면 벤치에서 경기를 지켜봄
         public int wage;                   // 이 경기로 받은 주급 (벤치여도 계약대로 받음)
         public List<LeagueGame> others = new List<LeagueGame>();   // 같은 라운드에 열린 다른 팀끼리의 경기
+        public List<GoalNote> goalNotes = new List<GoalNote>();     // 이 경기의 골 (시간, 득점자, 도움)
+    }
+
+    // 골 하나: 몇 분에 누가 넣고 누가 도왔는지 (경기 영상과 같은 장면)
+    [Serializable] public class GoalNote
+    {
+        public int minute;
+        public bool ours;
+        public string scorer, assist;
     }
 
     [Serializable] public class LeagueGame

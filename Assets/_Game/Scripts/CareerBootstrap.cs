@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 namespace MyFootballCareer
 {
@@ -54,6 +55,7 @@ namespace MyFootballCareer
             ui.OnPlayFriendly = PlayFriendly;
             ui.OnBuyFacility = BuyFacility;
             ui.OnClaimAttendance = ClaimAttendance; ui.OnClaimMission = ClaimMission; ui.OnClaimBonus = ClaimDailyBonus;
+            ui.OnOpenSquads = OpenSquads; ui.OnShowSquad = ShowSquad;
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -149,12 +151,11 @@ namespace MyFootballCareer
             bool awarded = AwardSystem.EnsureAwards(current, matchSettings, settings);   // 시상을 이적 제안보다 먼저
             if (SeasonSystem.EnsureOffers(current, matchSettings, settings) || awarded) saves.TrySave(current, out _);
             ui.SetTrophies(AwardSystem.DescribeTrophyRoom(current));
-            ui.SetLeaders(AwardSystem.DescribeLeaders(current, matchSettings, settings));
-            ui.SetSeason(SeasonSystem.DescribeNext(current, matchSettings, settings),
-                         SeasonSystem.DescribeLast(current, matchSettings),
-                         SeasonSystem.IsComplete(current),
-                         SeasonSystem.DescribeStandings(current, matchSettings),
-                         SeasonSystem.DescribeHistory(current));
+            var leaders = AwardSystem.LeadersView(current, matchSettings, settings, out string leadersHeader, out string leadersFooter);
+            ui.SetLeaderBoard(leadersHeader, leaders, leadersFooter);
+            ui.SetMatchPage(SeasonSystem.NextView(current, matchSettings, settings), SeasonSystem.LastView(current, matchSettings),
+                            SeasonSystem.TableView(current, matchSettings));
+            ui.SetSeason(SeasonSystem.IsComplete(current), SeasonSystem.DescribeHistory(current));
             var team = matchSettings.FindTeam(current.teamId);
             ui.SetTransfer(current.offers, current.pendingTeamId, team != null ? team.displayName : current.teamId, SeasonSystem.DescribeOffers(current),
                            SeasonSystem.TransferDecided(current));
@@ -254,6 +255,29 @@ namespace MyFootballCareer
                     + "\n" + (cost < 0 ? "최대 레벨" : "업그레이드  " + SeasonSystem.Money(cost)),
                     cost >= 0 && current.money >= cost);
             }
+        }
+
+        // ---------- 팀 선수단 ----------
+        void OpenSquads()
+        {
+            if (blocked || current == null) return;
+            var list = new List<KeyValuePair<string, string>>();
+            foreach (var id in current.season.teamIds)
+            {
+                var t = matchSettings.FindTeam(id);
+                if (t != null) list.Add(new KeyValuePair<string, string>(id, t.displayName + (id == current.teamId ? "  (내 팀)" : "")));
+            }
+            ui.ShowTeamPicker(list, matchSettings.DivisionName(current.season.division) + " 팀");
+        }
+
+        void ShowSquad(string teamId)
+        {
+            if (blocked || current == null) return;
+            var team = matchSettings.FindTeam(teamId);
+            if (team == null) return;
+            var stats = AwardSystem.TeamSeasonStats(current, matchSettings, settings, teamId, out int division);
+            ui.ShowSquad(team.displayName + (teamId == current.teamId ? "  (내 팀)" : ""),
+                         SquadSystem.View(current, matchSettings, settings, teamId, division, stats));
         }
 
         // ---------- 일일 미션·출석 ----------
@@ -436,7 +460,7 @@ namespace MyFootballCareer
                 System.Action afterResult = null;
                 if (SeasonSystem.IsComplete(current))   // 마지막 경기라면 결과 팝업을 닫은 뒤 시즌 결산을 보여줍니다.
                     afterResult = ShowSeasonEndWithTrophies;
-                ui.ShowPopup("경기 결과", SeasonSystem.DescribeResult(record, current, matchSettings), 260f, afterResult);
+                ui.ShowMatchResult("경기 결과", SeasonSystem.ResultData(record, current, matchSettings, null), afterResult);
             });
         }
 
@@ -465,7 +489,7 @@ namespace MyFootballCareer
                 RefreshMoneyUI();
                 RefreshFriendlyUI();
                 ui.RefreshTraining(current.player, training);
-                ui.ShowPopup("친선 경기 결과", SeasonSystem.DescribeResult(record, current, matchSettings) + rewardLine, 290f);
+                ui.ShowMatchResult("친선 경기 결과", SeasonSystem.ResultData(record, current, matchSettings, rewardLine.Trim()), null);
             });
         }
 
