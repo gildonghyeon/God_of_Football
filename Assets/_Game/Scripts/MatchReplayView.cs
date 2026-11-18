@@ -9,8 +9,13 @@ namespace MyFootballCareer
     //   그림: Resources/Art/Match/ (pitch, dot_blue, dot_red, dot_you, ball, goal_0 ~ goal_7)
     public class MatchReplayView
     {
+        // 아래 두 값은 2배속 기준입니다. 1배속은 절반 속도 (90분이 30초).
         const float MinutesPerSecond = 6f;    // 90분 / 15초
         const float SimSpeed = 8f;            // 실제 1초 동안 진행하는 경기 속 시간(초)
+        const string SpeedPref = "ReplaySpeed";
+        int speed = 2;                        // 1배속 또는 2배속 (기본 2배속, 마지막 선택을 기억)
+        readonly Image[] speedEdges = new Image[2], speedFills = new Image[2];
+        readonly Text[] speedTexts = new Text[2];
         // stadium.png(912x1490) 안에서 경기장 흰 선의 위치입니다. 그림을 바꾸면 이 숫자만 맞춰 주세요.
         const float ImgW = 912f, ImgH = 1490f;
         const float FieldLeft = 88f, FieldRight = 823.5f;        // 왼쪽·오른쪽 터치라인
@@ -31,6 +36,8 @@ namespace MyFootballCareer
         RectTransform pitchRect, closeupPanel, youLabel, clockFill;
         readonly RectTransform[] dotRects = new RectTransform[22];
         RectTransform ballRect;
+        Text callLabel;   // 공 옆에 잠깐 뜨는 판정 (스로인, 코너킥, 프리킥…)
+        int lastCallId; float callTimer;   // 판정 글자는 실제 시간으로 0.9초 보여 줌
         Image closeupImage;
         Text scoreText, clockText, closeupText, benchText;
         // 사건 카드 (골, 실점, 도움, 태클, 경기 종료): 경기장 위쪽에 잠깐 내려왔다 사라짐
@@ -91,23 +98,26 @@ namespace MyFootballCareer
         }
 
         // ---------- 시작 ----------
-        public bool Show(RectTransform parent, MatchRecord m, PlayerData player, string ownTeamName, float attributeCap, Action finished)
+        public bool Show(RectTransform parent, MatchRecord m, PlayerData player, string ownTeamName, float attributeCap, Action finished, TeamTactic ownTactic, TeamTactic oppTactic)
         {
             if (Active) return true;
             if (!Available) return false;
             record = m; onFinished = finished; ownName = ownTeamName; oppName = m.opponentName;
-            youSlot = m.playerPlayed ? MatchReplayPlan.YouSlot(player.position) : -1;
+            ownTactic = ownTactic ?? new TeamTactic(); oppTactic = oppTactic ?? new TeamTactic();
+            int mySlot = TacticSystem.YouSlot(ownTactic.formation, player.position);
+            youSlot = m.playerPlayed ? mySlot : -1;
             var rng = new System.Random(m.seed ^ 0x2f6e2b1);
             // 내 선수의 능력치가 영상 속 움직임에 반영됩니다. (속도, 후반 피로, 패스 정확도, 슛 속도와 유효 슈팅, 공 지키기)
             var stats = ReplayStats.From(player, m, attributeCap);
-            var plan = MatchReplayPlan.Build(m, m.playerPlayed, MatchReplayPlan.YouSlot(player.position), rng, stats.shootN, m.defensiveActions);
-            engine = new MatchReplayEngine(plan, youSlot, rng);
+            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation);
+            engine = new MatchReplayEngine(plan, youSlot, rng, ownTactic, oppTactic);
             engine.stats = stats;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
-            engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken;
+            engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken; engine.SetPieceCalled = OnSetPiece;
             clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; closeupT = 0f; finishing = false; ourNote = 0; theirNote = 0;
             yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
-            feedItems.Clear(); scorePulse = 0f;
+            feedItems.Clear(); scorePulse = 0f; lastCallId = 0; callTimer = 0f;
+            try { speed = Mathf.Clamp(PlayerPrefs.GetInt(SpeedPref, 2), 1, 2); } catch { speed = 2; }
             BuildUi(parent);
             Feed("0'", m.playerPlayed ? "킥오프" : "킥오프 (벤치 대기)", NeutralColor);
             SoundFx.Play(Sfx.Whistle);
@@ -182,11 +192,26 @@ namespace MyFootballCareer
             clockText = TextNode("0'", hudInner, 26, TextAnchor.MiddleLeft, PixelTheme.Accent);
             Anchored(clockText.rectTransform, .03f, .04f, .2f, .42f);
             var barBack = NewRect("ClockBack", hudInner);
-            Anchored(barBack, .22f, .12f, .97f, .32f);
+            Anchored(barBack, .22f, .12f, .69f, .32f);
             barBack.gameObject.AddComponent<Image>().color = PixelTheme.BarBack;
             clockFill = NewRect("ClockFill", barBack);
             Anchored(clockFill, 0, 0, 0, 1);
             clockFill.gameObject.AddComponent<Image>().color = PixelTheme.Bar;
+            // 배속 버튼: 시계 막대 오른쪽
+            for (int i = 0; i < 2; i++)
+            {
+                int value = i + 1;
+                var b = Box(hudInner, PixelTheme.QuietEdge, PixelTheme.QuietFill);
+                Anchored(b, i == 0 ? .71f : .845f, .03f, i == 0 ? .835f : .97f, .42f);
+                speedEdges[i] = b.GetComponent<Image>();
+                speedFills[i] = b.GetChild(0).GetComponent<Image>();
+                speedTexts[i] = Fit(TextNode(value + "배속", b.GetChild(0), 18, TextAnchor.MiddleCenter, PixelTheme.Text), 12);
+                Anchored(speedTexts[i].rectTransform, 0, 0, 1, 1);
+                var button = b.gameObject.AddComponent<Button>();
+                button.targetGraphic = speedFills[i];
+                button.onClick.AddListener(() => SetSpeed(value));
+            }
+            RefreshSpeed();
 
             // 가운데: 코트. 점수판 아래에 두고, 아래쪽 골라인이 기록 띠에 가리지 않도록 아래도 조금 띄웁니다.
             // 점수판은 코트 그림보다 앞에 그립니다.
@@ -218,6 +243,10 @@ namespace MyFootballCareer
             var youText = TextNode("나", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
             Anchored(youText.rectTransform, 0, 0, 1, 1);
             youLabel.gameObject.SetActive(youSlot >= 0);
+            callLabel = TextNode("", pitchRect, 22, TextAnchor.MiddleCenter, Color.white);
+            callLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            callLabel.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, .9f);
+            callLabel.gameObject.SetActive(false);
 
             // 사건 카드 (골!, 실점, 도움!, 태클!, 경기 종료): 테두리 있는 띠에 큰 제목과 설명
             eventCard = NewRect("EventCard", area);
@@ -346,19 +375,24 @@ namespace MyFootballCareer
             }
 
             // 시계: 아직 끝나지 않은 장면이 있으면 90분에서 기다립니다.
-            if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond);
+            // 코너킥·페널티킥·골문 앞 프리킥은 절반 속도 (시계도 같이 느려져 장면 순서는 그대로)
+            float pace = engine.SetPieceFocus ? 0.5f : 1f;
+            pace *= speed / 2f;   // 1배속은 절반
+            if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond * pace);
             if (clock >= 90f && engine.Busy)   // 혹시 장면이 끝나지 않아도 오래 기다리지 않음
             {
                 waitT += dt;
                 if (waitT > 10f) { Skip(); return; }
             }
-            float sim = dt * SimSpeed;
+            float sim = dt * SimSpeed * pace;
             while (sim > 0.0001f)
             {
                 float step = Mathf.Min(sim, 0.05f);
                 engine.Step(step, clock);
                 sim -= step;
             }
+            if (engine.CallId != lastCallId) { lastCallId = engine.CallId; callTimer = 0.9f; }
+            callTimer = Mathf.Max(0f, callTimer - dt);
             Render();
 
             if (clock >= 90f && !engine.Busy)
@@ -384,6 +418,16 @@ namespace MyFootballCareer
                 var d = engine.dots[youSlot];
                 PlacePx(youLabel, MeterX(d.x), MeterY(d.y) - 29f, 52f, 20f);
             }
+            if (callTimer > 0f && !string.IsNullOrEmpty(engine.CallText))
+            {
+                callLabel.gameObject.SetActive(true);
+                callLabel.text = engine.CallText;
+                float cx = Mathf.Clamp(MeterX(engine.ballX), FieldLeft + 110f, FieldRight - 110f);
+                float cy = Mathf.Clamp(MeterY(engine.ballY) - 50f, FieldTop + 24f, FieldBottom - 24f);
+                PlacePx(callLabel.rectTransform, cx, cy, 220f, 36f);
+                var col = callLabel.color; col.a = Mathf.Clamp01(callTimer / 0.25f); callLabel.color = col;
+            }
+            else callLabel.gameObject.SetActive(false);
             UpdateStatsLine(Mathf.Clamp01(clock / 90f));
             clockText.text = Mathf.FloorToInt(Mathf.Min(clock, 90f)) + "'";
             clockFill.anchorMax = new Vector2(Mathf.Clamp01(clock / 90f), 1f);
@@ -452,14 +496,15 @@ namespace MyFootballCareer
             if (ev.type == ReplayEventType.GoalOurs) goalsFor++; else goalsAgainst++;
             SoundFx.Play(ev.type == ReplayEventType.GoalOurs ? Sfx.Goal : Sfx.Conceded);
             scoreText.text = goalsFor + " - " + goalsAgainst;
+            string how = ev.setPiece != SetPiece.None ? " [" + MatchReplayPlan.SetPieceName(ev.setPiece) + "]" : "";
             if (ev.type == ReplayEventType.GoalOurs)
             {
                 scorePulse = 0.8f; scoreFlash = new Color(.55f, .75f, 1f);
-                string who = note != null ? note.scorer + (string.IsNullOrEmpty(note.assist) ? "" : "  (도움 " + note.assist + ")") : ownName;
+                string who = note != null ? note.scorer + how + (string.IsNullOrEmpty(note.assist) ? "" : "  (도움 " + note.assist + ")") : ownName + how;
                 if (ev.youScore)
                 {
                     yourGoals++;
-                    Feed(Minute(), "골! 내가 넣었다!" + (note != null && !string.IsNullOrEmpty(note.assist) ? "  (도움 " + note.assist + ")" : ""), OurGoalColor);
+                    Feed(Minute(), "골! 내가 넣었다!" + how + (note != null && !string.IsNullOrEmpty(note.assist) ? "  (도움 " + note.assist + ")" : ""), OurGoalColor);
                     StartCloseup();
                 }
                 else
@@ -471,10 +516,19 @@ namespace MyFootballCareer
             else
             {
                 scorePulse = 0.8f; scoreFlash = new Color(1f, .5f, .5f);
-                string who = note != null ? note.scorer : oppName;
+                string who = (note != null ? note.scorer : oppName) + how;
                 Feed(Minute(), "실점  " + oppName + " " + who, TheirGoalColor);
                 ShowEvent("실점", Minute() + "  " + oppName + "  " + who, TheirGoalColor, 1.2f);
             }
+        }
+
+        // 득점 장면의 페널티킥 선언 (코너킥·프리킥은 경기장 위 판정 글자만)
+        void OnSetPiece(ReplayEvent ev)
+        {
+            if (ev.setPiece != SetPiece.Penalty) return;
+            bool ours = ev.type == ReplayEventType.GoalOurs;
+            SoundFx.Play(Sfx.Whistle, 0.7f);
+            ShowEvent("페널티킥!", Minute() + "  " + (ours ? ownName : oppName), ours ? OurGoalColor : TheirGoalColor, 1.0f);
         }
 
         void OnAssist(ReplayEvent ev)
@@ -551,6 +605,29 @@ namespace MyFootballCareer
                 feedMinutes[i].text = f.minute;
                 feedLines[i].text = f.text;
                 feedLines[i].color = new Color(PixelTheme.Text.r, PixelTheme.Text.g, PixelTheme.Text.b, fade);
+            }
+        }
+
+        // ---------- 배속 ----------
+        void SetSpeed(int value)
+        {
+            if (speed == value) return;
+            speed = value;
+            try { PlayerPrefs.SetInt(SpeedPref, value); PlayerPrefs.Save(); } catch { }   // 이 기기에만 기억
+            SoundFx.Play(Sfx.Click);
+            RefreshSpeed();
+        }
+
+        // 고른 배속은 금색으로 채움
+        void RefreshSpeed()
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                if (speedFills[i] == null) continue;
+                bool on = speed == i + 1;
+                speedEdges[i].color = on ? PixelTheme.Accent : PixelTheme.QuietEdge;
+                speedFills[i].color = on ? new Color(PixelTheme.Accent.r * .45f, PixelTheme.Accent.g * .45f, PixelTheme.Accent.b * .45f, 1f) : PixelTheme.QuietFill;
+                speedTexts[i].color = on ? PixelTheme.Accent : PixelTheme.TextDim;
             }
         }
 

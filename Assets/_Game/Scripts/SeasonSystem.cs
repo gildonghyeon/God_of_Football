@@ -654,7 +654,10 @@ namespace MyFootballCareer
             var next = season.matches[season.nextMatchIndex];
             v.header = "시즌 " + season.seasonNumber + " · " + where + " · " + next.round + " / " + season.matches.Count + " 라운드";
             v.own = TeamName(save, ms); v.opp = next.opponentName; v.home = next.home;
-            v.note = season.division > 0 ? "내 평점 " + PlayerRating(save, ms, career).ToString("0") + "   ·   권장 " + ms.RecommendedRating(season.division).ToString("0") : "";
+            var ownT = TacticSystem.Of(ms.FindTeam(save.teamId)); var oppT = TacticSystem.Of(ms.FindTeam(next.opponentId));
+            v.ownTactic = TacticSystem.Describe(ownT); v.oppTactic = TacticSystem.Describe(oppT);
+            string role = "내 역할 " + TacticSystem.KindName(TacticSystem.KindAt(ownT.formation, SquadSystem.MySlot(save, ms)));
+            v.note = role + (season.division > 0 ? "   ·   내 평점 " + PlayerRating(save, ms, career).ToString("0") + " / 권장 " + ms.RecommendedRating(season.division).ToString("0") : "");
             return v;
         }
 
@@ -671,7 +674,7 @@ namespace MyFootballCareer
             var own = new List<string>(); var opp = new List<string>();
             if (m.goalNotes != null)
                 foreach (var g in m.goalNotes)
-                    (g.ours ? own : opp).Add(g.minute + "' " + g.scorer + (string.IsNullOrEmpty(g.assist) ? "" : " (" + g.assist + ")"));
+                    (g.ours ? own : opp).Add(g.minute + "' " + g.scorer + (string.IsNullOrEmpty(g.how) ? "" : " [" + g.how + "]") + (string.IsNullOrEmpty(g.assist) ? "" : " (" + g.assist + ")"));
             v.ownGoals = string.Join("\n", own); v.oppGoals = string.Join("\n", opp);
             int passPercent = m.passesAttempted > 0 ? Mathf.RoundToInt(100f * m.passesCompleted / m.passesAttempted) : 0;
             v.myLine = !m.playerPlayed ? "벤치 대기 (출전하지 못함)" + (m.wage > 0 ? "   주급 +" + Money(m.wage) : "")

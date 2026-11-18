@@ -54,7 +54,7 @@ namespace MyFootballCareer
                     row.gameObject.AddComponent<Image>().color = RowA;
                     var badge = Img(row, g.ours ? OurColor : TheirColor, .02f, .1f, .14f, .9f);
                     Label(badge.rectTransform, font, g.minute + "'", 17, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
-                    Fit(Label(row, font, g.scorer + (string.IsNullOrEmpty(g.assist) ? "" : "  (도움 " + g.assist + ")"), 18,
+                    Fit(Label(row, font, g.scorer + (string.IsNullOrEmpty(g.how) ? "" : " [" + g.how + "]") + (string.IsNullOrEmpty(g.assist) ? "" : "  (도움 " + g.assist + ")"), 18,
                         g.ours ? PixelTheme.Text : new Color(1f, .78f, .78f), .17f, 0f, .7f, 1f, TextAnchor.MiddleLeft), 13);
                     Fit(Label(row, font, g.ours ? v.own : v.opp, 15, PixelTheme.TextDim, .7f, 0f, .98f, 1f, TextAnchor.MiddleRight), 11);
                 }

@@ -127,6 +127,7 @@ namespace MyFootballCareer
     {
         public int minute;
         public bool ours;
+        public string how = "";      // 세트피스 골이면 PK, 프리킥, 코너킥
         public string scorer, assist;
     }
 

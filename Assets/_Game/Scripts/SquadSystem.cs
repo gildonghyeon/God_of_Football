@@ -23,7 +23,8 @@ namespace MyFootballCareer
     public class SquadRowView
     {
         public SquadRole role;
-        public string name, tag;     // tag: "나", "내 자리 경쟁" 등
+        public SlotKind kind;        // 포메이션 속 역할 (주전만 의미 있음)
+        public string name, tag;     // tag: "나", "경쟁" 등
         public int age;              // 0이면 표시하지 않음
         public float rating;
         public SeasonLine line;      // 이번 시즌 기록 (없으면 null)
@@ -34,6 +35,8 @@ namespace MyFootballCareer
     {
         public string division;      // 예: "3부 리그"
         public float strength, required, avgAge, starterAvg;
+        public TeamTactic tactic;
+        public SlotDef[] layout;     // 포메이션 그림용 (주전 순서와 같음)
         public List<SquadRowView> starters = new List<SquadRowView>(), subs = new List<SquadRowView>();
     }
 
@@ -132,21 +135,29 @@ namespace MyFootballCareer
         }
 
         // ---------- 주전 ----------
-        // 영상 자리 순서(0 GK, 1~4 DF, 5~8 MF, 9~10 FW)로 주전 11명. 포지션마다 능력이 높은 순.
+        // 팀 포메이션의 자리 순서(TacticSystem.Layout)로 주전 11명. 같은 포지션 묶음 안에서는 능력이 높은 순으로 채웁니다.
         public static SquadPlayer[] Starters(SaveData save, MatchSettings ms, string teamId)
         {
             Ensure(save, ms);
             var squad = Find(save, teamId);
-            var xi = new SquadPlayer[11];
+            var layout = TacticSystem.Layout(TacticSystem.Of(ms.FindTeam(teamId)).formation);
+            var xi = new SquadPlayer[layout.Length];
             if (squad == null) return xi;
-            int slot = 0;
             for (int r = 0; r < 4; r++)
             {
                 var list = squad.players.FindAll(p => (int)p.role == r);
                 list.Sort((a, b) => b.rating.CompareTo(a.rating));
-                for (int i = 0; i < StarterCount[r]; i++) xi[slot++] = i < list.Count ? list[i] : null;
+                int next = 0;
+                for (int slot = 0; slot < layout.Length; slot++)
+                    if ((int)layout[slot].role == r) xi[slot] = next < list.Count ? list[next++] : null;
             }
             return xi;
+        }
+
+        // 내 팀에서 내가 서는 자리 (팀 포메이션과 내 포지션으로 정함)
+        public static int MySlot(SaveData save, MatchSettings ms)
+        {
+            return TacticSystem.YouSlot(TacticSystem.Of(ms.FindTeam(save.teamId)).formation, save.player.position);
         }
 
         static string NameAt(SquadPlayer[] xi, int slot, int youSlot, string youName)
@@ -161,10 +172,12 @@ namespace MyFootballCareer
         {
             m.goalNotes = new List<GoalNote>();
             var player = save.player;
-            int youSlot = m.playerPlayed ? MatchReplayPlan.YouSlot(player.position) : -1;
+            var ownTactic = TacticSystem.Of(ms.FindTeam(ownId)); var oppTactic = TacticSystem.Of(ms.FindTeam(oppId));
+            int mySlot = TacticSystem.YouSlot(ownTactic.formation, player.position);
+            int youSlot = m.playerPlayed ? mySlot : -1;
             var rng = new System.Random(m.seed ^ 0x2f6e2b1);   // MatchReplayView와 같은 시드
             var stats = ReplayStats.From(player, m, career.attributeCap);
-            var plan = MatchReplayPlan.Build(m, m.playerPlayed, MatchReplayPlan.YouSlot(player.position), rng, stats.shootN, m.defensiveActions);
+            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation);
             var ours = Starters(save, ms, ownId);
             var theirs = Starters(save, ms, oppId);
             foreach (var e in plan)
@@ -172,11 +185,13 @@ namespace MyFootballCareer
                 if (e.type == ReplayEventType.GoalOurs)
                     m.goalNotes.Add(new GoalNote { minute = (int)e.minute, ours = true,
                         scorer = e.youScore ? player.playerName : NameAt(ours, e.scorerSlot, youSlot, player.playerName),
-                        assist = e.youAssist ? player.playerName : e.assisterSlot >= 0 ? NameAt(ours, e.assisterSlot, youSlot, player.playerName) : "" });
+                        assist = e.youAssist ? player.playerName : e.assisterSlot >= 0 ? NameAt(ours, e.assisterSlot, youSlot, player.playerName) : "",
+                        how = MatchReplayPlan.SetPieceName(e.setPiece) });
                 else if (e.type == ReplayEventType.GoalTheirs)
                     m.goalNotes.Add(new GoalNote { minute = (int)e.minute, ours = false,
                         scorer = NameAt(theirs, e.scorerSlot, -1, null),
-                        assist = e.assisterSlot >= 0 ? NameAt(theirs, e.assisterSlot, -1, null) : "" });
+                        assist = e.assisterSlot >= 0 ? NameAt(theirs, e.assisterSlot, -1, null) : "",
+                        how = MatchReplayPlan.SetPieceName(e.setPiece) });
             }
         }
 
@@ -188,7 +203,7 @@ namespace MyFootballCareer
             {
                 var parts = new List<string>();
                 foreach (var g in m.goalNotes)
-                    if (g.ours == ours) parts.Add(g.minute + "' " + g.scorer + (string.IsNullOrEmpty(g.assist) ? "" : "(도움 " + g.assist + ")"));
+                    if (g.ours == ours) parts.Add(g.minute + "' " + g.scorer + (string.IsNullOrEmpty(g.how) ? "" : " [" + g.how + "]") + (string.IsNullOrEmpty(g.assist) ? "" : "(도움 " + g.assist + ")"));
                 if (parts.Count == 0) continue;
                 if (sb.Length > 0) sb.Append('\n');
                 sb.Append(ours ? ownName : oppName).Append(": ").Append(string.Join(", ", parts));
@@ -236,8 +251,11 @@ namespace MyFootballCareer
             v.division = division > 0 ? ms.DivisionName(division) : "";
             v.strength = team.strength; v.required = team.requiredRating;
             var xi = Starters(save, ms, teamId);
+            var tactic = TacticSystem.Of(team);
+            var layout = TacticSystem.Layout(tactic.formation);
+            v.tactic = tactic; v.layout = layout;
             bool mine = teamId == save.teamId;
-            int youSlot = mine ? MatchReplayPlan.YouSlot(save.player.position) : -1;
+            int youSlot = mine ? MySlot(save, ms) : -1;
             float ageSum = 0f; foreach (var p in squad.players) ageSum += p.age;
             v.avgAge = squad.players.Count > 0 ? ageSum / squad.players.Count : 0f;
             float ratingSum = 0f; int count = 0;
@@ -246,13 +264,14 @@ namespace MyFootballCareer
                 if (slot == youSlot)
                 {
                     float myRating = SeasonSystem.PlayerRating(save, ms, career);
-                    v.starters.Add(new SquadRowView { role = RoleOfSlot(slot), name = save.player.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true });
+                    v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = save.player.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true });
                     ratingSum += myRating; count++;
                     continue;
                 }
                 var p = xi[slot];
                 if (p == null) continue;
-                v.starters.Add(Row(p, lines, null));
+                var row = Row(p, lines, null); row.kind = layout[slot].kind;
+                v.starters.Add(row);
                 ratingSum += p.rating; count++;
             }
             v.starterAvg = count > 0 ? ratingSum / count : 0f;
@@ -264,14 +283,15 @@ namespace MyFootballCareer
             return v;
         }
 
-        static SquadRole RoleOfSlot(int slot) { return slot == 0 ? SquadRole.GK : slot <= 4 ? SquadRole.DF : slot <= 8 ? SquadRole.MF : SquadRole.FW; }
 
         static SquadRowView Row(SquadPlayer p, Dictionary<string, SeasonLine> lines, string tag)
         {
             SeasonLine line = null;
             if (lines != null) lines.TryGetValue(p.name, out line);
-            return new SquadRowView { role = p.role, name = p.name, age = p.age, rating = p.rating, line = line, tag = tag };
+            return new SquadRowView { role = p.role, kind = DefaultKind(p.role), name = p.name, age = p.age, rating = p.rating, line = line, tag = tag };
         }
+
+        static SlotKind DefaultKind(SquadRole r) { return r == SquadRole.GK ? SlotKind.GK : r == SquadRole.DF ? SlotKind.CB : r == SquadRole.MF ? SlotKind.CM : SlotKind.ST; }
 
         // 내 선수의 이번 시즌 리그 기록
         static SeasonLine MyLine(SaveData save)
@@ -298,11 +318,11 @@ namespace MyFootballCareer
             var xi = Starters(save, ms, teamId);
             var starters = new HashSet<SquadPlayer>(xi);
             bool mine = teamId == save.teamId;
-            int youSlot = mine ? MatchReplayPlan.YouSlot(save.player.position) : -1;
+            int youSlot = mine ? MySlot(save, ms) : -1;
             var sb = new StringBuilder();
             sb.Append(division > 0 ? division + "부  " : "").Append("전력 ").Append(team.strength.ToString("0"))
               .Append("  요구 평점 ").Append(team.requiredRating.ToString("0")).Append('\n');
-            sb.Append("\n[주전 4-4-2]");
+            sb.Append("\n[주전]");
             for (int slot = 0; slot < xi.Length; slot++)
             {
                 if (slot == youSlot) { sb.Append('\n').Append(RoleOf(slot)).Append("  ").Append(save.player.playerName).Append(" (나)"); continue; }

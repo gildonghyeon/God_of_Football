@@ -15,9 +15,11 @@ namespace MyFootballCareer
             return Mathf.Clamp(sum / total / cap * 100f, 0f, 100f);
         }
 
+        // kind: 포메이션 속 내 자리 역할 (없으면 팀 포메이션과 포지션으로 정함)
         public static void Play(MatchRecord m, PlayerData p, TeamDefinition own, TeamDefinition opp,
-            MatchSettings ms, float attributeCap)
+            MatchSettings ms, float attributeCap, SlotKind? kind = null)
         {
+            var ownT = TacticSystem.Of(own); var oppT = TacticSystem.Of(opp);
             var rng = new System.Random(m.seed);
             float cap = Mathf.Max(1f, attributeCap);
             var profile = ms.Profile(p.position);
@@ -34,8 +36,10 @@ namespace MyFootballCareer
             ownPower = Mathf.Max(1f, ownPower);
             oppPower = Mathf.Max(1f, oppPower);
             float ratio = ownPower / oppPower;
-            m.goalsFor = Poisson(rng, Mathf.Clamp(ms.baseGoals * ratio, 0.2f, 4.5f));
-            m.goalsAgainst = Poisson(rng, Mathf.Clamp(ms.baseGoals / ratio, 0.2f, 4.5f));
+            // 전술: 스타일 상성(±6%)과 경기가 얼마나 열리는지(압박·측면은 골이 많고, 내려선 수비는 적음)
+            float open = Mathf.Sqrt(TacticSystem.Openness(ownT.style) * TacticSystem.Openness(oppT.style));
+            m.goalsFor = Poisson(rng, Mathf.Clamp(ms.baseGoals * ratio * TacticSystem.Matchup(ownT.style, oppT.style) * open, 0.2f, 4.5f));
+            m.goalsAgainst = Poisson(rng, Mathf.Clamp(ms.baseGoals / ratio * TacticSystem.Matchup(oppT.style, ownT.style) * open, 0.2f, 4.5f));
 
             if (!started)   // 벤치: 팀 결과만 남기고 개인 기록은 없습니다.
             {
@@ -53,28 +57,31 @@ namespace MyFootballCareer
             float defendingN = Mathf.Clamp01(p.defending / cap);
             float staminaN = Mathf.Clamp01(p.stamina / cap);
             float activity = 0.7f + 0.3f * staminaN;   // 체력이 낮으면 활동량이 줄어듭니다.
+            // 포메이션 속 역할과 팀 스타일 (예: 공격형 미드필더는 슈팅·도움 기회가 많고, 수비형은 수비가 많음)
+            var role = kind ?? TacticSystem.KindAt(ownT.formation, TacticSystem.YouSlot(ownT.formation, p.position));
+            TacticSystem.RoleMultipliers(role, ownT.style, out float shotMul, out float passMul, out float assistMul, out float defMul);
 
-            m.playerShots = Poisson(rng, profile.shotsPerMatch * activity * (0.5f + shootingN));
+            m.playerShots = Poisson(rng, profile.shotsPerMatch * activity * (0.5f + shootingN) * shotMul);
             float goalChance = 0.06f + 0.40f * (0.7f * shootingN + 0.3f * dribblingN);
             int goals = 0;
             for (int i = 0; i < m.playerShots; i++)
                 if (rng.NextDouble() < goalChance) goals++;
             m.playerGoals = Mathf.Min(goals, m.goalsFor);   // 선수 득점은 팀 득점을 넘을 수 없습니다.
 
-            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * activity * (0.8f + 0.4f * (float)rng.NextDouble()));
+            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * activity * (0.8f + 0.4f * (float)rng.NextDouble()) * passMul);
             float passRate = 0.55f + 0.40f * passingN;
             int completed = 0;
             for (int i = 0; i < m.passesAttempted; i++)
                 if (rng.NextDouble() < passRate) completed++;
             m.passesCompleted = completed;
 
-            float assistChance = Mathf.Clamp01(profile.assistChance * (0.3f + 1.2f * passingN));
+            float assistChance = Mathf.Clamp01(profile.assistChance * (0.3f + 1.2f * passingN) * assistMul);
             int assists = 0;
             for (int i = 0; i < m.goalsFor - m.playerGoals; i++)
                 if (rng.NextDouble() < assistChance) assists++;
             m.playerAssists = assists;
 
-            m.defensiveActions = Poisson(rng, profile.defensiveActionsPerMatch * activity * (0.4f + 1.2f * defendingN));
+            m.defensiveActions = Poisson(rng, profile.defensiveActionsPerMatch * activity * (0.4f + 1.2f * defendingN) * defMul);
 
             // 3) 평점
             float rating = 6.0f;
@@ -101,8 +108,10 @@ namespace MyFootballCareer
             float homePower = Mathf.Max(1f, home.strength) * ms.homeAdvantage;
             float awayPower = Mathf.Max(1f, away.strength);
             float ratio = homePower / awayPower;
-            g.homeGoals = Poisson(rng, Mathf.Clamp(ms.baseGoals * ratio, 0.2f, 4.5f));
-            g.awayGoals = Poisson(rng, Mathf.Clamp(ms.baseGoals / ratio, 0.2f, 4.5f));
+            var ht = TacticSystem.Of(home); var at = TacticSystem.Of(away);
+            float open = Mathf.Sqrt(TacticSystem.Openness(ht.style) * TacticSystem.Openness(at.style));
+            g.homeGoals = Poisson(rng, Mathf.Clamp(ms.baseGoals * ratio * TacticSystem.Matchup(ht.style, at.style) * open, 0.2f, 4.5f));
+            g.awayGoals = Poisson(rng, Mathf.Clamp(ms.baseGoals / ratio * TacticSystem.Matchup(at.style, ht.style) * open, 0.2f, 4.5f));
         }
 
         static int Poisson(System.Random rng, float lambda)

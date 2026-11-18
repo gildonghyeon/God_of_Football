@@ -747,10 +747,11 @@ namespace MyFootballCareer
         public bool IsMatchPlaying { get { return matchView != null && matchView.Active; } }
 
         // 경기 영상을 보여 주고, 끝나면(또는 건너뛰면) onFinished를 부릅니다. 그림이 없으면 바로 onFinished를 부릅니다.
-        public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished)
+        public TeamTactic ReplayOwnTactic, ReplayOppTactic;   // 다음 경기 영상의 두 팀 전술 (골 기록과 같은 장면이 나오게)
+        public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished, TeamTactic ownTactic = null, TeamTactic oppTactic = null)
         {
             CloseDialog();
-            if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished))
+            if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished, ownTactic ?? ReplayOwnTactic, oppTactic ?? ReplayOppTactic))
             {
                 if (onFinished != null) onFinished();
             }

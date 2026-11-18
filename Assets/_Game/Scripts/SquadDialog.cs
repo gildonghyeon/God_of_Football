@@ -31,10 +31,36 @@ namespace MyFootballCareer
             Stat(card, font, v.starterAvg.ToString("0"), "주전 평균", false);
             Stat(card, font, v.avgAge.ToString("0.0"), "평균 나이", false);
 
-            Header(parent, font, "주전  4-4-2", true);
+            // 전술: 포메이션 · 스타일 + 설명, 그리고 포메이션 그림
+            if (v.tactic != null)
+            {
+                var t = Block(parent, 30);
+                Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .45f, 1f, TextAnchor.MiddleLeft);
+                Label(t, font, TacticSystem.StyleNote(v.tactic.style), 16, PixelTheme.TextDim, .45f, 0f, .99f, 1f, TextAnchor.MiddleRight);
+                if (v.layout != null) Pitch(parent, font, v);
+            }
+            Header(parent, font, "주전  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);
             for (int i = 0; i < v.starters.Count; i++) Row(parent, font, v.starters[i], i, true);
             Header(parent, font, "교체", false);
             for (int i = 0; i < v.subs.Count; i++) Row(parent, font, v.subs[i], i, false);
+        }
+
+        // 포메이션 그림: 잔디 위에 11자리 점과 이름 (아래가 우리 골대, 위로 공격)
+        static void Pitch(Transform parent, Font font, SquadView v)
+        {
+            var box = Block(parent, 190);
+            box.gameObject.AddComponent<Image>().color = new Color(.16f, .38f, .22f, 1f);
+            Img(box, new Color(1f, 1f, 1f, .25f), 0f, .5f, 1f, .506f);                       // 하프라인
+            Img(box, new Color(1f, 1f, 1f, .18f), .3f, 0f, .7f, .14f);                       // 우리 페널티 박스
+            for (int i = 0; i < v.layout.Length && i < v.starters.Count; i++)
+            {
+                var s = v.layout[i]; var r = v.starters[i];
+                float x = s.x / 68f, y = Mathf.Lerp(.07f, .93f, Mathf.Clamp01((s.depth - .03f) / .68f));
+                var dot = Img(box, r.me ? PixelTheme.Accent : RoleColor(s.role), x - .022f, y - .02f, x + .022f, y + .065f);
+                Label(dot.rectTransform, font, s.kind.ToString(), 11, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
+                string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
+                Fit(Label(box, font, r.me ? "나" : surname, 13, r.me ? PixelTheme.Accent : Color.white, x - .1f, y - .085f, x + .1f, y - .02f, TextAnchor.MiddleCenter), 9);
+            }
         }
 
         static void Stat(Transform parent, Font font, string value, string label, bool small)
@@ -56,11 +82,11 @@ namespace MyFootballCareer
 
         static void Row(Transform parent, Font font, SquadRowView r, int index, bool starter)
         {
-            var row = Block(parent, 38);
+            var row = Block(parent, 32);
             row.gameObject.AddComponent<Image>().color = r.me ? MeRow : (index % 2 == 0 ? RowA : RowB);
             // 포지션 배지
             var badge = Img(row, RoleColor(r.role), .01f, .14f, .09f, .86f);
-            Label(badge.rectTransform, font, r.role.ToString(), 15, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+            Label(badge.rectTransform, font, starter ? r.kind.ToString() : r.role.ToString(), 15, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);   // 주전은 자리 역할 (ST, AM ...)
             // 이름 (+ 표시)
             string name = r.name + (string.IsNullOrEmpty(r.tag) ? "" : r.tag == "나" ? "  ★" : "  · " + r.tag);
             Fit(Label(row, font, name, 19, r.me ? Color.white : (starter ? PixelTheme.Text : PixelTheme.TextDim), .11f, 0f, .52f, 1f, TextAnchor.MiddleLeft), 13);

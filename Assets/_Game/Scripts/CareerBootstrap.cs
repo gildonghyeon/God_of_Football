@@ -454,6 +454,7 @@ namespace MyFootballCareer
             var ownTeam = matchSettings.FindTeam(current.teamId);
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
             // 경기 영상을 보여 준 뒤(건너뛰기 포함) 순위와 요약을 갱신하고 결과를 알려 줍니다.
+            ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshSeasonUI();
@@ -484,6 +485,7 @@ namespace MyFootballCareer
                 : "\n친선 경기 " + current.friendlyCount + "/" + every + "  (" + every + "경기마다 보상)";
             var ownTeam = matchSettings.FindTeam(current.teamId);
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
+            ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshMoneyUI();

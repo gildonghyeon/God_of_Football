@@ -11,6 +11,7 @@ namespace MyFootballCareer
         public string own, opp;
         public bool home;
         public string note;               // 예: "내 평점 52 / 권장 39"
+        public string ownTactic, oppTactic; // 예: "4-3-3 · 역습"
         public string doneTitle, doneBody;
     }
 
@@ -87,6 +88,9 @@ namespace MyFootballCareer
             Fit(Text(nextRoot, v.own, 26, PixelTheme.Text, .02f, .4f, .43f, .78f, TextAnchor.MiddleRight), 14);
             Text(nextRoot, "VS", 30, PixelTheme.Accent, .43f, .4f, .57f, .78f, TextAnchor.MiddleCenter);
             Fit(Text(nextRoot, v.opp, 26, PixelTheme.Text, .57f, .4f, .98f, .78f, TextAnchor.MiddleLeft), 14);
+            // 두 팀 전술 (팀 이름 아래)
+            Text(nextRoot, v.ownTactic, 16, new Color(.65f, .80f, 1f), .02f, .25f, .34f, .41f, TextAnchor.MiddleRight);
+            Text(nextRoot, v.oppTactic, 16, new Color(1f, .70f, .70f), .66f, .25f, .98f, .41f, TextAnchor.MiddleLeft);
             Pill(nextRoot, v.home ? "홈 경기" : "원정 경기", v.home ? PixelTheme.ButtonFill : PixelTheme.QuietFill, .35f, .2f, .65f, .38f);
             Text(nextRoot, v.note, 18, PixelTheme.TextDim, 0f, .02f, 1f, .2f, TextAnchor.MiddleCenter);
         }

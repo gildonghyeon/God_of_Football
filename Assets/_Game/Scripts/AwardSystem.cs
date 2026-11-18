@@ -78,7 +78,7 @@ namespace MyFootballCareer
                 {
                     var sp = xi[slot];
                     if (sp == null || (team.id == skipTeam && slot == skipSlot)) continue;
-                    var pos = SquadSystem.ToPosition(sp.role);
+                    var pos = SquadSystem.ToPosition(sp.role); SlotKind kind = TacticSystem.KindAt(TacticSystem.Of(team).formation, slot);   // 포메이션 속 역할
                     float rating = Mathf.Clamp(sp.rating, 1f, career.attributeCap);
                     int seed = unchecked(save.season.seed ^ (division * 104729) ^ (sp.id * 7919) ^ 0x2545F491);
                     string name = sp.name;
@@ -91,7 +91,7 @@ namespace MyFootballCareer
                         for (int leg = 0; leg < 2; leg++)
                         {
                             var m = new MatchRecord { home = leg == 0, seed = mr.Next() };
-                            MatchSimulation.Play(m, p, team, opp, ms, career.attributeCap);
+                            MatchSimulation.Play(m, p, team, opp, ms, career.attributeCap, kind);
                             r.played++;
                             r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = m.defensiveActions, rating = m.rating });
                             if (!m.playerPlayed) continue;
@@ -161,7 +161,7 @@ namespace MyFootballCareer
             }
             else { div = division; teams = SeasonSystem.TeamsInDivision(save, ms, div); }
             if (games <= 0 || teams.Count < 2) return result;
-            var rivals = Snapshot(SimulateRivals(save, ms, career, teams, div, skipTeam, MatchReplayPlan.YouSlot(save.player.position)), games, save);
+            var rivals = Snapshot(SimulateRivals(save, ms, career, teams, div, skipTeam, SquadSystem.MySlot(save, ms)), games, save);
             foreach (var r in rivals)
                 if (r.teamId == teamId)
                     result[r.name] = new SeasonLine { goals = r.goals, assists = r.assists, apps = r.apps, avg = r.Avg };
@@ -181,7 +181,7 @@ namespace MyFootballCareer
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
             var pos = save.player.position;
             var now = new List<Rival>();
-            now.AddRange(Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, MatchReplayPlan.YouSlot(pos)), games, save));
+            now.AddRange(Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, SquadSystem.MySlot(save, ms)), games, save));
 
             var me = new Rival { name = save.player.playerName, teamId = save.teamId, position = pos };
             for (int i = 0; i < games; i++)
@@ -220,7 +220,7 @@ namespace MyFootballCareer
             var teams = new List<TeamDefinition>();
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
             var pos = save.player.position;
-            var now = Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, MatchReplayPlan.YouSlot(pos)), games, save);
+            var now = Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, SquadSystem.MySlot(save, ms)), games, save);
             var me = new Rival { name = save.player.playerName, teamId = save.teamId, position = pos };
             for (int i = 0; i < games; i++)
             {
@@ -336,7 +336,7 @@ namespace MyFootballCareer
             // 같은 리그 경쟁자
             var leagueTeams = new List<TeamDefinition>();
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) leagueTeams.Add(t); }
-            var rivals = Snapshot(SimulateRivals(save, ms, career, leagueTeams, div, save.teamId, MatchReplayPlan.YouSlot(pos)), int.MaxValue, save);
+            var rivals = Snapshot(SimulateRivals(save, ms, career, leagueTeams, div, save.teamId, SquadSystem.MySlot(save, ms)), int.MaxValue, save);
 
             int statWins = 0;
             void StatAward(TrophyKind kind, string label, string unit, int myValue, System.Func<Rival, int> value)
