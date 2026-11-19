@@ -104,28 +104,28 @@ namespace MyFootballCareer
 
         // ---------- 공통 ----------
         // 칸보다 긴 글자는 칸에 맞게 작아지게 (팀 이름 등)
-        static Text Fit(Text t, int min)
+        internal static Text Fit(Text t, int min)
         {
             t.resizeTextForBestFit = true; t.resizeTextMinSize = min; t.resizeTextMaxSize = t.fontSize;
             t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
             return t;
         }
 
-        static RectTransform NewRect(string name, Transform parent)
+        internal static RectTransform NewRect(string name, Transform parent)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
             return go.GetComponent<RectTransform>();
         }
 
-        static RectTransform Block(Transform parent, float height)
+        internal static RectTransform Block(Transform parent, float height)
         {
             var r = NewRect("Block", parent);
             var le = r.gameObject.AddComponent<LayoutElement>(); le.minHeight = height; le.preferredHeight = height;
             return r;
         }
 
-        static Image Img(Transform parent, Color c, float x0, float y0, float x1, float y1)
+        internal static Image Img(Transform parent, Color c, float x0, float y0, float x1, float y1)
         {
             var r = NewRect("Image", parent);
             r.anchorMin = new Vector2(x0, y0); r.anchorMax = new Vector2(x1, y1); r.offsetMin = r.offsetMax = Vector2.zero;
@@ -133,7 +133,7 @@ namespace MyFootballCareer
             return img;
         }
 
-        static Text Label(Transform parent, Font font, string value, int size, Color color, float x0, float y0, float x1, float y1, TextAnchor align)
+        internal static Text Label(Transform parent, Font font, string value, int size, Color color, float x0, float y0, float x1, float y1, TextAnchor align)
         {
             var r = NewRect("Text", parent);
             r.anchorMin = new Vector2(x0, y0); r.anchorMax = new Vector2(x1, y1); r.offsetMin = r.offsetMax = Vector2.zero;

@@ -15,6 +15,8 @@ namespace MyFootballCareer
         public bool youScore, youAssist;
         public bool saved;                                // ShotYou: 골키퍼가 막았는지(true) 빗나갔는지(false)
         public SetPiece setPiece;                         // 골이 나온 세트피스 (None이면 경기 중 골)
+        public bool header;                               // 헤딩 슈팅이었는지 (영상이 정함: 코너킥·측면 크로스)
+        public bool longShot;                             // 상자 밖에서 때린 중거리 슛인지 (영상이 정함)
     }
 
     // 저장된 경기 결과로부터 장면 목록을 만듭니다.
@@ -165,6 +167,7 @@ namespace MyFootballCareer
         public float attackPush, defendDrop;          // 공격·수비할 때 대형 높이 조정 (깊이)
         public float attackWidth, defendWidth, slide; // 대형 폭, 수비 때 공 쪽으로 쏠리는 정도
         public float overlap;                         // 풀백·윙백 오버래핑 정도
+        public float support = 1f;                    // 공이 앞으로 갈 때 수비·미드필더가 따라 올라서는 정도 (팀 전체가 같이 공격)
         public float pressFrom;                       // 공이 우리 골에서 이 깊이 안쪽이면 압박 (1이면 어디서든)
         public bool doublePress;                      // 둘이서 공을 압박
         public float passProb, decideMin, decideMax;  // 공을 잡으면 패스할 확률, 다음 결정까지 시간
@@ -177,15 +180,15 @@ namespace MyFootballCareer
         {
             switch (s)
             {
-                case TacticStyle.Counter: return new StyleParams { attackPush = .03f, defendDrop = -.08f, attackWidth = .9f, defendWidth = .66f, slide = .38f, overlap = .6f,
+                case TacticStyle.Counter: return new StyleParams { attackPush = .03f, defendDrop = -.08f, attackWidth = .9f, defendWidth = .66f, slide = .38f, overlap = .6f, support = .75f,
                     pressFrom = .5f, passProb = .8f, decideMin = .5f, decideMax = 1.1f, fwdWeight = .07f, distPenalty = .008f, maxPass = 48f, shotDepth = .76f, runForward = .12f, runMid = .05f, counter = true };
-                case TacticStyle.HighPress: return new StyleParams { attackPush = .06f, defendDrop = .06f, attackWidth = .95f, defendWidth = .72f, slide = .32f, overlap = 1f,
+                case TacticStyle.HighPress: return new StyleParams { attackPush = .06f, defendDrop = .06f, attackWidth = .95f, defendWidth = .72f, slide = .32f, overlap = 1f, support = 1.1f,
                     pressFrom = 1f, doublePress = true, passProb = .82f, decideMin = .5f, decideMax = 1.1f, fwdWeight = .045f, distPenalty = .012f, maxPass = 38f, shotDepth = .78f, runForward = .09f, runMid = .04f };
-                case TacticStyle.LowBlock: return new StyleParams { attackPush = 0f, defendDrop = -.12f, attackWidth = .9f, defendWidth = .58f, slide = .42f, overlap = .5f,
+                case TacticStyle.LowBlock: return new StyleParams { attackPush = 0f, defendDrop = -.12f, attackWidth = .9f, defendWidth = .58f, slide = .42f, overlap = .5f, support = .65f,
                     pressFrom = .42f, passProb = .72f, decideMin = .7f, decideMax = 1.5f, fwdWeight = .06f, distPenalty = .006f, maxPass = 46f, shotDepth = .78f, runForward = .07f, runMid = .02f };
-                case TacticStyle.Wing: return new StyleParams { attackPush = .05f, defendDrop = -.04f, attackWidth = 1.12f, defendWidth = .68f, slide = .36f, overlap = 1.4f,
+                case TacticStyle.Wing: return new StyleParams { attackPush = .05f, defendDrop = -.04f, attackWidth = 1.12f, defendWidth = .68f, slide = .36f, overlap = 1.4f, support = 1f,
                     pressFrom = .7f, passProb = .85f, decideMin = .6f, decideMax = 1.2f, fwdWeight = .035f, distPenalty = .012f, maxPass = 40f, shotDepth = .80f, runForward = .09f, runMid = .04f, wing = true };
-                default: return new StyleParams { attackPush = .06f, defendDrop = -.02f, attackWidth = 1f, defendWidth = .7f, slide = .38f, overlap = 1f,
+                default: return new StyleParams { attackPush = .06f, defendDrop = -.02f, attackWidth = 1f, defendWidth = .7f, slide = .38f, overlap = 1f, support = 1.1f,
                     pressFrom = .75f, passProb = .92f, decideMin = .5f, decideMax = 1f, fwdWeight = .02f, distPenalty = .02f, maxPass = 30f, shotDepth = .82f, runForward = .06f, runMid = .05f };
             }
         }
@@ -244,6 +247,7 @@ namespace MyFootballCareer
         bool badPass;   // 내 선수의 패스가 빗나가는 중
         int carrier = -1, lastPoss, scriptTeam;
         float buildX, buildY, scorerOffset, shotSide, shotGx;
+        bool lastPassCross;   // 마지막 패스가 측면에서 상자 안으로 띄운 크로스였는지 (득점 장면이면 헤딩으로 마무리)
 
         // 공이 날아가는 중일 때
         bool flying;
@@ -351,6 +355,8 @@ namespace MyFootballCareer
                 var st = sp[d.team];
                 depth = d.def.depth + (bd - 0.5f) * d.def.shift + (attacking ? st.attackPush : st.defendDrop) + d.oy;
                 if (attacking && counterT[d.team] > 0f && d.def.role != SquadRole.DF) depth += 0.08f;   // 역습: 앞으로 달려 나감
+                float adv = attacking ? Mathf.Clamp01((bd - 0.35f) / 0.35f) : 0f;   // 공이 중앙선을 넘어 들어간 정도
+                if (attacking) depth += SupportPush(d.def.kind) * st.support * adv;   // 팀 전체가 같이 올라섬
                 float rx = d.team == 0 ? d.def.x : W - d.def.x;
                 float width = attacking ? st.attackWidth : st.defendWidth;   // 수비 때는 가운데로 좁힘
                 float slide = attacking ? 0.22f : st.slide;                 // 수비 때는 공 쪽으로 쏠림
@@ -363,17 +369,38 @@ namespace MyFootballCareer
             depth = Mathf.Clamp(depth, 0.03f, d.slot == 0 ? 0.14f : 0.95f);
             float fx = Mathf.Clamp(x, 2f, W - 2f), fy = DepthY(d.team, depth);
             if (!d.started) { d.ax = fx; d.ay = fy; d.started = true; }
-            float follow = 1f - Mathf.Exp(-(d.runT > 0f ? 2.5f : 1.3f) * dt);
+            // 공격 때 뒤쪽 줄(수비·미드필더)은 빨리 따라 올라와 간격을 좁힙니다.
+            bool backLine = d.slot != 0 && d.def.role != SquadRole.FW && d.def.kind != SlotKind.W && d.def.kind != SlotKind.ST;
+            bool pushing = backLine && (carrier >= 0 ? dots[carrier].team : lastPoss) == d.team && fy != d.ay && (d.team == 0 ? fy < d.ay : fy > d.ay);
+            float follow = 1f - Mathf.Exp(-(d.runT > 0f ? 2.5f : pushing ? 2.2f : 1.3f) * dt);
             d.ax += (fx - d.ax) * follow; d.ay += (fy - d.ay) * follow;
             // 제자리에서도 조금씩 자리를 고치는 움직임 (선수마다 다른 느린 흔들림)
             float wx = (Noise(d.noise, time * 0.18f) - 0.5f) * 4f;
             float wy = (Noise(d.noise + 37f, time * 0.15f) - 0.5f) * 4f;
             d.tx = d.ax + (d.slot == 0 ? wx * 0.25f : wx);
             d.ty = d.ay + (d.slot == 0 ? wy * 0.15f : wy);
-            d.maxSpeed = d.slot == 0 ? KeeperSpeed : (d.runT > 0f ? SprintSpeed : JogSpeed);
+            d.maxSpeed = d.slot == 0 ? KeeperSpeed : (d.runT > 0f ? SprintSpeed : pushing ? (JogSpeed + SprintSpeed) / 2f : JogSpeed);
+        }
+
+        // 공이 상대 진영 깊이 들어갔을 때 자리별로 더 올라서는 깊이. 뒤쪽 줄일수록 많이 따라 올라와
+        // 공격수만 따로 노는 대신 미드필더는 상자 앞까지, 풀백은 측면 높이까지, 센터백은 중앙선 근처까지 올라섭니다.
+        static float SupportPush(SlotKind k)
+        {
+            switch (k)
+            {
+                case SlotKind.CB: return 0.16f;
+                case SlotKind.FB: case SlotKind.WB: return 0.30f;
+                case SlotKind.DM: return 0.14f;
+                case SlotKind.CM: return 0.18f;
+                case SlotKind.WM: return 0.14f;
+                case SlotKind.AM: return 0.08f;
+                case SlotKind.W: return 0.03f;
+                default: return 0f;
+            }
         }
 
         // 공을 가진 팀의 미드필더·공격수가 가끔 수비 뒷공간으로 뛰어듭니다.
+        // 공이 상대 진영에 있으면 풀백·윙백도 측면으로 오버래핑해 올라갑니다.
         void UpdateRuns(float dt)
         {
             int poss = carrier >= 0 ? dots[carrier].team : lastPoss;
@@ -381,15 +408,18 @@ namespace MyFootballCareer
             {
                 var d = dots[i];
                 if (d.runT > 0f) { d.runT -= dt; if (d.team != poss) d.runT = 0f; continue; }
-                if (d.team != poss || d.slot == 0 || d.def.role == SquadRole.DF || i == carrier || script != null) continue;
+                bool wideBack = d.def.kind == SlotKind.FB || d.def.kind == SlotKind.WB;
+                if (d.team != poss || d.slot == 0 || (d.def.role == SquadRole.DF && !wideBack) || i == carrier || script != null) continue;
+                if (wideBack && BallDepth(d.team) < 0.5f) continue;   // 풀백은 공이 상대 진영에 있을 때만
                 var st = sp[d.team];
                 bool front = d.def.kind == SlotKind.ST || d.def.kind == SlotKind.W || d.def.kind == SlotKind.AM;
-                float rate = front ? st.runForward : st.runMid;
+                float rate = front ? st.runForward : wideBack ? st.runMid * st.overlap * 4f : st.runMid * 1.4f;
                 if (counterT[d.team] > 0f && front) rate *= 6f;   // 역습: 앞쪽 선수들이 한꺼번에 뛰어듦
                 if (rng.NextDouble() < rate * dt)
                 {
                     d.runT = Rand(2.5f, 4.5f);
-                    d.runDx = d.def.kind == SlotKind.W ? (d.def.x < 34f ? Rand(4f, 10f) : Rand(-10f, -4f)) : Rand(-7f, 7f);   // 윙어는 안쪽으로 파고듦
+                    d.runDx = d.def.kind == SlotKind.W ? (d.def.x < 34f ? Rand(4f, 10f) : Rand(-10f, -4f))   // 윙어는 안쪽으로 파고듦
+                            : wideBack ? 0f : Rand(-7f, 7f);                                                   // 풀백은 측면을 따라 올라감
                 }
             }
         }
@@ -580,6 +610,7 @@ namespace MyFootballCareer
                     { StartOut(tx, passer == 0 ? -1.5f : L + 1.5f, Restart.GoalKick, 1 - passer, dur, zz, to); return; }
                 }
             }
+            lastPassCross = cross && z < 0f && script != null && rng.NextDouble() < 0.55;   // 득점 장면의 크로스는 절반 남짓 헤딩으로
             StartFlight(tx, ty, Mathf.Max(0.45f, dist / (cross ? 14f : 17f)), KindPass, to, z >= 0f ? z : cross ? 3.5f : Mathf.Min(2.5f, dist * 0.05f));
         }
 
@@ -650,8 +681,15 @@ namespace MyFootballCareer
                 if (cDepth > 0.66f)
                 {
                     // 골문 앞: 뒤로 빼는 패스는 가끔만(다시 만들기), 옆 패스는 더 좋은 자리일 때만
-                    if (mDepth < cDepth - 0.08f && (finalPasses > 0 || rng.NextDouble() > 0.15)) continue;
-                    bool better = mDepth > cDepth + 0.03f || Mathf.Abs(m.x - 34f) < Mathf.Abs(c.x - 34f) - 6f;
+                    // 단, 뒤따라 올라온 미드필더·풀백에게 짧게 내주는 패스(컷백·레이오프)는 슈팅 기회가 되므로 허용
+                    bool support = m.def.role == SquadRole.MF || m.def.kind == SlotKind.FB || m.def.kind == SlotKind.WB;
+                    bool layoff = support && finalPasses < 2 && mDepth > 0.62f && mDepth > cDepth - 0.14f && dist < 22f;
+                    if (!layoff && mDepth < cDepth - 0.08f && (finalPasses > 0 || rng.NextDouble() > 0.15)) continue;
+                    bool better = layoff || ((m.def.kind == SlotKind.FB || m.def.kind == SlotKind.WB) && m.runT > 0f) || mDepth > cDepth + 0.03f || Mathf.Abs(m.x - 34f) < Mathf.Abs(c.x - 34f) - 6f;
+                    if (layoff) score += 0.25f;
+                    bool overlapping = (m.def.kind == SlotKind.FB || m.def.kind == SlotKind.WB) && m.runT > 0f && mDepth > 0.62f;
+                    if (overlapping) score += 0.5f;    // 측면으로 오버래핑해 올라온 풀백에게
+                    if (m.def.role == SquadRole.MF && mDepth > 0.68f && Mathf.Abs(m.x - 34f) < 16f) score += 0.3f;   // 상자 앞까지 올라온 미드필더에게
                     if (mDepth >= cDepth - 0.08f && !better && !(st.wing && carrierWide)) continue;
                     if (mDepth > st.shotDepth && Mathf.Abs(m.x - 34f) < 14f) score += 0.4f;     // 슈팅 자리
                 }
@@ -1242,6 +1280,18 @@ namespace MyFootballCareer
             else if (ev.setPiece == SetPiece.FreeKick) { buildX = 34f + Rand(-10f, 10f); buildY = DepthY(scriptTeam, 0.74f); }
             else if (ev.setPiece == SetPiece.Corner) { buildX = c.x < 34f ? 5f : W - 5f; buildY = DepthY(scriptTeam, 0.86f); }
             scorerOffset = Rand(-6f, 6f);
+            // 중거리 슛: 세트피스·측면 크로스가 아니면 가끔 상자 밖(약 28m)에서 때립니다. 미드필더·수비수일수록 자주.
+            ev.longShot = false;
+            if (ev.setPiece == SetPiece.None && !(sp[scriptTeam].wing && wideAssist))
+            {
+                var sdef = lay[scriptTeam][ev.scorerSlot];
+                double p = sdef.role == SquadRole.FW ? 0.15 : sdef.role == SquadRole.MF ? 0.35 : 0.5;
+                if (rng.NextDouble() < p)
+                {
+                    ev.longShot = true;
+                    if (ev.assisterSlot < 0) buildY = DepthY(scriptTeam, 0.71f);
+                }
+            }
         }
 
         void CallSetPiece()
@@ -1292,7 +1342,7 @@ namespace MyFootballCareer
             }
             else if (phase == Phase.Receive)
             {
-                if (ev.setPiece == SetPiece.Corner) { if (phaseT > 0.1f) ShootScript(0.7f); }   // 코너킥: 바로 헤더
+                if (ev.setPiece == SetPiece.Corner || lastPassCross) { if (phaseT > 0.1f) ShootScript(0.7f, true); }   // 코너킥·크로스: 바로 헤딩
                 else if (phaseT > 0.45f) ShootScript();
             }
             else if (phase == Phase.SetPiece)
@@ -1309,12 +1359,13 @@ namespace MyFootballCareer
             }
         }
 
-        void ShootScript(float z = 1.6f)
+        void ShootScript(float z = 1.6f, bool header = false)
         {
             var ev = script;
             carrier = Idx(scriptTeam, ev.scorerSlot);
             var c = dots[carrier];
             if (phase != Phase.SetPiece) { ballX = c.x; ballY = c.y; }   // 페널티킥·프리킥은 공이 놓인 자리에서
+            ev.header = header;
             if (ShotTaken != null && (ev.youScore || ev.type == ReplayEventType.ShotYou)) ShotTaken(ev);
             if (ev.type == ReplayEventType.ShotYou) StartShot(c, ev.saved ? KindSaved : KindWide);
             else StartShot(c, KindGoal, z);
@@ -1342,7 +1393,7 @@ namespace MyFootballCareer
             var scorer = dots[Idx(scriptTeam, ev.scorerSlot)];
             if (cornerKick && phase == Phase.Pass) { }
             else if (phase == Phase.Build || phase == Phase.Pass)
-            { scorer.tx = 34f + scorerOffset; scorer.ty = DepthY(scriptTeam, 0.84f); scorer.maxSpeed = 9f; }
+            { scorer.tx = 34f + scorerOffset; scorer.ty = DepthY(scriptTeam, ev.longShot ? 0.71f : 0.84f); scorer.maxSpeed = 9f; }
             else if (phase == Phase.Receive || phase == Phase.Shot)
             { scorer.tx = scorer.x; scorer.ty = scorer.y; }
             if (phase == Phase.Build && carrier >= 0)

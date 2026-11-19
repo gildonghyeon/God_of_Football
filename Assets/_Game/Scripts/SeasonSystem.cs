@@ -293,6 +293,13 @@ namespace MyFootballCareer
         // 이적하거나 부가 바뀌었으면 안내 문장을, 아니면 null을 돌려줍니다.
         public static string StartNextSeason(SaveData save, MatchSettings ms, CareerSettings career)
         {
+            return StartNextSeason(save, ms, career, out _);
+        }
+
+        // info에는 새 시즌 팝업에 보여 줄 내용(이적, 주급, 승강)이 담깁니다.
+        public static string StartNextSeason(SaveData save, MatchSettings ms, CareerSettings career, out NewSeasonData info)
+        {
+            info = new NewSeasonData();
             EnsureSeasonEnd(save, ms);
             AwardSystem.EnsureAwards(save, ms, career);   // 시상을 건너뛰지 않도록 (이번 시즌 선수단 기준)
             SquadSystem.AdvanceSeason(save, ms);          // 모든 팀 선수가 한 살 먹고, 은퇴와 유망주 합류
@@ -309,22 +316,31 @@ namespace MyFootballCareer
                     string from = TeamName(save, ms);
                     save.transfers.Add(new TransferRecord { afterSeason = save.season.seasonNumber, fromTeamName = from, toTeamName = target.displayName });
                     lines.Add("이적: " + from + " -> " + target.displayName);
+                    info.fromTeam = from; info.toTeam = target.displayName;
                     save.teamId = target.id;
                     foreach (var o in save.offers) if (o.teamId == target.id && o.weeklyWage > 0) newWage = o.weeklyWage;
                 }
             }
             if (newWage <= 0) newWage = WageFor(save, ms, career, save.teamId);   // 남으면 지금 능력치로 재계약
             save.weeklyWage = newWage;
-            if (newWage != oldWage) lines.Add("새 계약: 주급 " + Money(newWage));
+            if (newWage != oldWage) { lines.Add("새 계약: 주급 " + Money(newWage)); info.oldWage = oldWage; info.newWage = newWage; }
             save.pendingTeamId = "";
             save.transferDecided = false;
             save.offers.Clear();
             StartSeason(save, ms, save.season.seasonNumber + 1);
             int after = save.season.division;
+            info.season = save.season.seasonNumber;
+            info.division = after > 0 ? ms.DivisionName(after) : "";
             if (before > 0 && after != before)
+            {
                 lines.Add(ms.DivisionName(after) + (after < before ? "로 승격!" : "로 강등."));
+                info.move = after < before ? 1 : -1;
+            }
             else if (before == 0)
+            {
                 lines.Add("리그가 " + ms.DivisionCount + "개 부로 나뉩니다. " + ms.DivisionName(after) + "에서 뜁니다.");
+                info.note = "리그가 " + ms.DivisionCount + "개 부로 나뉩니다";
+            }
             return lines.Count > 0 ? string.Join("\n", lines) : null;
         }
 
@@ -483,6 +499,20 @@ namespace MyFootballCareer
             save.pendingTeamId = "";
             save.transferDecided = true;
             return true;
+        }
+
+        // 커리어 탭의 '소속 팀' 카드: 이적 제안과 같은 기준(전력, 선발 확률, 주급, 중시 능력)으로 계산합니다.
+        public static TeamInfoView CurrentTeamInfo(SaveData save, MatchSettings ms, CareerSettings career)
+        {
+            var t = ms.FindTeam(save.teamId);
+            if (t == null) return null;
+            float rating = PlayerRating(save, ms, career);
+            return new TeamInfoView
+            {
+                teamId = t.id, name = t.displayName, division = DivisionOf(save, ms, t.id), wage = save.weeklyWage,
+                strength = t.strength, startChance = Mathf.Round(MatchSimulation.StartChance(t, rating) * 100f) / 100f, focus = t.focus,
+                myRating = Mathf.FloorToInt(rating), required = Mathf.RoundToInt(t.requiredRating)
+            };
         }
 
         // 내 선수의 포지션 평점 (0~100)
@@ -791,6 +821,42 @@ namespace MyFootballCareer
             string offers = DescribeOffers(save);
             if (offers != null) sb.Append(awards != null ? "\n\n" : "\n").Append(offers).Append(save.offers.Count > 0 ? " 커리어 탭에서 확인하세요." : "");
             return sb.ToString();
+        }
+
+        // 시즌 종료 팝업(카드형)에 보여 줄 내용
+        public static SeasonEndData SeasonEndView(SaveData save, MatchSettings ms)
+        {
+            EnsureSeasonEnd(save, ms);
+            var t = Summarize(save, ms);
+            var season = save.season;
+            var d = new SeasonEndData
+            {
+                season = t.seasonNumber, division = season.division > 0 ? ms.DivisionName(season.division) : "",
+                position = t.finalPosition, teams = Standings(save, ms).Count, points = t.points, champion = t.champion ?? "",
+                wins = t.wins, draws = t.draws, losses = t.losses, goalsFor = t.goalsFor, goalsAgainst = t.goalsAgainst,
+                goals = t.playerGoals, assists = t.playerAssists, apps = t.appearances, played = t.played, rating = t.averageRating
+            };
+            if (season.division > 0 && season.nextDivision > 0)
+            {
+                if (season.nextDivision < season.division) { d.move = 1; d.moveText = ms.DivisionName(season.nextDivision) + " 승격"; }
+                else if (season.nextDivision > season.division) { d.move = -1; d.moveText = ms.DivisionName(season.nextDivision) + " 강등"; }
+                else { d.move = 0; d.moveText = ms.DivisionName(season.division) + " 잔류"; }
+            }
+            if (save.awardsSeason == season.seasonNumber && save.awardLines != null)
+                foreach (var line in save.awardLines)
+                {
+                    if (line.Contains("트로피 없음")) { d.noTrophy = true; continue; }
+                    var row = PopupCards.ParseAward(line);
+                    if (row != null) d.awards.Add(row);
+                }
+            if (IsComplete(save) && save.offersSeason == season.seasonNumber)
+            {
+                d.offersReady = true;
+                d.score = save.offersScore >= 0 ? Mathf.RoundToInt(save.offersScore) : -1;
+                d.grade = save.offersScore >= 0 ? Grade(save.offersScore) : "";
+                d.offers = save.offers != null ? save.offers.Count : 0;
+            }
+            return d;
         }
 
         public static string DescribeHistory(SaveData save)

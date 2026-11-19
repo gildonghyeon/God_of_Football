@@ -21,6 +21,15 @@ namespace MyFootballCareer
         public bool loop = true;   // false면 한 번만 하고 리프팅(idle)으로 돌아갑니다
         public bool ballFollows;   // 공이 선수 발 앞을 따라다니는지
         public StageKey[] player, gk, attacker, mate, ball;
+        public StageExtra[] extras;   // 그 밖의 인물 (경기 골 장면의 동료·수비수)
+    }
+
+    // 장면에 더 나오는 인물 한 명: 팀(ally 우리 팀 동료, red 상대, gold 골키퍼)과 동선
+    public class StageExtra
+    {
+        public string team;
+        public StageKey[] keys;
+        public StageExtra(string team, StageKey[] keys) { this.team = team; this.keys = keys; }
     }
 
     // 경기장 위쪽(골대와 페널티 박스) 띠를 훈련장으로 쓰는 화면. 내 선수는 제자리에서 리프팅을 하고,
@@ -94,6 +103,81 @@ namespace MyFootballCareer
                     LoadStrip(team + "_" + anim + "_x");
             }
             SetLook(0, 0, 0);   // 내 선수(blue): 원래 모습으로 시작
+        }
+
+        // 다른 화면(경기 중 내 골 장면)에서 같은 그림을 쓰는 두 번째 무대. 그림은 share와 함께 쓰므로 외형이 바뀌면 같이 바뀝니다.
+        // (이 무대에서는 SetLook을 부르지 마세요.)
+        public TrainingStageView(TrainingStageView share)
+        {
+            this.share = share;
+            drills = TrainingStageDrills.Build();
+            strips = new Dictionary<string, Sprite[]>(share.strips);
+            var matchBg = LoadSprite("match_bg");   // 꼬깔콘·훈련용 선이 없는 경기용 배경
+            background = matchBg != null ? matchBg : share.background;
+            ballSprite = share.ballSprite; shadowSprite = share.shadowSprite;
+            bgW = share.bgW; bgH = share.bgH;
+            ViewBottom = TrainingStageDrills.MatchViewBottom;   // 중거리 슛 자리까지 보이게
+        }
+
+        readonly TrainingStageView share;   // 그림을 빌려 온 무대 (훈련장 무대 자신은 null)
+        // 보여 줄 배경의 세로 범위 (훈련장은 골대~페널티 박스, 경기 골 장면은 상자 밖 반원까지)
+        public float ViewTop { get; private set; } = TrainingStageDrills.BandTop;
+        public float ViewBottom { get; private set; } = TrainingStageDrills.BandBottom;
+        readonly List<Actor> extras = new List<Actor>();
+        readonly List<UnityEngine.Object> allyObjects = new List<UnityEngine.Object>();
+        int allyKey = -1;
+
+        // 우리 팀 동료 그림(ally): 내 유니폼 색에 머리색·피부색만 다르게. 외형이 바뀌었을 때만 다시 만듭니다.
+        void PrepareAlly()
+        {
+            if (share == null) return;
+            foreach (var kv in share.strips) strips[kv.Key] = kv.Value;   // 내 외형이 바뀌었으면 새 그림으로
+            int hair = Mathf.Max(0, share.lookHair), skin = Mathf.Max(0, share.lookSkin), kit = Mathf.Max(0, share.lookKit);
+            int key = (hair * 31 + skin) * 31 + kit;
+            if (key == allyKey) return;
+            DisposeAlly();
+            int h = (hair + 2) % PlayerLook.HairCount, s = (skin + 1) % PlayerLook.SkinCount;
+            foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
+                foreach (string view in new[] { "front", "side", "back" })
+                    LoadRecoloredStrip("blue_" + anim + "_" + view, "ally_" + anim + "_" + view, h, s, kit, allyObjects);
+            foreach (string anim in new[] { "jump", "cheer", "fall" })
+                LoadRecoloredStrip("blue_" + anim + "_x", "ally_" + anim + "_x", h, s, kit, allyObjects);
+            allyKey = key;
+        }
+
+        void DisposeAlly()
+        {
+            foreach (var obj in allyObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
+            allyObjects.Clear();
+            allyKey = -1;
+        }
+
+        // 이 무대가 만든 그림을 지웁니다 (경기 영상을 닫을 때)
+        public void Dispose() { DisposeAlly(); }
+
+        // 한 번 보여 줄 장면을 처음부터 바로 시작합니다 (시작 자리로 걸어가지 않음). Create 뒤에 부르세요.
+        public void PlayScene(StageDrill drill)
+        {
+            if (drill == null || drill.player == null || drill.player.Length == 0 || player == null) return;
+            PrepareAlly();
+            foreach (var e in extras) { drawOrder.Remove(e); if (e.root != null) UnityEngine.Object.Destroy(e.root.gameObject); }
+            extras.Clear();
+            if (drill.extras != null)
+                for (int i = 0; i < drill.extras.Length; i++)
+                {
+                    var ex = drill.extras[i];
+                    if (ex == null || ex.keys == null || ex.keys.Length == 0) continue;
+                    var a = MakeActor("Extra" + i, ex.team, 4 + i);
+                    var k0 = ex.keys[0];
+                    a.x = a.homeX = k0.x; a.y = a.homeY = k0.y;
+                    a.face = a.homeFace = k0.face == '*' ? 'd' : k0.face;
+                    extras.Add(a); drawOrder.Add(a);
+                }
+            drills["scene"] = drill;
+            currentKey = "scene"; walking = false; drillTime = 0f;
+            var first = drill.player[0];
+            player.x = first.x; player.y = first.y; player.face = first.face == '*' ? 'u' : first.face;
+            Tick(0f);
         }
 
         // ---------- 내 선수 외형 ----------
@@ -244,25 +328,31 @@ namespace MyFootballCareer
         // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
         void LoadLookStrip(string prefix, int hair, int skin, int kit)
         {
+            LoadRecoloredStrip(prefix, prefix, hair, skin, kit, lookObjects);
+        }
+
+        // src 그림(.bytes)을 색 바꿔 읽어 dest 이름으로 둡니다. 만든 텍스처·스프라이트는 owned에 넣어 나중에 지웁니다.
+        void LoadRecoloredStrip(string src, string dest, int hair, int skin, int kit, List<UnityEngine.Object> owned)
+        {
             var list = new List<Sprite>();
             for (int i = 0; i < 8; i++)
             {
                 Sprite sprite = null;
-                var asset = Resources.Load<TextAsset>(ArtPath + prefix + "_" + i);
+                var asset = Resources.Load<TextAsset>(ArtPath + src + "_" + i);
                 if (asset != null)
                 {
                     var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit);
                     if (tex != null)
                     {
                         sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
-                        lookObjects.Add(tex); lookObjects.Add(sprite);
+                        owned.Add(tex); owned.Add(sprite);
                     }
                 }
-                else sprite = LoadSprite(prefix + "_" + i);
+                else sprite = LoadSprite(src + "_" + i);
                 if (sprite == null) break;
                 list.Add(sprite);
             }
-            if (list.Count > 0) strips[prefix] = list.ToArray();
+            if (list.Count > 0) strips[dest] = list.ToArray();
         }
 
         void LoadStrip(string prefix)
@@ -304,7 +394,7 @@ namespace MyFootballCareer
             var frameGo = new GameObject("StageFrame", typeof(RectTransform));
             frameGo.transform.SetParent(parent, false);
             frameGo.AddComponent<Image>().color = PixelTheme.PanelEdge;
-            float height = (TrainingStageDrills.BandBottom - TrainingStageDrills.BandTop) * Scale + 8f;   // 위쪽 띠만 보여 줌
+            float height = (ViewBottom - ViewTop) * Scale + 8f;   // 위쪽 띠만 보여 줌
             var layout = frameGo.AddComponent<LayoutElement>();
             layout.minHeight = height; layout.preferredHeight = height;
 
@@ -406,7 +496,7 @@ namespace MyFootballCareer
             clock += dt;
             // 배경의 위쪽 띠(BandTop~BandBottom)만 보이도록 아래로 내립니다.
             float worldH = world.rect.height;
-            if (worldH > 0f) world.anchoredPosition = new Vector2(0f, -(bgH - TrainingStageDrills.BandBottom) / bgH * worldH);
+            if (worldH > 0f) world.anchoredPosition = new Vector2(0f, -(bgH - ViewBottom) / bgH * worldH);
             StageDrill drill = drills[currentKey];
 
             // 선수
@@ -456,6 +546,8 @@ namespace MyFootballCareer
             UpdateNpc(gk, drill.gk, dt);
             UpdateNpc(attacker, drill.attacker, dt);
             UpdateNpc(mate, drill.mate, dt);
+            for (int i = 0; i < extras.Count; i++)
+                UpdateNpc(extras[i], currentKey == "scene" && drill.extras != null && i < drill.extras.Length && drill.extras[i] != null ? drill.extras[i].keys : null, dt);
 
             // 공
             bool ballVisible = true;
@@ -480,6 +572,7 @@ namespace MyFootballCareer
 
             // 그리기
             RenderCharacter(gk); RenderCharacter(attacker); RenderCharacter(mate); RenderCharacter(player);
+            foreach (var e in extras) RenderCharacter(e);
             RenderBall(ballVisible);
             drawOrder.Sort(BySortKey);
             for (int i = 0; i < drawOrder.Count; i++) drawOrder[i].root.SetSiblingIndex(i);
@@ -606,6 +699,12 @@ namespace MyFootballCareer
                     key = a.team + "_jump_x"; flip = false;
                     strip = Find(key); index = strip == null ? 0 : Mathf.Min(strip.Length - 1, (int)(a.poseTime * 5f));
                     lift = Mathf.Sin(Mathf.Clamp01(a.poseTime / 0.6f) * Mathf.PI) * 22f;
+                    break;
+                case "leap":
+                    // 헤딩: 달리던 그림으로 뛰어올라 머리에 공을 맞힘 (0.55초 동안 올라갔다 내려옴)
+                    key = a.team + "_run_" + view;
+                    strip = Find(key); index = strip == null ? 0 : Mathf.Min(1, strip.Length - 1);
+                    lift = Mathf.Sin(Mathf.Clamp01(a.poseTime / 0.55f) * Mathf.PI) * 26f;
                     break;
                 case "dive":
                     key = a.team + "_fall_x";

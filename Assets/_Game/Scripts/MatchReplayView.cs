@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace MyFootballCareer
 {
     // 경기 영상 화면. 90분을 약 15초에 보여 주며, 위에서 본 전체 코트에 점으로 선수와 공이 움직입니다.
-    // 내 선수가 골을 넣으면 골망을 가르는 장면과 GOAL!, 도움을 하면 ASSIST!가 나옵니다.
+    // 내 선수가 골을 넣으면 세리머니 화면(GoalCelebration: GOAL!, 골망, 꽃가루, 득점 정보), 도움을 하면 도움! 카드가 나옵니다.
     //   그림: Resources/Art/Match/ (pitch, dot_blue, dot_red, dot_you, ball, goal_0 ~ goal_7)
     public class MatchReplayView
     {
@@ -32,14 +32,19 @@ namespace MyFootballCareer
         Action onFinished;
         string ownName, oppName;
 
-        GameObject root, closeupRoot;
-        RectTransform pitchRect, closeupPanel, youLabel, clockFill;
+        GameObject root;
+        GoalCelebration celebration;   // 내 골 세리머니
+        string playerName = "";
+        public TrainingStageView SceneArt;   // 내 골 장면에 쓸 선수 그림 (훈련장과 같은 그림, 없으면 골망 장면)
+        public int SeasonGoalsBefore = -1;
+        public int SeasonAssistsBefore = -1;   // 이번 경기 전까지 시즌 도움 수 (-1이면 '시즌 N호 도움'을 보여 주지 않음)
+        ReplayEvent countedAssist;             // 도움을 이미 센 장면 (패스할 때 세고, 코너킥처럼 패스 신호가 없으면 골 때 셈)   // 이번 경기 전까지 시즌 골 수 (-1이면 '시즌 N호 골'을 보여 주지 않음, 친선 경기 등)
+        RectTransform pitchRect, youLabel, clockFill;
         readonly RectTransform[] dotRects = new RectTransform[22];
         RectTransform ballRect;
         Text callLabel;   // 공 옆에 잠깐 뜨는 판정 (스로인, 코너킥, 프리킥…)
         int lastCallId; float callTimer;   // 판정 글자는 실제 시간으로 0.9초 보여 줌
-        Image closeupImage;
-        Text scoreText, clockText, closeupText, benchText;
+        Text scoreText, clockText, benchText;
         // 사건 카드 (골, 실점, 도움, 태클, 경기 종료): 경기장 위쪽에 잠깐 내려왔다 사라짐
         RectTransform eventCard;
         Image eventFill, eventEdge;
@@ -61,7 +66,7 @@ namespace MyFootballCareer
         static readonly Color TackleColor = new Color(.25f, .65f, .40f, 1f);
         static readonly Color NeutralColor = new Color(.35f, .40f, .52f, 1f);
 
-        float clock, bannerT, bannerDur, closeupT, closeupElapsed, finishT;
+        float clock, bannerT, bannerDur, finishT;
         int goalsFor, goalsAgainst, youSlot;
         int ourNote, theirNote;   // 다음에 보여 줄 골 기록 (GoalNote) 순서
         int yourGoals, yourAssists, yourShots, yourTackles;
@@ -102,7 +107,7 @@ namespace MyFootballCareer
         {
             if (Active) return true;
             if (!Available) return false;
-            record = m; onFinished = finished; ownName = ownTeamName; oppName = m.opponentName;
+            record = m; onFinished = finished; ownName = ownTeamName; oppName = m.opponentName; playerName = player.playerName;
             ownTactic = ownTactic ?? new TeamTactic(); oppTactic = oppTactic ?? new TeamTactic();
             int mySlot = TacticSystem.YouSlot(ownTactic.formation, player.position);
             youSlot = m.playerPlayed ? mySlot : -1;
@@ -114,7 +119,7 @@ namespace MyFootballCareer
             engine.stats = stats;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
             engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken; engine.SetPieceCalled = OnSetPiece; engine.HalfTime = OnHalfTime;
-            clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; closeupT = 0f; finishing = false; ourNote = 0; theirNote = 0;
+            clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; finishing = false; countedAssist = null; ourNote = 0; theirNote = 0;
             yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
             feedItems.Clear(); scorePulse = 0f; lastCallId = 0; callTimer = 0f;
             try { speed = Mathf.Clamp(PlayerPrefs.GetInt(SpeedPref, 2), 1, 2); } catch { speed = 2; }
@@ -320,26 +325,8 @@ namespace MyFootballCareer
             var skipText = TextNode("건너뛰기", skip.GetChild(0), 26, TextAnchor.MiddleCenter, PixelTheme.Text);
             Anchored(skipText.rectTransform, 0, 0, 1, 1);
 
-            // 골망 장면 (평소에는 숨김)
-            var closeup = NewRect("Closeup", rootRect);
-            Anchored(closeup, 0, 0, 1, 1);
-            closeup.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .65f);
-            closeupRoot = closeup.gameObject;
-            closeupPanel = Box(closeup, PixelTheme.Accent, PixelTheme.Background);
-            closeupPanel.anchorMin = closeupPanel.anchorMax = new Vector2(.5f, .5f);
-            closeupPanel.pivot = new Vector2(.5f, .5f);
-            closeupPanel.sizeDelta = new Vector2(640, 640f * 65f / 97f + 16f);
-            var goalLayer = NewRect("GoalImage", closeupPanel.GetChild(0));
-            Anchored(goalLayer, 0, 0, 1, 1);
-            closeupImage = goalLayer.gameObject.AddComponent<Image>();
-            closeupImage.sprite = goalFrames[0]; closeupImage.raycastTarget = false;
-            closeupText = TextNode("골!", closeup, 96, TextAnchor.MiddleCenter, PixelTheme.Accent);
-            closeupText.rectTransform.anchorMin = closeupText.rectTransform.anchorMax = new Vector2(.5f, .5f);
-            closeupText.rectTransform.sizeDelta = new Vector2(700, 140);
-            closeupText.rectTransform.anchoredPosition = new Vector2(0, 330);
-            var closeupOutline = closeupText.gameObject.AddComponent<Outline>();
-            closeupOutline.effectColor = new Color(0, 0, 0, .9f); closeupOutline.effectDistance = new Vector2(5, -5);
-            closeupRoot.SetActive(false);
+            // 내 골 세리머니 (평소에는 숨김)
+            celebration = new GoalCelebration(font, rootRect, goalFrames, SceneArt != null && SceneArt.Available ? new TrainingStageView(SceneArt) : null);
         }
 
         // ---------- 매 프레임 ----------
@@ -357,14 +344,9 @@ namespace MyFootballCareer
                 scoreText.color = Color.Lerp(PixelTheme.Text, scoreFlash, k);
             }
 
-            if (closeupT > 0f)   // 골 장면 동안 경기는 멈춤
+            if (celebration != null && celebration.Active)   // 골 세리머니 동안 경기는 멈춤
             {
-                closeupT -= dt; closeupElapsed += dt;
-                int frame = Mathf.Min(goalFrames.Length - 1, (int)(closeupElapsed * 8f));
-                closeupImage.sprite = goalFrames[frame];
-                float pulse = 1f + 0.08f * Mathf.Sin(closeupElapsed * 14f);
-                closeupText.rectTransform.localScale = new Vector3(pulse, pulse, 1f);
-                if (closeupT <= 0f) closeupRoot.SetActive(false);
+                celebration.Tick(dt);
                 return;
             }
             if (finishing)
@@ -498,7 +480,8 @@ namespace MyFootballCareer
         {
             var note = NextNote(ev.type == ReplayEventType.GoalOurs);
             if (ev.type == ReplayEventType.GoalOurs) goalsFor++; else goalsAgainst++;
-            SoundFx.Play(ev.type == ReplayEventType.GoalOurs ? Sfx.Goal : Sfx.Conceded);
+            bool assistScene = ev.type == ReplayEventType.GoalOurs && !ev.youScore && ev.youAssist && youSlot >= 0;
+            if (!ev.youScore && !assistScene) SoundFx.Play(ev.type == ReplayEventType.GoalOurs ? Sfx.Goal : Sfx.Conceded);   // 내 골·도움은 장면 속 공이 들어갈 때
             scoreText.text = goalsFor + " - " + goalsAgainst;
             string how = ev.setPiece != SetPiece.None ? " [" + MatchReplayPlan.SetPieceName(ev.setPiece) + "]" : "";
             if (ev.type == ReplayEventType.GoalOurs)
@@ -509,7 +492,13 @@ namespace MyFootballCareer
                 {
                     yourGoals++;
                     Feed(Minute(), "골! 내가 넣었다!" + how + (note != null && !string.IsNullOrEmpty(note.assist) ? "  (도움 " + note.assist + ")" : ""), OurGoalColor);
-                    StartCloseup();
+                    StartCelebration(ev, note);
+                }
+                else if (assistScene)
+                {
+                    if (countedAssist != ev) { countedAssist = ev; yourAssists++; }
+                    Feed(Minute(), "골! " + who + "  ← 내 도움", OurGoalColor);
+                    StartAssistCelebration(ev, note);
                 }
                 else
                 {
@@ -542,11 +531,11 @@ namespace MyFootballCareer
             ShowEvent("페널티킥!", Minute() + "  " + (ours ? ownName : oppName), ours ? OurGoalColor : TheirGoalColor, 1.0f);
         }
 
+        // 내 패스가 나가는 순간: 도움을 세고 효과음만 (골이 들어가면 도움 장면이 나옴)
         void OnAssist(ReplayEvent ev)
         {
-            yourAssists++;
+            if (countedAssist != ev) { countedAssist = ev; yourAssists++; }
             SoundFx.Play(Sfx.Assist, 0.8f);
-            ShowEvent("도움!", Minute() + "  내 패스가 골로 이어졌다", AssistColor, 1.4f);
         }
 
         void OnShot(ReplayEvent ev)
@@ -564,12 +553,50 @@ namespace MyFootballCareer
             ShowEvent("태클!", Minute() + "  공을 빼앗았다", TackleColor, 0.9f);
         }
 
-        void StartCloseup()
+        // 골 장면 종류: 세트피스면 그 장면, 헤딩이면 크로스 헤딩, 도움이 있으면 패스 받아 슈팅, 아니면 드리블 돌파
+        static TrainingStageDrills.GoalScene SceneFor(ReplayEvent ev)
         {
-            closeupT = 2.0f; closeupElapsed = 0f;
-            closeupImage.sprite = goalFrames[0];
-            closeupRoot.SetActive(true);
+            if (ev.setPiece == SetPiece.Penalty) return TrainingStageDrills.GoalScene.Penalty;
+            if (ev.setPiece == SetPiece.FreeKick) return TrainingStageDrills.GoalScene.FreeKick;
+            if (ev.setPiece == SetPiece.Corner) return TrainingStageDrills.GoalScene.Corner;
+            if (ev.header) return TrainingStageDrills.GoalScene.Cross;
+            if (ev.longShot) return TrainingStageDrills.GoalScene.LongShot;
+            return ev.assisterSlot >= 0 ? TrainingStageDrills.GoalScene.Pass : TrainingStageDrills.GoalScene.Dribble;
+        }
+
+        // 내 도움 장면 종류: 코너킥, 크로스(동료 헤딩), 슈팅 자리로 내준 패스(동료 중거리), 그 밖에는 스루 패스
+        static TrainingStageDrills.GoalScene AssistSceneFor(ReplayEvent ev)
+        {
+            if (ev.setPiece == SetPiece.Corner) return TrainingStageDrills.GoalScene.Corner;
+            if (ev.header) return TrainingStageDrills.GoalScene.Cross;
+            if (ev.longShot) return TrainingStageDrills.GoalScene.LongShot;
+            return TrainingStageDrills.GoalScene.Pass;
+        }
+
+        void StartAssistCelebration(ReplayEvent ev, GoalNote note)
+        {
             bannerT = 0f; eventCard.gameObject.SetActive(false);
+            celebration.Play(new GoalInfo
+            {
+                minute = Minute(), scorer = playerName, isAssist = true, partner = note != null ? note.scorer : "",
+                scene = AssistSceneFor(ev), how = "", assist = "",
+                ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst,
+                matchGoals = yourAssists, seasonGoal = SeasonAssistsBefore >= 0 ? SeasonAssistsBefore + yourAssists : 0
+            });
+        }
+
+        void StartCelebration(ReplayEvent ev, GoalNote note)
+        {
+            bannerT = 0f; eventCard.gameObject.SetActive(false);
+            celebration.Play(new GoalInfo
+            {
+                minute = Minute(), scorer = playerName,
+                how = ((ev.setPiece != SetPiece.None ? MatchReplayPlan.SetPieceName(ev.setPiece) : "") + (ev.header ? " 헤딩" : "") + (ev.longShot ? " 중거리" : "")).Trim(),
+                scene = SceneFor(ev),
+                assist = note != null ? note.assist : "",
+                ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst,
+                matchGoals = yourGoals, seasonGoal = SeasonGoalsBefore >= 0 ? SeasonGoalsBefore + yourGoals : 0
+            });
         }
 
         // 사건 카드: 팀 색 띠에 큰 제목과 한 줄 설명. 위에서 톡 떨어지듯 나타났다가 흐려지며 사라집니다.
@@ -654,6 +681,7 @@ namespace MyFootballCareer
         void Close()
         {
             Active = false;
+            if (celebration != null) { celebration.Dispose(); celebration = null; }
             if (root != null) UnityEngine.Object.Destroy(root);
             var callback = onFinished;
             onFinished = null;

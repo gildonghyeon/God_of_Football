@@ -46,21 +46,59 @@ namespace MyFootballCareer
         }
 
         // 포메이션 그림: 잔디 위에 11자리 점과 이름 (아래가 우리 골대, 위로 공격)
+        // 실제 경기장 비율에 가깝게, 가운데에 세로로 긴 판으로 그립니다. (우리 골대부터 상대 진영 일부까지)
+        const float PitchW = 420f, PitchH = 440f;
+        static float PitchY(float depth) { return .035f + depth * 1.25f; }   // 깊이(0=우리 골라인) -> 판 높이 비율
         static void Pitch(Transform parent, Font font, SquadView v)
         {
-            var box = Block(parent, 190);
+            var block = Block(parent, PitchH + 8f);
+            var box = NewRect("Pitch", block);
+            box.anchorMin = box.anchorMax = new Vector2(.5f, .5f); box.pivot = new Vector2(.5f, .5f);
+            box.sizeDelta = new Vector2(PitchW, PitchH);
             box.gameObject.AddComponent<Image>().color = new Color(.16f, .38f, .22f, 1f);
-            Img(box, new Color(1f, 1f, 1f, .25f), 0f, .5f, 1f, .506f);                       // 하프라인
-            Img(box, new Color(1f, 1f, 1f, .18f), .3f, 0f, .7f, .14f);                       // 우리 페널티 박스
+            for (int b = 0; b < 8; b += 2) Img(box, new Color(.18f, .42f, .24f, 1f), 0f, b / 8f, 1f, (b + 1) / 8f);   // 잔디 줄무늬
+            var line = new Color(1f, 1f, 1f, .28f);
+            float half = PitchY(.5f);
+            Img(box, line, 0f, half - .003f, 1f, half + .003f);                                   // 하프라인
+            Img(box, line, .48f, half - .008f, .52f, half + .008f);                               // 센터 스팟
+            Frame(box, line, .204f, PitchY(0f), .796f, PitchY(16.5f / 105f));                     // 페널티 박스
+            Frame(box, line, .365f, PitchY(0f), .635f, PitchY(5.5f / 105f));                      // 골 에어리어
+            Img(box, new Color(1f, 1f, 1f, .5f), .446f, 0f, .554f, PitchY(0f));                   // 골대
             for (int i = 0; i < v.layout.Length && i < v.starters.Count; i++)
             {
                 var s = v.layout[i]; var r = v.starters[i];
-                float x = s.x / 68f, y = Mathf.Lerp(.07f, .93f, Mathf.Clamp01((s.depth - .03f) / .68f));
-                var dot = Img(box, r.me ? PixelTheme.Accent : RoleColor(s.role), x - .022f, y - .02f, x + .022f, y + .065f);
-                Label(dot.rectTransform, font, s.kind.ToString(), 11, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
+                float x = s.x / 68f, y = Mathf.Clamp(PitchY(s.depth), .08f, .93f);
+                var dot = Point(box, r.me ? PixelTheme.Accent : RoleColor(s.role), x, y, 34f, 34f);
+                Label(dot.rectTransform, font, s.kind.ToString(), 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
                 string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
-                Fit(Label(box, font, r.me ? "나" : surname, 13, r.me ? PixelTheme.Accent : Color.white, x - .1f, y - .085f, x + .1f, y - .02f, TextAnchor.MiddleCenter), 9);
+                var name = Point(box, new Color(0f, 0f, 0f, .35f), x, y - 34f / PitchH, 92f, 22f);
+                Fit(Label(name.rectTransform, font, r.me ? "나" : surname, 15, r.me ? PixelTheme.Accent : Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
             }
+        }
+
+        // 판 위 한 점(x, y 비율)에 고정 크기(픽셀)로 놓는 칸
+        static Image Point(Transform parent, Color c, float x, float y, float w, float h)
+        {
+            var r = NewRect("Point", parent);
+            r.anchorMin = r.anchorMax = new Vector2(x, y); r.pivot = new Vector2(.5f, .5f); r.sizeDelta = new Vector2(w, h);
+            var img = r.gameObject.AddComponent<Image>(); img.color = c; img.raycastTarget = false;
+            return img;
+        }
+
+        // 테두리만 있는 네모 (선 두께 3픽셀)
+        static void Frame(Transform parent, Color c, float x0, float y0, float x1, float y1)
+        {
+            const float T = 3f;
+            Edge(parent, c, x0, y0, x1, y0, new Vector2(0f, T)); Edge(parent, c, x0, y1, x1, y1, new Vector2(0f, T));
+            Edge(parent, c, x0, y0, x0, y1, new Vector2(T, 0f)); Edge(parent, c, x1, y0, x1, y1, new Vector2(T, 0f));
+        }
+
+        static void Edge(Transform parent, Color c, float x0, float y0, float x1, float y1, Vector2 size)
+        {
+            var r = NewRect("Line", parent);
+            r.anchorMin = new Vector2(x0, y0); r.anchorMax = new Vector2(x1, y1); r.pivot = new Vector2(.5f, .5f);
+            r.sizeDelta = size; r.anchoredPosition = Vector2.zero;
+            var img = r.gameObject.AddComponent<Image>(); img.color = c; img.raycastTarget = false;
         }
 
         static void Stat(Transform parent, Font font, string value, string label, bool small)

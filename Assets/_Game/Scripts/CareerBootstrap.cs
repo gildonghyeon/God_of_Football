@@ -238,8 +238,8 @@ namespace MyFootballCareer
         // 시즌 결산 팝업 (시상 결과가 붙어 길이가 달라지므로 줄 수에 맞춰 높이를 정함)
         void ShowSeasonEnd()
         {
-            string text = SeasonSystem.DescribeSeasonEnd(current, matchSettings);
-            ui.ShowPopup("시즌 종료", text, Mathf.Clamp(text.Split('\n').Length * 29f + 16f, 260f, 760f));
+            var view = SeasonSystem.SeasonEndView(current, matchSettings);
+            ui.ShowCards("시즌 종료", (body, font) => PopupCards.SeasonEnd(body, font, view));
         }
 
         void RefreshMoneyUI()
@@ -376,22 +376,57 @@ namespace MyFootballCareer
         void RefreshRebirthUI()
         {
             ui.SetRebirth(RebirthSystem.DescribeStatus(current, rebirthSettings), RebirthSystem.CanRebirth(current, rebirthSettings));
+            RefreshCareerUI();
+        }
+
+        // 커리어 탭 카드: 프로필, 트로피 룸, 시즌 기록, 환생 조건 (바뀐 게 없으면 화면은 그대로)
+        void RefreshCareerUI()
+        {
+            if (current == null || current.player == null || current.season == null) return;
+            var team = matchSettings.FindTeam(current.teamId);
+            var d = new CareerPageData
+            {
+                name = current.player.playerName, position = Ko.Pos(current.player.position), trait = Ko.TraitName(current.player.trait),
+                team = team != null ? team.displayName : current.teamId,
+                division = current.season.division > 0 ? matchSettings.DivisionName(current.season.division) : "",
+                season = current.season.seasonNumber, career = current.rebirthCount + 1,
+                money = current.money, pay = FacilitySystem.MatchPay(current, matchSettings),
+                agentPercent = Mathf.RoundToInt((FacilitySystem.WageMultiplier(current, matchSettings) - 1f) * 100f), wage = current.weeklyWage,
+                rebirthCount = current.rebirthCount, bonus = current.rebirthBonusPercent, speed = RebirthSystem.TrainingMultiplier(current),
+                canRebirth = RebirthSystem.CanRebirth(current, rebirthSettings),
+                conditions = RebirthSystem.Conditions(current, rebirthSettings)
+            };
+            d.trophyCounts = new int[System.Enum.GetValues(typeof(TrophyKind)).Length];
+            if (current.trophies != null)
+            {
+                foreach (var t in current.trophies) d.trophyCounts[(int)t.kind]++;
+                d.trophyTotal = current.trophies.Count;
+                for (int i = current.trophies.Count - 1; i >= 0 && d.recent.Count < 4; i--) d.recent.Add(current.trophies[i]);
+            }
+            for (int i = current.seasonHistory.Count - 1; i >= 0 && d.history.Count < 5; i--) d.history.Add(current.seasonHistory[i]);
+            if (current.careers != null && current.careers.Count > 0) { d.hasLastCareer = true; d.lastCareer = current.careers[current.careers.Count - 1]; }
+            ui.SetCareer(d);
+            ui.SetCurrentTeam(SeasonSystem.CurrentTeamInfo(current, matchSettings, settings));
         }
 
         void Rebirth()
         {
             if (blocked || current == null) return;
             if (!RebirthSystem.CanRebirth(current, rebirthSettings)) { ui.SetStatus("아직 환생 조건을 채우지 못했습니다."); return; }
-            ui.ShowConfirm("환생할까요?", RebirthSystem.DescribePreview(current, settings, rebirthSettings), 360f, "환생", DoRebirth);
+            var preview = RebirthSystem.PreviewView(current, settings, rebirthSettings);
+            ui.ShowCardsConfirm("환생할까요?", (body, font) => PopupCards.RebirthPreview(body, font, preview), "환생", DoRebirth);
         }
 
         void DoRebirth()
         {
             if (blocked || current == null || !RebirthSystem.CanRebirth(current, rebirthSettings)) return;
-            string message = RebirthSystem.Perform(current, settings, rebirthSettings, matchSettings);
+            RebirthSystem.Perform(current, settings, rebirthSettings, matchSettings);
             saves.TrySave(current, out _);
             StartPlayer("환생 완료.", false);   // 새 커리어 화면으로 다시 만듭니다.
-            ui.ShowPopup("환생 완료", message, 170f);
+            int count = current.rebirthCount;
+            float total = current.rebirthBonusPercent, speed = RebirthSystem.TrainingMultiplier(current);
+            float gain = current.careers.Count > 0 ? current.careers[current.careers.Count - 1].bonusGainedPercent : 0f;
+            ui.ShowCards("환생 완료", (body, font) => PopupCards.RebirthDone(body, font, count, gain, total, speed));
         }
 
         // 이적 제안을 고르면 한 번 더 묻고, 확정하면 저장합니다. 확정한 뒤에는 바꿀 수 없습니다.
@@ -401,11 +436,10 @@ namespace MyFootballCareer
             if (SeasonSystem.TransferDecided(current)) { ui.SetStatus("이번 시즌 선택은 이미 확정되었습니다."); return; }
             var offer = SeasonSystem.FindOffer(current, teamId);
             if (offer == null) return;
-            string body = offer.teamName + (offer.division > 0 ? " (" + offer.division + "부)" : "") + "\n다음 시즌에 이 팀으로 이적할까요?"
-                + "\n선발 확률 " + Mathf.RoundToInt(offer.startChance * 100f) + "%"
-                + (offer.weeklyWage > 0 ? "   주급 " + SeasonSystem.Money(offer.weeklyWage) : "")
-                + "\n\n확정하면 바꿀 수 없습니다.";
-            ui.ShowConfirm("이적 확정", body, 170f, "이적하기", () =>
+            string division = offer.division > 0 ? matchSettings.DivisionName(offer.division) : "";
+            int startPercent = Mathf.RoundToInt(offer.startChance * 100f), currentWage = current.weeklyWage;
+            ui.ShowCardsConfirm("이적할까요?", (body, font) => PopupCards.TransferConfirm(body, font, offer.teamName, division, startPercent, offer.weeklyWage, currentWage),
+                "이적하기", () =>
             {
                 if (SeasonSystem.SetPending(current, teamId) == null) return;
                 saves.TrySave(current, out string message);
@@ -420,7 +454,7 @@ namespace MyFootballCareer
             if (SeasonSystem.TransferDecided(current)) { ui.SetStatus("이번 시즌 선택은 이미 확정되었습니다."); return; }
             var team = matchSettings.FindTeam(current.teamId);
             string name = team != null ? team.displayName : current.teamId;
-            ui.ShowConfirm("잔류 확정", "모든 제안을 거절하고 다음 시즌에도 " + name + "에서 뛸까요?\n\n확정하면 바꿀 수 없습니다.", 150f,
+            ui.ShowCardsConfirm("잔류할까요?", (body, font) => PopupCards.StayConfirm(body, font, name),
                 "잔류하기", () =>
             {
                 if (!SeasonSystem.ConfirmStay(current)) return;
@@ -436,13 +470,12 @@ namespace MyFootballCareer
 
             if (SeasonSystem.IsComplete(current))
             {
-                string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings, settings);   // 이적·승강 안내 (바뀐 게 없으면 null)
+                string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings, settings, out var newSeason);   // 이적·승강 안내 (바뀐 게 없으면 null)
                 saves.TrySave(current, out string newSeasonMessage);
                 RefreshSeasonUI();
                 ui.SetStatus("새 시즌이 시작되었습니다. " + newSeasonMessage);
                 if (changeMessage != null)
-                    ui.ShowPopup("새 시즌", changeMessage + "\n시즌 " + current.season.seasonNumber + " 시작: "
-                        + matchSettings.DivisionName(current.season.division), 170f);
+                    ui.ShowCards("새 시즌", (body, font) => PopupCards.NewSeason(body, font, newSeason));
                 return;
             }
 
@@ -455,6 +488,11 @@ namespace MyFootballCareer
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
             // 경기 영상을 보여 준 뒤(건너뛰기 포함) 순위와 요약을 갱신하고 결과를 알려 줍니다.
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
+            // 세리머니의 '시즌 N호 골': 이번 경기를 뺀 시즌 골 수
+            int seasonGoals = 0, seasonAssists = 0;
+            foreach (var sm in current.season.matches) if (sm.played && sm.playerPlayed) { seasonGoals += sm.playerGoals; seasonAssists += sm.playerAssists; }
+            ui.ReplaySeasonGoals = Mathf.Max(0, seasonGoals - record.playerGoals);
+            ui.ReplaySeasonAssists = Mathf.Max(0, seasonAssists - record.playerAssists);
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshSeasonUI();

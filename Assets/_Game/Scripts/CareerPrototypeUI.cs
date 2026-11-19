@@ -90,6 +90,7 @@ namespace MyFootballCareer
         MatchReplayView matchView; // 경기 영상 화면
         UpgradeEffects upgradeFx;  // 강화 결과 연출
         MatchPageView matchPage;   // 경기 탭의 카드와 표
+        CareerPageView careerPage; // 커리어 탭의 카드와 표
         TrophyCeremony ceremony;   // 시즌 끝 트로피 수여 연출
         Text offlineNumber;        // 오프라인 보상 창의 올라가는 숫자
         float offlineTarget, offlineT;
@@ -107,6 +108,7 @@ namespace MyFootballCareer
             settings = config; trainingSettings = training;
             stage = new TrainingStageView();
             matchView = new MatchReplayView(font);
+            matchView.SceneArt = stage;   // 내 골 장면은 훈련장 그림(내 외형 포함)을 같이 씁니다.
             onCreate = create; onSave = save;
             onUpgrade = upgrade; onPlayMatch = playMatch;
             onChooseOffer = chooseOffer; onStay = stay; onRebirth = rebirth;
@@ -192,6 +194,7 @@ namespace MyFootballCareer
         {
             if (stage != null) stage.Tick(Time.unscaledDeltaTime);
             if (matchView != null) matchView.Tick(Time.unscaledDeltaTime);
+            TickGoalPreview(Time.unscaledDeltaTime);
             if (upgradeFx != null) upgradeFx.Tick(Time.unscaledDeltaTime);
             if (ceremony != null) ceremony.Tick(Time.unscaledDeltaTime);
             if (attendCards != null) attendCards.Tick(Time.unscaledDeltaTime);
@@ -356,14 +359,14 @@ namespace MyFootballCareer
             Array.Clear(statTexts, 0, statTexts.Length);
             Array.Clear(statBars, 0, statBars.Length);
             Array.Clear(upgradeButtons, 0, upgradeButtons.Length);
-            rateButton = null; matchPage = null;
+            rateButton = null; matchPage = null; careerPage = null;
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
             friendlyButton = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
             Array.Clear(missionTexts, 0, missionTexts.Length); Array.Clear(missionButtons, 0, missionButtons.Length);
             attendText = attendDetail = attendNote = resetText = bonusText = null; attendButton = bonusButton = null; attendCards = null;
             moneyText = facilityMoneyText = null;
-            transferRoot = null; rebirthFill = null;
+            transferRoot = null; rebirthFill = null; tCurrentKey = null;
             SetChrome(false);
             DestroyPreview();
         }
@@ -472,20 +475,20 @@ namespace MyFootballCareer
             currentParent = Section(pages[1], "개인 순위", true);
             matchPage.BuildLeaders(Parent);
 
-            // CAREER: 이적 제안, 이력, 환생
-            currentParent = Section(pages[3], "돈", true);
-            moneyText = Label("", 22, 64);
+            // CAREER: 선수 프로필, 이적 제안, 트로피 룸, 시즌 기록, 환생 (카드와 표로 보여 줌)
+            careerPage = new CareerPageView(font);
+            currentParent = Section(pages[3], "", true);
+            careerPage.BuildProfile(Parent);
+            PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                .GetComponentInChildren<Text>().fontSize = 22;
             transferRoot = NewRect("TransferRoot", pages[3]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
-            currentParent = Section(pages[3], "외형", true);
-            Label("머리색, 피부색, 유니폼 색을 바꿉니다.", 20, 30).color = PixelTheme.TextDim;
-            PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             currentParent = Section(pages[3], "트로피 룸", true);
-            trophyText = Label("", 22, 60);
+            careerPage.BuildTrophies(Parent);
             currentParent = Section(pages[3], "시즌 기록", true);
-            historyText = Label("", 22, 60);
+            careerPage.BuildHistory(Parent);
             currentParent = Section(pages[3], "환생", true);
-            rebirthText = Label("", 22, 120);
+            careerPage.BuildRebirth(Parent);
             var rebirth = PixelButton("환생하기", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
 
@@ -524,6 +527,43 @@ namespace MyFootballCareer
             currentParent = Section(pages[4], "초기화", true);
             Label("지금 선수와 진행 상황을 지우고 처음부터 시작합니다.", 20, 30).color = PixelTheme.TextDim;
             PixelButton("저장 초기화", () => { if (OnResetSave != null) OnResetSave(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+
+            // 개발용: 골 장면 미리보기 (에디터·개발용 빌드에서만 보임, 출시 빌드에는 없음)
+            if (Application.isEditor || Debug.isDebugBuild)
+            {
+                currentParent = Section(pages[4], "골 장면 미리보기 (개발용)", true);
+                Label("경기 중 내가 골을 넣을 때의 장면을 바로 봅니다. 누를 때마다 1골 → 멀티골 → 해트트릭 순으로 배지가 바뀝니다.", 18, 52).color = PixelTheme.TextDim;
+                string previewName = p.playerName;
+                var kinds = (TrainingStageDrills.GoalScene[])Enum.GetValues(typeof(TrainingStageDrills.GoalScene));
+                string[] names = { "드리블", "패스", "크로스 헤딩", "코너킥 헤딩", "프리킥", "페널티킥", "중거리 슛" };
+                // 도움 장면: 내가 공을 보내고 동료가 넣음
+                var assistKinds = new[] { TrainingStageDrills.GoalScene.Pass, TrainingStageDrills.GoalScene.Cross, TrainingStageDrills.GoalScene.Corner, TrainingStageDrills.GoalScene.LongShot };
+                string[] assistNames = { "도움: 스루 패스", "도움: 크로스", "도움: 코너킥", "도움: 내준 패스" };
+                for (int i = 0; i < assistKinds.Length; i += 2)
+                {
+                    var arow = NewRect("AssistPreviewRow", Parent); Height(arow.gameObject, 60);
+                    var ah = arow.gameObject.AddComponent<HorizontalLayoutGroup>();
+                    ah.spacing = 8; ah.childControlWidth = true; ah.childControlHeight = true; ah.childForceExpandWidth = true; ah.childForceExpandHeight = true;
+                    for (int k = i; k < i + 2; k++)
+                    {
+                        var kind = assistKinds[k];
+                        PixelButton(assistNames[k], () => PlayGoalPreview(kind, previewName, true), arow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                            .GetComponentInChildren<Text>().fontSize = 20;
+                    }
+                }
+                for (int i = 0; i < kinds.Length; i += 2)
+                {
+                    var row = NewRect("PreviewRow", Parent); Height(row.gameObject, 60);
+                    var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                    h.spacing = 8; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+                    for (int k = i; k < i + 2 && k < kinds.Length; k++)
+                    {
+                        var kind = kinds[k];
+                        PixelButton(k < names.Length ? names[k] : kind.ToString(), () => PlayGoalPreview(kind, previewName), row, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                            .GetComponentInChildren<Text>().fontSize = 22;
+                    }
+                }
+            }
 
             currentParent = null;
             SetPage(0);
@@ -608,6 +648,9 @@ namespace MyFootballCareer
 
         public void SetTrophies(string text) { if (trophyText != null) SetLines(trophyText, text, 2); }
 
+        // 커리어 탭 카드 (프로필, 트로피, 시즌 기록, 환생 조건)
+        public void SetCareer(CareerPageData data) { if (careerPage != null) careerPage.Set(data); }
+
         // ---------- 미션 탭 ----------
         static void SetButton(Button b, string label, bool ready, Color fill, Color quiet)
         {
@@ -680,37 +723,115 @@ namespace MyFootballCareer
             if (matchPage != null) matchPage.SetLeaders(header, blocks, footer);
         }
 
-        // 시즌이 끝나 이적 제안이 있을 때만 제안 목록을 보여줍니다.
+        // 커리어 탭의 '소속 팀' 카드와 '이적 제안' 카드들. 제안 카드의 숫자 아래에는 지금 팀과의 차이(▲▼)를 보여 줍니다.
         // summary: 시즌 성적 등급과 제안 수 안내 (null이면 아직 시즌 중)
         // decided: 선택을 확정했으면 true. 이때는 버튼을 누를 수 없고 결과만 보여 줍니다.
+        List<TransferOffer> tOffers;
+        string tPending, tTeamName, tSummary, tCurrentKey;
+        bool tDecided;
+        TeamInfoView tCurrent;
+
         public void SetTransfer(List<TransferOffer> offers, string pendingTeamId, string currentTeamName, string summary, bool decided)
+        {
+            tOffers = offers; tPending = pendingTeamId; tTeamName = currentTeamName; tSummary = summary; tDecided = decided;
+            RenderTransfer();
+        }
+
+        // 지금 팀 정보 (능력치가 오르면 선발 확률이 바뀌므로 자주 불림). 바뀌었을 때만 다시 그립니다.
+        public void SetCurrentTeam(TeamInfoView team)
+        {
+            string key = team != null ? JsonUtility.ToJson(team) : "";
+            if (key == tCurrentKey) return;
+            tCurrentKey = key; tCurrent = team;
+            RenderTransfer();
+        }
+
+        void RenderTransfer()
         {
             if (transferRoot == null) return;
             foreach (Transform child in transferRoot) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            var cur = tCurrent;
+            Color good = new Color(.55f, .95f, .65f, 1f);
+            if (cur != null)
+            {
+                var section = Section(transferRoot, "소속 팀", true);
+                var card = NewRect("Current", section);
+                card.gameObject.AddComponent<Image>().color = new Color(.12f, .20f, .34f, 1f);
+                ConfigureStack(card.gameObject, 12, 10, 12, 12, 8);
+                var head = NewRect("Head", card); Height(head.gameObject, 36);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, cur.name, 24, PixelTheme.Text, 0f, 0f, .7f, 1f, TextAnchor.MiddleLeft), 14);
+                MatchResultDialog.Label(head, font, cur.division > 0 ? cur.division + "부" : "", 18, PixelTheme.TextDim, .7f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+                var tiles = TileRow(card);
+                MiniTile(tiles, "전력", cur.strength.ToString("0"), null, PixelTheme.TextDim);
+                MiniTile(tiles, "선발 확률", Mathf.RoundToInt(cur.startChance * 100f) + "%", null, PixelTheme.TextDim);
+                MiniTile(tiles, "주급", cur.wage > 0 ? SeasonSystem.Money(cur.wage) : "-", null, PixelTheme.TextDim);
+                MiniTile(tiles, "중시 능력", Ko.Attr(cur.focus), null, PixelTheme.TextDim);
+                MatchResultDialog.Label(NewRectH(card, 24), font, "내 평점 " + cur.myRating + "  ·  팀 요구 평점 " + cur.required, 16,
+                    cur.myRating >= cur.required ? good : PixelTheme.DangerEdge, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                string curId = cur.teamId;
+                PixelButton("선수단 보기", () => { if (OnShowSquad != null) OnShowSquad(curId); }, card, 52f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                    .GetComponentInChildren<Text>().fontSize = 21;
+            }
+
+            var offers = tOffers; string pendingTeamId = tPending, currentTeamName = tTeamName; bool decided = tDecided;
             bool none = offers == null || offers.Count == 0;
-            if (none && summary == null) return;
+            if (none && tSummary == null) return;
 
             var body = Section(transferRoot, "이적 제안", true);
-            if (summary != null) { var s = TextNode(summary, body, 22); s.horizontalOverflow = HorizontalWrapMode.Wrap; Height(s.gameObject, 64); }
+            if (tSummary != null)
+            {
+                var s = TextNode(tSummary, body, 20); s.color = PixelTheme.Accent; s.alignment = TextAnchor.MiddleCenter;
+                s.horizontalOverflow = HorizontalWrapMode.Wrap; Height(s.gameObject, 56);
+            }
             if (none) return;   // 제안이 없으면 지금 팀에 남습니다
-            string note = !decided ? "다음 시즌에 갈 팀을 고르거나 잔류하세요. 선택은 한 번뿐입니다."
+            string noteText = !decided ? "다음 시즌에 갈 팀을 고르거나 잔류하세요. 선택은 한 번뿐입니다."
                 : string.IsNullOrEmpty(pendingTeamId) ? "결정 완료: " + currentTeamName + "에 잔류합니다."
                 : "결정 완료: 표시된 팀으로 다음 시즌에 이적합니다.";
-            var info = TextNode(note, body, 22); info.color = PixelTheme.TextDim; Height(info.gameObject, 34);
+            var info = TextNode(noteText, body, 18); info.color = PixelTheme.TextDim; info.alignment = TextAnchor.MiddleCenter;
+            info.horizontalOverflow = HorizontalWrapMode.Wrap; Height(info.gameObject, 30);
+            if (cur != null)
+            {
+                var hint = TextNode("▲▼ 는 지금 팀(" + cur.name + ")과 비교한 차이입니다.", body, 16); hint.color = PixelTheme.TextDim;
+                hint.alignment = TextAnchor.MiddleCenter; hint.horizontalOverflow = HorizontalWrapMode.Wrap; Height(hint.gameObject, 26);
+            }
             foreach (var offer in offers)
             {
                 string id = offer.teamId;
                 bool agreed = id == pendingTeamId;
-                var button = PixelButton((agreed ? "[확정] " : "") + offer.teamName + (offer.division > 0 ? "  (" + offer.division + "부)" : "")
-                            + "\n전력 " + offer.teamStrength.ToString("0")
-                            + "   선발 확률 " + Mathf.RoundToInt(offer.startChance * 100f) + "%   중시 " + Ko.Attr(offer.focus)
-                            + (offer.weeklyWage > 0 ? "\n주급 " + SeasonSystem.Money(offer.weeklyWage) : ""),
-                            () => onChooseOffer(id), body, offer.weeklyWage > 0 ? 120f : 92f,
+                // 제안 카드: 팀 이름 + 숫자 타일(지금 팀과의 차이) + 버튼 두 개
+                var card = NewRect("Offer", body);
+                card.gameObject.AddComponent<Image>().color = agreed ? new Color(.30f, .24f, .08f, 1f) : new Color(.13f, .18f, .28f, 1f);
+                ConfigureStack(card.gameObject, 12, 10, 12, 12, 8);
+                var head = NewRect("Head", card); Height(head.gameObject, 36);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, offer.teamName, 24, PixelTheme.Accent, 0f, 0f, .7f, 1f, TextAnchor.MiddleLeft), 14);
+                // 부: 지금보다 높은 부면 ▲ 초록, 낮은 부면 ▼ 빨강
+                string divText = offer.division > 0 ? offer.division + "부" : "";
+                Color divColor = PixelTheme.TextDim;
+                if (cur != null && offer.division > 0 && cur.division > 0 && offer.division != cur.division)
+                {
+                    bool up = offer.division < cur.division;
+                    divText = (up ? "▲ " : "▼ ") + divText; divColor = up ? good : PixelTheme.DangerEdge;
+                }
+                MatchResultDialog.Label(head, font, agreed ? "확정" : divText, 18, agreed ? PixelTheme.Accent : divColor, .7f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+                var tiles = TileRow(card);
+                Color dc = PixelTheme.TextDim;
+                string d1 = cur != null ? Delta(offer.teamStrength - cur.strength, "0", out dc) : null;
+                MiniTile(tiles, "전력", offer.teamStrength.ToString("0"), d1, dc);
+                string d2 = cur != null ? Delta(Mathf.RoundToInt(offer.startChance * 100f) - Mathf.RoundToInt(cur.startChance * 100f), "0", out dc) : null;
+                MiniTile(tiles, "선발 확률", Mathf.RoundToInt(offer.startChance * 100f) + "%", d2 != null && d2 != "=" ? d2 + "%" : d2, dc);
+                string d3 = cur != null && offer.weeklyWage > 0 && cur.wage > 0 ? Delta(offer.weeklyWage - cur.wage, "#,0", out dc) : null;
+                MiniTile(tiles, "주급", offer.weeklyWage > 0 ? SeasonSystem.Money(offer.weeklyWage) : "-", d3, dc);
+                MiniTile(tiles, "중시 능력", Ko.Attr(offer.focus), cur != null ? (offer.focus == cur.focus ? "같음" : "다름") : null, PixelTheme.TextDim);
+                var buttons = NewRect("Buttons", card); Height(buttons.gameObject, 56);
+                var bh = buttons.gameObject.AddComponent<HorizontalLayoutGroup>();
+                bh.spacing = 8; bh.childControlWidth = true; bh.childControlHeight = true; bh.childForceExpandWidth = true; bh.childForceExpandHeight = true;
+                var button = PixelButton(agreed ? "이적 확정됨" : "이 팀으로 이적", () => onChooseOffer(id), buttons, 0f,
                             agreed ? PixelTheme.AccentFill : decided ? PixelTheme.QuietFill : PixelTheme.ButtonFill,
                             agreed ? PixelTheme.Accent : decided ? PixelTheme.QuietEdge : PixelTheme.ButtonEdge);
+                button.GetComponentInChildren<Text>().fontSize = 21;
                 if (decided) button.interactable = false;
-                PixelButton("선수단 보기", () => { if (OnShowSquad != null) OnShowSquad(id); }, body, 48f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
-                    .GetComponentInChildren<Text>().fontSize = 20;
+                PixelButton("선수단 보기", () => { if (OnShowSquad != null) OnShowSquad(id); }, buttons, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                    .GetComponentInChildren<Text>().fontSize = 21;
             }
             var stay = PixelButton((decided && string.IsNullOrEmpty(pendingTeamId) ? "[확정] " : "") + currentTeamName + " 잔류", () => onStay(), body, 68f,
                 decided && string.IsNullOrEmpty(pendingTeamId) ? PixelTheme.AccentFill : PixelTheme.QuietFill,
@@ -718,12 +839,41 @@ namespace MyFootballCareer
             if (decided) stay.interactable = false;
         }
 
+        // 지금 팀과의 차이 글자: 양수 ▲ 초록, 음수 ▼ 빨강, 같으면 "="
+        static string Delta(float diff, string format, out Color color)
+        {
+            if (Mathf.Abs(diff) < 0.5f) { color = PixelTheme.TextDim; return "="; }
+            color = diff > 0f ? new Color(.55f, .95f, .65f, 1f) : PixelTheme.DangerEdge;
+            return (diff > 0f ? "▲ " : "▼ ") + Mathf.Abs(diff).ToString(format);
+        }
+
+        RectTransform TileRow(Transform card)
+        {
+            var tiles = NewRect("Tiles", card); Height(tiles.gameObject, 72);
+            var th = tiles.gameObject.AddComponent<HorizontalLayoutGroup>();
+            th.spacing = 6; th.childControlWidth = true; th.childControlHeight = true; th.childForceExpandWidth = true; th.childForceExpandHeight = true;
+            return tiles;
+        }
+
+        RectTransform NewRectH(Transform parent, float height) { var r = NewRect("Line", parent); Height(r.gameObject, height); return r; }
+
+        // 카드의 작은 숫자 칸: 값, 차이(없으면 비움), 이름
+        void MiniTile(Transform row, string label, string value, string delta, Color deltaColor)
+        {
+            var tile = NewRect("Tile", row);
+            tile.gameObject.AddComponent<Image>().color = new Color(.09f, .12f, .19f, 1f);
+            MatchResultDialog.Fit(MatchResultDialog.Label(tile, font, value, 21, PixelTheme.Text, .04f, .50f, .96f, .98f, TextAnchor.MiddleCenter), 12);
+            if (!string.IsNullOrEmpty(delta))
+                MatchResultDialog.Fit(MatchResultDialog.Label(tile, font, delta, 14, deltaColor, .04f, .27f, .96f, .52f, TextAnchor.MiddleCenter), 10);
+            MatchResultDialog.Fit(MatchResultDialog.Label(tile, font, label, 13, PixelTheme.TextDim, .04f, .02f, .96f, .29f, TextAnchor.MiddleCenter), 9);
+        }
+
         // 돈, 주급, 동시 훈련 레벨과 다음 레벨 가격 (price < 0이면 최고 레벨)
         // pay: 경기 한 번에 실제로 받는 돈, agentPercent: 에이전트 보너스(%)
         public void SetMoney(long money, int pay, int agentPercent)
         {
-            if (moneyText == null) return;
             if (facilityMoneyText != null) facilityMoneyText.text = "보유 돈 " + SeasonSystem.Money(money);
+            if (moneyText == null) return;
             moneyText.text = "돈 " + SeasonSystem.Money(money) + "\n경기당 " + SeasonSystem.Money(pay) + " (주급 1주치)"
                 + (agentPercent > 0 ? "  에이전트 +" + agentPercent + "% 포함" : "");
         }
@@ -738,9 +888,8 @@ namespace MyFootballCareer
 
         public void SetRebirth(string text, bool available)
         {
-            if (rebirthText == null) return;
-            SetLines(rebirthText, text, 4);
-            rebirthFill.color = available ? PixelTheme.RebirthFill : PixelTheme.QuietFill;
+            if (rebirthText != null) SetLines(rebirthText, text, 4);
+            if (rebirthFill != null) rebirthFill.color = available ? PixelTheme.RebirthFill : PixelTheme.QuietFill;
         }
 
         // 경기 영상이 재생되는 동안에는 true입니다. 이 동안 훈련은 멈춥니다.
@@ -748,9 +897,16 @@ namespace MyFootballCareer
 
         // 경기 영상을 보여 주고, 끝나면(또는 건너뛰면) onFinished를 부릅니다. 그림이 없으면 바로 onFinished를 부릅니다.
         public TeamTactic ReplayOwnTactic, ReplayOppTactic;   // 다음 경기 영상의 두 팀 전술 (골 기록과 같은 장면이 나오게)
+        public int ReplaySeasonGoals = -1;                    // 다음 경기 영상 전까지의 시즌 골 수 (-1이면 친선 경기 등)
+        public int ReplaySeasonAssists = -1;                  // 다음 경기 영상 전까지의 시즌 도움 수
         public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished, TeamTactic ownTactic = null, TeamTactic oppTactic = null)
         {
             CloseDialog();
+            if (matchView != null)
+            {
+                matchView.SeasonGoalsBefore = ReplaySeasonGoals; ReplaySeasonGoals = -1;
+                matchView.SeasonAssistsBefore = ReplaySeasonAssists; ReplaySeasonAssists = -1;
+            }
             if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished, ownTactic ?? ReplayOwnTactic, oppTactic ?? ReplayOppTactic))
             {
                 if (onFinished != null) onFinished();
@@ -810,6 +966,45 @@ namespace MyFootballCareer
             int i = (int)r.Attribute;
             if (stage != null && stage.Available) stage.PlayUpgrade(r.Attribute, r.Outcome);   // 훈련장 선수가 그 능력치 동작과 결과 반응
             upgradeFx.Play(r, i >= 0 && i < statTexts.Length ? statTexts[i] : null, trainingSettings != null ? trainingSettings.doubleShare : 0.5f);
+        }
+
+        // ---------- 골 장면 미리보기 (개발용) ----------
+        GoalCelebration goalPreview;
+        int previewCount;
+
+        void PlayGoalPreview(TrainingStageDrills.GoalScene kind, string scorer, bool isAssist = false)
+        {
+            if (goalPreview != null) { goalPreview.DestroyAll(); goalPreview = null; }
+            var frames = new Sprite[8];
+            for (int i = 0; i < frames.Length; i++)
+            {
+                var tex = Resources.Load<Texture2D>("Art/Match/goal_" + i);
+                if (tex == null) { frames = new Sprite[0]; break; }
+                tex.filterMode = FilterMode.Point;
+                frames[i] = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
+            }
+            var scene = stage != null && stage.Available ? new TrainingStageView(stage) : null;
+            goalPreview = new GoalCelebration(font, safeRoot, frames, scene);
+            int goals = previewCount++ % 3 + 1;
+            bool header = kind == TrainingStageDrills.GoalScene.Cross || kind == TrainingStageDrills.GoalScene.Corner;
+            string how = kind == TrainingStageDrills.GoalScene.LongShot ? "중거리" : kind == TrainingStageDrills.GoalScene.Penalty ? "PK" : kind == TrainingStageDrills.GoalScene.FreeKick ? "프리킥"
+                : kind == TrainingStageDrills.GoalScene.Corner ? "코너킥" : "";
+            if (header) how = (how + " 헤딩").Trim();
+            bool assisted = kind == TrainingStageDrills.GoalScene.Pass || header || (kind == TrainingStageDrills.GoalScene.LongShot && previewCount % 2 == 0);   // 중거리는 혼자/패스 받아 번갈아
+            goalPreview.Play(new GoalInfo
+            {
+                minute = "67'", scorer = scorer, how = how, assist = assisted ? "J. Teammate" : "",
+                ownName = "My Team", oppName = "Rival FC", goalsFor = goals, goalsAgainst = 1,
+                matchGoals = goals, seasonGoal = 6 + goals, scene = kind,
+                isAssist = isAssist, partner = isAssist ? "J. Teammate" : ""
+            });
+        }
+
+        void TickGoalPreview(float dt)
+        {
+            if (goalPreview == null) return;
+            goalPreview.Tick(dt);
+            if (!goalPreview.Active) { goalPreview.DestroyAll(); goalPreview = null; }
         }
 
         // ---------- 팝업 ----------
@@ -891,11 +1086,20 @@ namespace MyFootballCareer
             if (overlay != null) Destroy(overlay);
             var root = NewRect("Dialog", safeRoot); Stretch(root); overlay = root.gameObject;
             root.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .78f);
-            var holder = NewRect("Holder", root);
-            holder.anchorMin = new Vector2(.06f, .5f); holder.anchorMax = new Vector2(.94f, .5f);
-            holder.pivot = new Vector2(.5f, .5f); holder.offsetMin = holder.offsetMax = Vector2.zero;
+            // 내용이 화면보다 길면 위아래로 스크롤하고, 짧으면 가운데에 둡니다.
+            var view = NewRect("View", root); Stretch(view);
+            view.offsetMin = new Vector2(0, 24); view.offsetMax = new Vector2(0, -24);
+            view.gameObject.AddComponent<Image>().color = Color.clear;
+            view.gameObject.AddComponent<RectMask2D>();
+            var holder = NewRect("Holder", view);
+            holder.anchorMin = new Vector2(.06f, 1f); holder.anchorMax = new Vector2(.94f, 1f);
+            holder.pivot = new Vector2(.5f, 1f); holder.offsetMin = holder.offsetMax = Vector2.zero;
             ConfigureStack(holder.gameObject, 0, 0, 0, 0, 0);
             holder.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var scroll = view.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = view; scroll.content = holder; scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 40f;
+            view.gameObject.AddComponent<DialogCenter>().Init(scroll, view, holder);
             var inner = Section(holder, title);
             var b = TextNode(body, inner, bodyFont); Height(b.gameObject, bodyHeight);
             return inner;
@@ -907,6 +1111,27 @@ namespace MyFootballCareer
         {
             var inner = BuildDialog(title, body, bodyHeight, bodyFont);
             PixelButton("확인", () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 76f);
+        }
+
+        // 카드형 팝업: build가 내용 칸(세로로 쌓임)을 채웁니다. 글자만 늘어놓는 대신 숫자 타일·배지로 보여 줍니다.
+        public void ShowCards(string title, Action<Transform, Font> build, Action onClose = null, string okLabel = "확인")
+        {
+            var inner = BuildDialog(title, "", 0f);
+            var body = NewRect("CardBody", inner);
+            ConfigureStack(body.gameObject, 0, 0, 0, 0, 8);
+            build(body, font);
+            PixelButton(okLabel, () => { CloseDialog(); if (onClose != null) onClose(); }, inner, 76f);
+        }
+
+        // 카드형 확인 창: 내용 + 실행 버튼 + 취소
+        public void ShowCardsConfirm(string title, Action<Transform, Font> build, string yesLabel, Action onYes)
+        {
+            var inner = BuildDialog(title, "", 0f);
+            var body = NewRect("CardBody", inner);
+            ConfigureStack(body.gameObject, 0, 0, 0, 0, 8);
+            build(body, font);
+            PixelButton(yesLabel, () => { CloseDialog(); if (onYes != null) onYes(); }, inner, 76f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
+            PixelButton("취소", () => CloseDialog(), inner, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         // 경기 결과 창: 결과 배지·큰 점수, 골 타임라인, 내 기록 타일, 보상 줄

@@ -181,6 +181,46 @@ namespace MyFootballCareer
             return sb.ToString();
         }
 
+        // 커리어 탭의 환생 조건 줄 (값이 0인 조건은 빼고)
+        public static List<RebirthCondition> Conditions(SaveData save, RebirthSettings rs)
+        {
+            var list = new List<RebirthCondition>();
+            if (rs.requiredDivision > 0)
+            {
+                int reached = BestDivisionReached(save);
+                bool ok = DivisionOk(save, rs);
+                list.Add(new RebirthCondition { label = rs.requiredDivision + "부 도달", value = reached > 0 ? "최고 " + reached + "부" : "-", ok = ok,
+                    progress = ok ? 1f : reached > 0 ? Mathf.Clamp01((float)rs.requiredDivision / reached) : 0f });
+            }
+            if (rs.requiredSeasons > 0)
+            {
+                int seasons = CompletedSeasons(save);
+                list.Add(new RebirthCondition { label = "끝낸 시즌", value = seasons + " / " + rs.requiredSeasons, ok = seasons >= rs.requiredSeasons,
+                    progress = (float)seasons / rs.requiredSeasons });
+            }
+            if (rs.requiredBestAttribute > 0)
+            {
+                float best = BestAttribute(save.player);
+                list.Add(new RebirthCondition { label = "최고 능력치", value = best.ToString("0.0") + " / " + rs.requiredBestAttribute.ToString("0.#"),
+                    ok = best >= rs.requiredBestAttribute, progress = best / rs.requiredBestAttribute });
+            }
+            return list;
+        }
+
+        // 환생 확인 팝업(카드형)에 보여 줄 내용
+        public static RebirthPreviewData PreviewView(SaveData save, CareerSettings career, RebirthSettings rs)
+        {
+            float gain = BonusGain(save, career, rs);
+            float total = save.rebirthBonusPercent + gain;
+            return new RebirthPreviewData
+            {
+                gain = gain, total = total, speedBefore = TrainingMultiplier(save), speedAfter = 1f + total / 100f,
+                keepPercent = Mathf.RoundToInt(rs.keepProgressRatio * 100f), capped = gain <= 0f,
+                reset = new[] { "능력치", "시즌·순위", "팀·이적", "돈", "노력 포인트", "노력 증가량", "시설" },
+                keep = new[] { "이름", "포지션", "특성", "환생 횟수", "보너스", "커리어 기록", "트로피" }
+            };
+        }
+
         // 환생 확인창에 보여줄 글: 초기화되는 것, 유지되는 것, 받을 보너스
         public static string DescribePreview(SaveData save, CareerSettings career, RebirthSettings rs)
         {
