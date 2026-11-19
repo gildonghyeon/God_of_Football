@@ -222,6 +222,9 @@ namespace MyFootballCareer
         // 코너킥·페널티킥·골문 앞 프리킥은 화면에서 천천히 보여 줍니다.
         public bool SetPieceFocus { get { return restart == Restart.Corner || restart == Restart.Penalty || (restart == Restart.FreeKick && rDanger) || (flying && focusFlight); } }
         public Action<ReplayEvent> SetPieceCalled;          // 득점 장면에서 페널티킥이 선언됨 등
+        // 후반전: 두 팀이 진영을 바꿉니다. 엔진 좌표는 그대로 두고 화면이 경기장을 180도 돌려 그립니다.
+        public bool SecondHalf { get; private set; }
+        public Action HalfTime;                             // 전반이 끝나고 후반 킥오프 준비를 시작함
         public readonly int[] RestartCount = new int[7];    // 재개 종류별 횟수 (확인용)
 
         enum Phase { None, Build, Pass, Receive, Shot, After, Press, SetPiece }
@@ -272,8 +275,10 @@ namespace MyFootballCareer
                     };
             lastPoss = 0; boost = 2f;
             foreach (var d in dots) { FormationTarget(d, 0f); d.x = d.tx; d.y = d.ty; }
-            carrier = Idx(0, kickSlot[0]);
-            dots[carrier].x = W / 2f; dots[carrier].y = L / 2f + 1f;
+            // 경기 시작: 두 팀이 중앙선 기준 자기 진영의 킥오프 자리에 선 채로 시작합니다.
+            StartRestart(Restart.Kickoff, 0, W / 2f, L / 2f, false);
+            RestartTargets();
+            foreach (var d in dots) { d.x = d.tx; d.y = d.ty; d.ax = d.tx; d.ay = d.ty; }
         }
 
         static int Idx(int team, int slot) { return team * 11 + slot; }
@@ -298,8 +303,18 @@ namespace MyFootballCareer
             }
             // 후반 시작: 전반에 킥오프하지 않은 팀이 킥오프
             if (!halfDone && clockMinute >= 45f && script == null && restart == Restart.None && !flying)
-            { halfDone = true; Kickoff(1); Call("후반 시작"); }
-            if (script == null && restart == Restart.None && pending.Count > 0 && clockMinute >= pending[0].minute - LeadMinutes)
+            {
+                halfDone = true; SecondHalf = true;
+                Kickoff(1);
+                rT = 6f;   // 하프타임 안내를 볼 시간
+                // 쉬는 시간 뒤 선수들은 바뀐 진영의 킥오프 자리에 서서 나옵니다.
+                RestartTargets();
+                foreach (var d in dots) { d.x = d.tx; d.y = d.ty; d.ax = d.tx; d.ay = d.ty; d.vx = 0f; d.vy = 0f; }
+                Call("후반 시작");
+                if (HalfTime != null) HalfTime();
+            }
+            if (script == null && restart == Restart.None && pending.Count > 0 && clockMinute >= pending[0].minute - LeadMinutes
+                && (halfDone || pending[0].minute <= 45f))   // 후반 장면은 진영을 바꾼 뒤에
             {
                 var next = pending[0]; pending.RemoveAt(0);
                 BeginScript(next);
@@ -937,10 +952,36 @@ namespace MyFootballCareer
                         }
                     }
                     break;
+                case Restart.Kickoff: KickoffSetup(); break;
                 case Restart.Corner: BoxSetup(true); break;
                 case Restart.FreeKick: if (rDanger) BoxSetup(false); break;
                 case Restart.Penalty: PenaltySetup(); break;
             }
+        }
+
+        // 킥오프: 두 팀 모두 중앙선 기준 자기 진영에 포메이션 모양으로 섭니다.
+        // 차는 팀은 공격수 둘이 공 옆에 서고, 상대 팀은 센터 서클(9.15m) 밖에 섭니다.
+        void KickoffSetup()
+        {
+            int partner = -1, best = 99;
+            for (int k = 1; k <= 10; k++)
+            {
+                int i = Idx(rTeam, k); if (i == rTaker) continue;
+                var kind = dots[i].def.kind;
+                int pr = kind == SlotKind.ST ? 0 : kind == SlotKind.AM ? 1 : kind == SlotKind.W ? 2 : kind == SlotKind.CM ? 3 : 9;
+                if (pr < best) { best = pr; partner = i; }
+            }
+            if (partner >= 0) Spot(partner, W / 2f + 3f, L / 2f + (rTeam == 0 ? 1.2f : -1.2f));
+            for (int t = 0; t < 2; t++)
+                for (int k = 0; k < 11; k++)
+                {
+                    int i = Idx(t, k); if (rUse[i]) continue;
+                    var d = dots[i];
+                    // 자기 골문에서의 깊이: 수비 0.07, 미드필더 0.25, 공격수 0.46 (중앙선은 0.5)
+                    float depth = k == 0 ? 0.03f : Mathf.Clamp(0.06f + (d.def.depth - 0.18f) / 0.5f * 0.40f, 0.05f, 0.46f);
+                    float x = t == 0 ? d.def.x : W - d.def.x;
+                    Spot(i, 34f + (x - 34f) * 0.9f, DepthY(t, depth));
+                }
         }
 
         static int BoxPriority(SlotKind k)
@@ -1034,10 +1075,6 @@ namespace MyFootballCareer
             {
                 var d = dots[i];
                 if (rUse[i]) { d.tx = rSx[i]; d.ty = rSy[i]; d.maxSpeed = d.slot == 0 ? 6f : SprintSpeed; continue; }
-                if (restart == Restart.Kickoff)   // 킥오프: 모두 자기 진영
-                {
-                    if (d.team == 0) d.ty = Mathf.Max(d.ty, L / 2f + 1f); else d.ty = Mathf.Min(d.ty, L / 2f - 1f);
-                }
                 if (d.team == rTeam) continue;
                 // 상대는 공에서 떨어져 섬 (스로인 3m, 그 밖 9.15m)
                 PushOff(d);
@@ -1064,14 +1101,20 @@ namespace MyFootballCareer
             if ((restart == Restart.Penalty || (restart == Restart.FreeKick && rDanger)) && rT < 0.5f)
             { rSx[rTaker] = rX; rSy[rTaker] = rY + Inward(rTeam) * 0.4f; }
             bool ready = DistTo(dots[rTaker], rSx[rTaker], rSy[rTaker]) < 1.5f;
-            if (restart == Restart.Kickoff && rT > -5f)   // 킥오프: 모두 자기 진영으로 돌아올 때까지
+            float giveUp = -2.5f;
+            if (restart == Restart.Kickoff)   // 킥오프: 모두 중앙선 기준 자기 진영에 들어오고, 상대는 센터 서클 밖으로 나갈 때까지
+            {
+                giveUp = -15f;
                 for (int i = 0; i < 22 && ready; i++)
                 {
                     if (i == rTaker) continue;
                     var d = dots[i];
-                    if (d.team == 0 ? d.y < L / 2f - 0.5f : d.y > L / 2f + 0.5f) ready = false;
+                    if (d.team == 0 ? d.y < L / 2f + 0.3f : d.y > L / 2f - 0.3f) ready = false;
+                    else if (d.team != rTeam && DistTo(d, rX, rY) < 8.5f) ready = false;
+                    else if (rT > -8f && rUse[i] && DistTo(d, rSx[i], rSy[i]) > 6f) ready = false;   // 대형 자리 가까이까지 (늦으면 진영만 확인)
                 }
-            if (rT > 0f || (!ready && rT > -2.5f)) return;
+            }
+            if (rT > 0f || (!ready && rT > giveUp)) return;
             ExecuteRestart();
         }
 

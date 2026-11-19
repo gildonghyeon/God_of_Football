@@ -113,7 +113,7 @@ namespace MyFootballCareer
             engine = new MatchReplayEngine(plan, youSlot, rng, ownTactic, oppTactic);
             engine.stats = stats;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
-            engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken; engine.SetPieceCalled = OnSetPiece;
+            engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken; engine.SetPieceCalled = OnSetPiece; engine.HalfTime = OnHalfTime;
             clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; closeupT = 0f; finishing = false; ourNote = 0; theirNote = 0;
             yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
             feedItems.Clear(); scorePulse = 0f; lastCallId = 0; callTimer = 0f;
@@ -379,6 +379,7 @@ namespace MyFootballCareer
             float pace = engine.SetPieceFocus ? 0.5f : 1f;
             pace *= speed / 2f;   // 1배속은 절반
             if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond * pace);
+            if (!engine.SecondHalf) clock = Mathf.Min(clock, 45f);   // 전반 추가 시간: 진영을 바꿀 때까지 45분에서 기다림
             if (clock >= 90f && engine.Busy)   // 혹시 장면이 끝나지 않아도 오래 기다리지 않음
             {
                 waitT += dt;
@@ -440,9 +441,12 @@ namespace MyFootballCareer
         }
 
         // 경기장 좌표(가로 0~68m, 세로 0~105m)를 그림 픽셀로 바꿉니다. 중앙선을 기준으로 위아래를 따로 맞춥니다.
-        static float MeterX(float mx) { return FieldLeft + mx / 68f * (FieldRight - FieldLeft); }
-        static float MeterY(float my)
+        // 후반에는 진영이 바뀌므로 경기장을 180도 돌려 그립니다.
+        bool Flip { get { return engine != null && engine.SecondHalf; } }
+        float MeterX(float mx) { if (Flip) mx = 68f - mx; return FieldLeft + mx / 68f * (FieldRight - FieldLeft); }
+        float MeterY(float my)
         {
+            if (Flip) my = 105f - my;
             return my <= 52.5f
                 ? FieldTop + my / 52.5f * (FieldMid - FieldTop)
                 : FieldMid + (my - 52.5f) / 52.5f * (FieldBottom - FieldMid);
@@ -523,6 +527,13 @@ namespace MyFootballCareer
         }
 
         // 득점 장면의 페널티킥 선언 (코너킥·프리킥은 경기장 위 판정 글자만)
+        void OnHalfTime()
+        {
+            SoundFx.Play(Sfx.Whistle);
+            Feed("45'", "전반 종료 · 진영 교체", NeutralColor);
+            ShowEvent("하프타임", "전반 " + goalsFor + " - " + goalsAgainst + "  ·  진영 교체", NeutralColor, 1.4f);
+        }
+
         void OnSetPiece(ReplayEvent ev)
         {
             if (ev.setPiece != SetPiece.Penalty) return;
