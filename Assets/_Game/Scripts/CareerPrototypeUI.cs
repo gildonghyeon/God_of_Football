@@ -536,6 +536,21 @@ namespace MyFootballCareer
                 string previewName = p.playerName;
                 var kinds = (TrainingStageDrills.GoalScene[])Enum.GetValues(typeof(TrainingStageDrills.GoalScene));
                 string[] names = { "드리블", "패스", "크로스 헤딩", "코너킥 헤딩", "프리킥", "페널티킥", "중거리 슛" };
+                // 수비 장면
+                var defKinds = (TrainingStageDrills.DefenseScene[])Enum.GetValues(typeof(TrainingStageDrills.DefenseScene));
+                string[] defNames = { "수비: 태클", "수비: 슈팅 블록", "수비: 골라인", "수비: 가로채기" };
+                for (int i = 0; i < defKinds.Length; i += 2)
+                {
+                    var drow = NewRect("DefensePreviewRow", Parent); Height(drow.gameObject, 60);
+                    var dh = drow.gameObject.AddComponent<HorizontalLayoutGroup>();
+                    dh.spacing = 8; dh.childControlWidth = true; dh.childControlHeight = true; dh.childForceExpandWidth = true; dh.childForceExpandHeight = true;
+                    for (int k = i; k < i + 2 && k < defKinds.Length; k++)
+                    {
+                        var dk = defKinds[k];
+                        PixelButton(defNames[k], () => PlayDefensePreview(dk, previewName), drow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                            .GetComponentInChildren<Text>().fontSize = 20;
+                    }
+                }
                 // 도움 장면: 내가 공을 보내고 동료가 넣음
                 var assistKinds = new[] { TrainingStageDrills.GoalScene.Pass, TrainingStageDrills.GoalScene.Cross, TrainingStageDrills.GoalScene.Corner, TrainingStageDrills.GoalScene.LongShot };
                 string[] assistNames = { "도움: 스루 패스", "도움: 크로스", "도움: 코너킥", "도움: 내준 패스" };
@@ -997,6 +1012,18 @@ namespace MyFootballCareer
                 ownName = "My Team", oppName = "Rival FC", goalsFor = goals, goalsAgainst = 1,
                 matchGoals = goals, seasonGoal = 6 + goals, scene = kind,
                 isAssist = isAssist, partner = isAssist ? "J. Teammate" : ""
+            });
+        }
+
+        void PlayDefensePreview(TrainingStageDrills.DefenseScene kind, string name)
+        {
+            if (goalPreview != null) { goalPreview.DestroyAll(); goalPreview = null; }
+            var scene = stage != null && stage.Available ? new TrainingStageView(stage) : null;
+            goalPreview = new GoalCelebration(font, safeRoot, new Sprite[0], scene);
+            goalPreview.Play(new GoalInfo
+            {
+                minute = "71'", scorer = name, isDefense = true, defense = kind, how = "", assist = "",
+                ownName = "My Team", oppName = "Rival FC", goalsFor = 1, goalsAgainst = 0, matchGoals = previewCount++ % 5 + 1
             });
         }
 

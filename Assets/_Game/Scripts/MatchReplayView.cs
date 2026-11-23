@@ -38,7 +38,9 @@ namespace MyFootballCareer
         public TrainingStageView SceneArt;   // 내 골 장면에 쓸 선수 그림 (훈련장과 같은 그림, 없으면 골망 장면)
         public int SeasonGoalsBefore = -1;
         public int SeasonAssistsBefore = -1;   // 이번 경기 전까지 시즌 도움 수 (-1이면 '시즌 N호 도움'을 보여 주지 않음)
-        ReplayEvent countedAssist;             // 도움을 이미 센 장면 (패스할 때 세고, 코너킥처럼 패스 신호가 없으면 골 때 셈)   // 이번 경기 전까지 시즌 골 수 (-1이면 '시즌 N호 골'을 보여 주지 않음, 친선 경기 등)
+        ReplayEvent countedAssist;             // 도움을 이미 센 장면 (패스할 때 세고, 코너킥처럼 패스 신호가 없으면 골 때 셈)
+        Position youPosition;                  // 내 포지션 (수비 장면 종류를 고를 때)
+        int defenseShown;                      // 이번 경기에 보여 준 수비 장면 수 (전반 첫 수비, 60분 뒤 첫 수비 - 최대 2번)   // 이번 경기 전까지 시즌 골 수 (-1이면 '시즌 N호 골'을 보여 주지 않음, 친선 경기 등)
         RectTransform pitchRect, youLabel, clockFill;
         readonly RectTransform[] dotRects = new RectTransform[22];
         RectTransform ballRect;
@@ -110,6 +112,7 @@ namespace MyFootballCareer
             record = m; onFinished = finished; ownName = ownTeamName; oppName = m.opponentName; playerName = player.playerName;
             ownTactic = ownTactic ?? new TeamTactic(); oppTactic = oppTactic ?? new TeamTactic();
             int mySlot = TacticSystem.YouSlot(ownTactic.formation, player.position);
+            youPosition = player.position; defenseShown = 0;
             youSlot = m.playerPlayed ? mySlot : -1;
             var rng = new System.Random(m.seed ^ 0x2f6e2b1);
             // 내 선수의 능력치가 영상 속 움직임에 반영됩니다. (속도, 후반 피로, 패스 정확도, 슛 속도와 유효 슈팅, 공 지키기)
@@ -382,7 +385,10 @@ namespace MyFootballCareer
             {
                 finishing = true; finishT = 1.3f;
                 SnapStats();
-                ShowEvent("경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName, NeutralColor, 1.3f);
+                bool cleanSheet = youSlot >= 0 && goalsAgainst == 0 && youPosition != Position.Forward;
+                ShowEvent(cleanSheet ? "무실점!" : "경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName + (cleanSheet ? "  ·  골문을 지켰다" : ""),
+                          cleanSheet ? TackleColor : NeutralColor, cleanSheet ? 1.6f : 1.3f);
+                if (cleanSheet) finishT = 1.6f;
                 SoundFx.Play(Sfx.FullTime);
                 Feed("90'", "경기 종료", NeutralColor);
             }
@@ -548,9 +554,44 @@ namespace MyFootballCareer
         void OnTackle(ReplayEvent ev)
         {
             yourTackles++;
-            Feed(Minute(), "태클! 공을 빼앗았다", TackleColor);
+            // 경기마다 두 번까지 내 수비 장면: 첫 수비, 그리고 60분 뒤 첫 수비. 나머지는 짧은 카드만
+            bool scene = celebration != null && (defenseShown == 0 || (defenseShown == 1 && clock >= 60f));
+            var kind = DefenseFor(youPosition, clock, yourTackles);
+            Feed(Minute(), DefenseFeed(kind), TackleColor);
+            if (scene)
+            {
+                defenseShown++;
+                bannerT = 0f; eventCard.gameObject.SetActive(false);
+                celebration.Play(new GoalInfo
+                {
+                    minute = Minute(), scorer = playerName, isDefense = true, defense = kind, how = "", assist = "",
+                    ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst, matchGoals = yourTackles
+                });
+                return;
+            }
             SoundFx.Play(Sfx.Tackle, 0.8f);
             ShowEvent("태클!", Minute() + "  공을 빼앗았다", TackleColor, 0.9f);
+        }
+
+        // 수비 장면 종류: 포지션마다 자주 나오는 수비가 다름 (수비수는 블록·걷어내기, 미드필더는 가로채기, 공격수는 전방 압박 태클)
+        static TrainingStageDrills.DefenseScene DefenseFor(Position pos, float minute, int count)
+        {
+            int[] w = pos == Position.Defender ? new[] { 3, 3, 2, 2 } : pos == Position.Midfielder ? new[] { 4, 1, 0, 5 } : new[] { 6, 0, 0, 4 };
+            int total = w[0] + w[1] + w[2] + w[3];
+            int r = Mathf.Abs((int)(minute * 7.3f) * 31 + count * 17) % total;   // 같은 경기 영상이면 같은 장면
+            for (int i = 0; i < 4; i++) { if (r < w[i]) return (TrainingStageDrills.DefenseScene)i; r -= w[i]; }
+            return TrainingStageDrills.DefenseScene.Tackle;
+        }
+
+        static string DefenseFeed(TrainingStageDrills.DefenseScene k)
+        {
+            switch (k)
+            {
+                case TrainingStageDrills.DefenseScene.Block: return "슈팅 블록! 몸으로 막았다";
+                case TrainingStageDrills.DefenseScene.Clearance: return "골라인 앞에서 걷어냈다!";
+                case TrainingStageDrills.DefenseScene.Interception: return "패스를 가로챘다!";
+                default: return "태클! 공을 빼앗았다";
+            }
         }
 
         // 골 장면 종류: 세트피스면 그 장면, 헤딩이면 크로스 헤딩, 도움이 있으면 패스 받아 슈팅, 아니면 드리블 돌파

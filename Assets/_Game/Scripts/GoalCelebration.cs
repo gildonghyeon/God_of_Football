@@ -12,6 +12,8 @@ namespace MyFootballCareer
         public TrainingStageDrills.GoalScene scene;   // 골 장면 종류 (드리블, 패스, 크로스 헤딩, 코너킥 헤딩, 프리킥, 페널티킥, 중거리)
         public bool isAssist;    // 내 도움으로 동료가 넣은 골 (ASSIST! 화면). 이때 matchGoals·seasonGoal은 도움 수
         public string partner;   // 도움일 때 골을 넣은 동료 이름
+        public bool isDefense;   // 내 수비 장면 (TACKLE! 등). 이때 matchGoals는 이번 경기 수비 횟수
+        public TrainingStageDrills.DefenseScene defense;
     }
 
     // 내가 골을 넣었을 때의 화면.
@@ -47,6 +49,10 @@ namespace MyFootballCareer
         readonly Outline goalShade;
         static readonly Color AssistColor = new Color(.45f, .92f, .78f, 1f);
         static readonly Color AssistDark = new Color(.04f, .28f, .22f, 1f);
+        static readonly Color DefenseColor = new Color(.62f, .95f, .48f, 1f);
+        static readonly Color DefenseDark = new Color(.10f, .30f, .06f, 1f);
+        readonly System.Collections.Generic.List<Image> rayImages = new System.Collections.Generic.List<Image>();
+        bool defenseMode;   // 수비 장면: 꽃가루 없이, 번쩍임과 빛줄기를 약하게
         readonly RectTransform[] confetti = new RectTransform[ConfettiCount];
         readonly Vector2[] cPos = new Vector2[ConfettiCount], cVel = new Vector2[ConfettiCount];
         readonly float[] cRot = new float[ConfettiCount], cSpin = new float[ConfettiCount];
@@ -74,7 +80,7 @@ namespace MyFootballCareer
             {
                 var bar = NewRect("Ray", rays); Center(bar, 0f, 0f, 40f, 1900f);
                 bar.localRotation = Quaternion.Euler(0f, 0f, i * 15f);
-                Img(bar, new Color(Gold.r, Gold.g, Gold.b, .09f));
+                rayImages.Add(Img(bar, new Color(Gold.r, Gold.g, Gold.b, .09f)));
             }
 
             // 장면 판 (금색 테두리): 내 캐릭터 골 장면, 또는 골망 그림
@@ -176,19 +182,33 @@ namespace MyFootballCareer
                 if (!string.IsNullOrEmpty(info.assist)) parts.Add("도움 " + info.assist);
                 if (info.seasonGoal > 0) parts.Add("시즌 " + info.seasonGoal + "호 골");
             }
+            defenseMode = info.isDefense;
+            if (info.isDefense)
+            {
+                parts.Clear();
+                parts.Add(DefenseKind(info.defense));
+                if (info.matchGoals > 0) parts.Add("이번 경기 수비 " + info.matchGoals + "회");
+            }
             detailText.text = parts.Count > 0 ? string.Join("   ·   ", parts) : "멋진 골!";
-            goalLabel.text = info.isAssist ? "ASSIST!" : "GOAL!";
-            goalLabel.color = info.isAssist ? AssistColor : Gold;
-            goalShade.effectColor = info.isAssist ? AssistDark : GoldDark;
+            goalLabel.text = info.isDefense ? DefenseTitle(info.defense) : info.isAssist ? "ASSIST!" : "GOAL!";
+            goalLabel.color = info.isDefense ? DefenseColor : info.isAssist ? AssistColor : Gold;
+            goalShade.effectColor = info.isDefense ? DefenseDark : info.isAssist ? AssistDark : GoldDark;
+            Color ray = info.isDefense ? DefenseColor : Gold;
+            foreach (var r in rayImages) r.color = new Color(ray.r, ray.g, ray.b, info.isDefense ? .06f : .09f);
             scoreText.text = info.ownName + "   <color=#FBCC47>" + info.goalsFor + "</color> - " + info.goalsAgainst + "   " + info.oppName;
-            if (info.isAssist) comboLabel.text = combo >= 3 ? "도움 " + combo + "개!" : combo == 2 ? "멀티 도움!" : "";
+            if (info.isDefense) { comboLabel.text = ""; combo = 0; }
+            else if (info.isAssist) comboLabel.text = combo >= 3 ? "도움 " + combo + "개!" : combo == 2 ? "멀티 도움!" : "";
             else comboLabel.text = combo >= 4 ? combo + "골 폭발!" : combo == 3 ? "해트트릭!" : combo == 2 ? "멀티골!" : "";
-            captionText.text = info.minute + "  " + info.scorer + "  " + (info.isAssist ? AssistCaption(info.scene) : SceneCaption(info.scene));
+            captionText.text = info.minute + "  " + info.scorer + "  " + (info.isDefense ? DefenseCaption(info.defense) : info.isAssist ? AssistCaption(info.scene) : SceneCaption(info.scene));
 
             root.SetActive(true);
             root.transform.SetAsLastSibling();
             goalAt = 0f;
-            if (scene != null) scene.PlayScene(TrainingStageDrills.MatchGoal(info.scene, out goalAt, info.isAssist || !string.IsNullOrEmpty(info.assist), info.isAssist));
+            if (scene != null)
+            {
+                if (info.isDefense) scene.PlayScene(TrainingStageDrills.MatchDefense(info.defense, out goalAt));
+                else scene.PlayScene(TrainingStageDrills.MatchGoal(info.scene, out goalAt, info.isAssist || !string.IsNullOrEmpty(info.assist), info.isAssist));
+            }
 
             // 꽃가루는 화면 위쪽에서 흩어져 떨어집니다 (골 순간부터).
             Rect area = rootRect.rect;
@@ -244,11 +264,11 @@ namespace MyFootballCareer
             if (!goalShown)
             {
                 goalShown = true;
-                SoundFx.Play(Sfx.Goal);
-                foreach (var c in confetti) c.gameObject.SetActive(true);
+                SoundFx.Play(defenseMode ? Sfx.Tackle : Sfx.Goal);
+                if (!defenseMode) foreach (var c in confetti) c.gameObject.SetActive(true);
             }
             SetA(captionText, Mathf.Clamp01(1f - tg / .2f));
-            SetA(flash, .85f * Mathf.Clamp01(1f - tg / .25f));
+            SetA(flash, (defenseMode ? .45f : .85f) * Mathf.Clamp01(1f - tg / .25f));
             raysGroup.alpha = Mathf.Clamp01(tg / .4f);
             rays.localRotation = Quaternion.Euler(0f, 0f, -tg * 22f);
 
@@ -310,6 +330,39 @@ namespace MyFootballCareer
                 case TrainingStageDrills.GoalScene.Pass: return "패스를 받아 슈팅!";
                 case TrainingStageDrills.GoalScene.LongShot: return "중거리 슛!";
                 default: return "드리블 돌파!";
+            }
+        }
+
+        static string DefenseTitle(TrainingStageDrills.DefenseScene d)
+        {
+            switch (d)
+            {
+                case TrainingStageDrills.DefenseScene.Block: return "BLOCKED!";
+                case TrainingStageDrills.DefenseScene.Clearance: return "CLEARED!";
+                case TrainingStageDrills.DefenseScene.Interception: return "INTERCEPT!";
+                default: return "TACKLE!";
+            }
+        }
+
+        static string DefenseCaption(TrainingStageDrills.DefenseScene d)
+        {
+            switch (d)
+            {
+                case TrainingStageDrills.DefenseScene.Block: return "슈팅을 몸으로 막는다!";
+                case TrainingStageDrills.DefenseScene.Clearance: return "골문 앞 위기!";
+                case TrainingStageDrills.DefenseScene.Interception: return "패스 길을 읽었다!";
+                default: return "상대 돌파를 막는다!";
+            }
+        }
+
+        static string DefenseKind(TrainingStageDrills.DefenseScene d)
+        {
+            switch (d)
+            {
+                case TrainingStageDrills.DefenseScene.Block: return "슈팅 블록";
+                case TrainingStageDrills.DefenseScene.Clearance: return "골라인 걷어내기";
+                case TrainingStageDrills.DefenseScene.Interception: return "가로채기 후 역습";
+                default: return "슬라이딩 태클";
             }
         }
 
