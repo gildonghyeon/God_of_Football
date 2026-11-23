@@ -3,12 +3,20 @@ using UnityEngine;
 namespace MyFootballCareer
 {
     // 선수 외형(머리색, 피부색, 유니폼). 원본 캐릭터 그림에서 머리카락·피부·유니폼 영역을 찾아 색만 바꿉니다.
-    // 머리 모양은 그림 자체이므로 바뀌지 않습니다. 새 머리색·피부색·유니폼을 늘리려면 아래 표에 한 줄씩 추가하면 됩니다.
+    // 머리 모양은 그림 자체이므로 바뀌지 않습니다. 머리색·피부색은 아래 표에, 유니폼은 Kits 목록(기본 몇 벌 + TeamKits의 팀 유니폼)에 있습니다.
     public static class PlayerLook
     {
         public static readonly string[] HairNames = { "갈색", "검정", "밤색", "금발", "빨강", "은색", "파랑" };
         public static readonly string[] SkinNames = { "밝은 톤", "황갈색", "갈색", "어두운 톤" };
-        public static readonly string[] KitNames = { "파랑", "빨강", "흰색", "노랑", "초록", "남색", "하늘 줄무늬", "분홍" };
+        // 축구화 색. 첫 번째(원본 검정)는 바꾸지 않습니다.
+        public static readonly string[] BootNames = { "검정", "흰색", "빨강", "파랑", "노랑", "형광", "주황", "금색", "분홍", "하늘" };
+        static readonly Color32[] BootRgb =
+        {
+            new Color32(0, 0, 0, 255), new Color32(246, 246, 246, 255), new Color32(222, 40, 44, 255), new Color32(40, 104, 232, 255),
+            new Color32(250, 214, 40, 255), new Color32(168, 255, 56, 255), new Color32(255, 132, 30, 255), new Color32(226, 182, 64, 255),
+            new Color32(255, 112, 182, 255), new Color32(70, 214, 240, 255)
+        };
+        public static int BootCount { get { return BootNames.Length; } }
 
         // 머리색: 색상(도), 채도, 기준 밝기. 첫 번째(원본)는 바꾸지 않습니다.
         static readonly float[] HairHue = { 0f, 20f, 22f, 44f, 13f, 220f, 214f };
@@ -20,28 +28,17 @@ namespace MyFootballCareer
             new Color32(0, 0, 0, 255), new Color32(222, 168, 122, 255), new Color32(170, 116, 78, 255), new Color32(116, 74, 50, 255)
         };
 
-        // 유니폼: 상의, 상의 줄무늬(투명이면 없음), 하의, 양말 띠, 등번호·장식(투명이면 원래 흰색). 첫 번째(원본)는 바꾸지 않습니다.
+        // 유니폼 목록. 0번(null)은 원래 그림 그대로, 그다음은 팀마다 홈·원정 유니폼 (TeamKits)
         static readonly Color32 None = new Color32(0, 0, 0, 0);
-        static readonly Color32 White = new Color32(244, 244, 244, 255), Black = new Color32(38, 38, 38, 255);
-        static readonly Color32[] KitShirt =
+        public static readonly List<KitDesign> Kits = BuildKits();
+        static List<KitDesign> BuildKits()
         {
-            None, new Color32(212, 42, 42, 255), White, new Color32(242, 204, 26, 255),
-            new Color32(30, 154, 68, 255), new Color32(30, 44, 110, 255), new Color32(124, 196, 240, 255), new Color32(242, 160, 196, 255)
-        };
-        static readonly Color32[] KitStripe = { None, None, None, None, None, None, White, None };
-        static readonly Color32[] KitShorts =
-        {
-            None, White, Black, new Color32(31, 79, 196, 255), White, White, Black, new Color32(242, 160, 196, 255)
-        };
-        static readonly Color32[] KitSocks =
-        {
-            None, new Color32(212, 42, 42, 255), White, White, new Color32(30, 154, 68, 255), new Color32(208, 42, 42, 255), White, new Color32(242, 160, 196, 255)
-        };
-        static readonly Color32[] KitTrim =
-        {
-            None, None, Black, new Color32(30, 138, 60, 255), None, None, new Color32(30, 44, 110, 255), Black
-        };
-        const int StripeWidth = 4;                            // 줄무늬 한 줄의 폭(픽셀)
+            var list = new List<KitDesign> { null };
+            TeamKits.AddTo(list);
+            return list;
+        }
+        public static void EnsureKits() { if (Kits == null) throw new System.InvalidOperationException(); }   // 목록을 먼저 만들게 하는 용도
+        public static KitDesign Kit(int i) { return i > 0 && i < Kits.Count ? Kits[i] : null; }
 
         const float BaseHairValue = 0.22f;                    // 원본 머리카락의 보통 밝기
         const float HairEdgeShade = 0.6f;                     // 피부와 맞닿은 머리 가장자리의 밝기 배율
@@ -54,17 +51,17 @@ namespace MyFootballCareer
 
         public static int HairCount { get { return HairNames.Length; } }
         public static int SkinCount { get { return SkinNames.Length; } }
-        public static int KitCount { get { return KitNames.Length; } }
+        public static int KitCount { get { return Kits.Count; } }
 
         // 그림 데이터(png 파일 내용)를 읽어서 색을 바꾼 질감을 만듭니다. 쓰고 나면 Destroy로 지워 주세요.
-        public static Texture2D LoadRecolored(byte[] pngBytes, int hair, int skin, int kit)
+        public static Texture2D LoadRecolored(byte[] pngBytes, int hair, int skin, int kit, int boots = 0)
         {
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             if (!tex.LoadImage(pngBytes)) { Object.Destroy(tex); return null; }
-            if (hair > 0 || skin > 0 || kit > 0)
+            if (hair > 0 || skin > 0 || kit > 0 || boots > 0)
             {
                 var pixels = tex.GetPixels32();
-                Recolor(pixels, tex.width, tex.height, hair, skin, kit);
+                Recolor(pixels, tex.width, tex.height, hair, skin, kit, boots);
                 tex.SetPixels32(pixels);
                 tex.Apply(false, false);
             }
@@ -73,12 +70,13 @@ namespace MyFootballCareer
             return tex;
         }
 
-        public static void Recolor(Color32[] px, int w, int h, int hair, int skin, int kit)
+        public static void Recolor(Color32[] px, int w, int h, int hair, int skin, int kit, int boots = 0)
         {
             hair = Mathf.Clamp(hair, 0, HairCount - 1);
             skin = Mathf.Clamp(skin, 0, SkinCount - 1);
             kit = Mathf.Clamp(kit, 0, KitCount - 1);
-            if (hair == 0 && skin == 0 && kit == 0) return;
+            boots = Mathf.Clamp(boots, 0, BootCount - 1);
+            if (hair == 0 && skin == 0 && kit == 0 && boots == 0) return;
             int n = w * h;
             var hue = new float[n]; var sat = new float[n]; var val = new float[n];
             var opaque = new bool[n]; var hairMask = new bool[n]; var skinMask = new bool[n];
@@ -215,7 +213,23 @@ namespace MyFootballCareer
             }
 
             // 7) 유니폼 부위 나누기
-            byte[] part = kit > 0 ? FindKitParts(w, h, hue, sat, val, opaque, hairMask, skinMask) : null;
+            var design = Kit(kit);
+            byte[] part = design != null || boots > 0 ? FindKitParts(w, h, hue, sat, val, opaque, hairMask, skinMask) : null;
+            bool[] bootMask = boots > 0 ? FindBoots(w, h, sat, val, opaque, hairMask, skinMask, part) : null;
+            // 축구화 부위: 1 윗부분(밝게), 2 밑창(맨 아래 줄, 어둡게), 3 발목(양말 맨 아래 줄을 축구화 색으로 덮어 발목까지 올라오게)
+            byte[] bootPart = bootMask != null ? BootParts(w, h, bootMask, opaque, val, sat, skinMask) : null;
+            float bootHue = 0f, bootS = 0f, bootV = 0f;
+            if (boots > 0) Color.RGBToHSV((Color)BootRgb[boots], out bootHue, out bootS, out bootV);
+            if (design == null) part = null;   // 유니폼은 그대로 (축구화를 찾는 데만 씀)
+            // 상의가 차지하는 범위 (어깨띠·반반 무늬의 기준)
+            var shirtBox = new RectInt(0, 0, w, h);
+            if (part != null)
+            {
+                int x0 = w, y0 = h, x1 = -1, y1 = -1;
+                for (int i = 0; i < n; i++)
+                    if (part[i] == PartShirt) { int x = i % w, y = i / w; x0 = Mathf.Min(x0, x); x1 = Mathf.Max(x1, x); y0 = Mathf.Min(y0, y); y1 = Mathf.Max(y1, y); }
+                if (x1 >= x0) shirtBox = new RectInt(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+            }
 
             // 8) 색 바꾸기: 밝고 어두운 정도(음영)는 그대로 두고 색만 바꿉니다.
             //    피부와 맞닿은 머리 가장자리는 조금 어둡게 해서 밝은 머리색이 경계선처럼 튀지 않게 합니다.
@@ -233,20 +247,29 @@ namespace MyFootballCareer
                 }
                 else if (skin > 0 && skinMask[i])
                     c = Color.HSVToRGB(skinHue, Mathf.Clamp01(skinS * sat[i] / BaseSkinSat), Mathf.Clamp01(skinV * val[i] / BaseSkinVal));
+                else if (bootPart != null && bootPart[i] != 0)
+                {
+                    // 윗부분은 고르게 밝게 (원래 음영은 살짝만), 밑창은 어둡게, 발목은 윗부분보다 조금 밝게
+                    float shade = bootPart[i] == 2 ? 0.38f
+                                : bootPart[i] == 3 ? 1f
+                                : Mathf.Lerp(0.84f, 1f, Mathf.Clamp01(val[i] / 0.18f));
+                    float s2 = bootPart[i] == 2 ? Mathf.Min(bootS, 0.5f) : bootS;
+                    c = Color.HSVToRGB(bootHue, s2, Mathf.Clamp01(bootV * shade));
+                }
                 else if (part != null && part[i] != PartNone)
                 {
                     Color32 target;
                     switch (part[i])
                     {
                         case PartShirt:
-                            target = KitStripe[kit].a > 0 && (i % w) / StripeWidth % 2 == 1 ? KitStripe[kit] : KitShirt[kit];
+                            target = design.ShirtAt(i % w, i / w, shirtBox);
                             c = Tint(target, sat[i], val[i], BaseShirtSat, BaseShirtVal); break;
-                        case PartSocks: c = Tint(KitSocks[kit], sat[i], val[i], BaseShirtSat, BaseShirtVal); break;
-                        case PartShorts: c = Tint(KitShorts[kit], 0f, val[i], 0f, BaseWhiteVal); break;
+                        case PartSocks: c = Tint(design.socks, sat[i], val[i], BaseShirtSat, BaseShirtVal); break;
+                        case PartShorts: c = Tint(design.shorts, 0f, val[i], 0f, BaseWhiteVal); break;
                         case PartNeutral: c = new Color(val[i], val[i], val[i]); break;
                         default:
-                            if (KitTrim[kit].a == 0) continue;
-                            c = Tint(KitTrim[kit], 0f, val[i], 0f, BaseWhiteVal); break;
+                            if (design.trim.a == 0) continue;
+                            c = Tint(design.trim, 0f, val[i], 0f, BaseWhiteVal); break;
                     }
                 }
                 else continue;
@@ -488,6 +511,191 @@ namespace MyFootballCareer
         }
 
         // 8방향으로 이어진 덩어리 목록. label에는 픽셀마다 덩어리 번호(없으면 -1)를 넣습니다.
+        // 축구화: 양말 바로 아래의 어두운 칸. 바깥 윤곽선(투명과 맞닿은 칸)은 검정 그대로 두고 안쪽만 칠합니다.
+        //  1) 양말 = 양말 띠 + 다리(피부)·양말 띠·하의에 붙은 흰 칸 (공의 흰색은 다리에 닿지 않아 빠짐)
+        //  2) 어두운 칸에서 같은 열을 위로 따라가 6칸 안에 처음 만나는 밝은 칸이 양말이고,
+        //     아래로 따라가면 6칸 안에 그림 바깥(발바닥 밑)에 닿아야 축구화
+        //     (다리 사이 그림자는 위로 가면 하의를, 공의 무늬는 공의 흰색을, 양말 띠의 그늘은 아래로 흰 양말을 만나서 빠짐)
+        //  3) 옆모습의 앞코처럼 양말 바로 아래가 아닌 부분은 축구화 칸 옆으로 몇 칸 넓힘
+        static bool[] FindBoots(int w, int h, float[] sat, float[] val, bool[] opaque, bool[] hairMask, bool[] skinMask, byte[] part)
+        {
+            int n = w * h;
+            var boot = new bool[n];
+            if (part == null) return boot;
+            int minY = h, maxY = -1;
+            for (int i = 0; i < n; i++) if (opaque[i]) { int y = i / w; minY = Mathf.Min(minY, y); maxY = Mathf.Max(maxY, y); }
+            if (maxY < 0) return boot;
+            float lowLimit = minY + (maxY - minY) * 0.45f;   // 그림 데이터는 아래 줄부터: y가 작을수록 아래
+
+            // 1) 양말
+            var light = new bool[n];
+            for (int i = 0; i < n; i++)
+                light[i] = opaque[i] && !skinMask[i] && (part[i] == PartNone || part[i] == PartNeutral) && val[i] > 0.4f && sat[i] < 0.38f;   // 그늘진 먼 쪽 다리의 회색 양말 포함
+            var sock = new bool[n];
+            for (int i = 0; i < n; i++) sock[i] = part[i] == PartSocks;
+            var lightParts = Components(light, w, h, out _);
+            foreach (var c in lightParts)
+            {
+                bool touches = false;
+                foreach (int j in c)
+                {
+                    int x = j % w, y = j / w;
+                    for (int dy = -1; dy <= 1 && !touches; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                            int k = ny * w + nx;
+                            if (part[k] == PartSocks || part[k] == PartShorts || skinMask[k]) { touches = true; break; }
+                        }
+                    if (touches) break;
+                }
+                if (touches) foreach (int j in c) sock[j] = true;
+            }
+
+            // 안쪽의 어두운 칸
+            var dark = new bool[n];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (!opaque[i] || hairMask[i] || skinMask[i] || val[i] >= 0.24f || y > lowLimit || part[i] == PartShirt) continue;
+                    bool edge = x == 0 || y == 0 || x == w - 1 || y == h - 1
+                             || !opaque[i - 1] || !opaque[i + 1] || !opaque[i - w] || !opaque[i + w];
+                    if (!edge) dark[i] = true;
+                }
+
+            // 축구화는 다리 아래에만: 같은 열(또는 바로 옆 열) 위쪽 10칸 안에 양말이 있어야 함
+            // (다리 사이의 어두운 틈이나 다리 바깥의 두꺼운 윤곽선은 위에 양말이 없어서 빠짐)
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (!dark[i]) continue;
+                    bool under = false;
+                    for (int dx = -1; dx <= 1 && !under; dx++)
+                    {
+                        int cx = x + dx;
+                        if (cx < 0 || cx >= w) continue;
+                        for (int k = 1; k <= 10 && y + k < h; k++)
+                            if (sock[(y + k) * w + cx]) { under = true; break; }
+                    }
+                    if (!under) dark[i] = false;
+                }
+
+            // 2) 시작: 같은 열 바로 위(어두운 칸만 지나 4칸 안)가 양말이고, 아래로 어두운 칸만 지나 8칸 안에 발바닥 밑(그림 바깥)이 있는 칸
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (dark[i] && TallOk(x, y, w, h, opaque, val, sock) && Sole(x, y, w, h, opaque, val, 8)) boot[i] = true;
+                }
+
+            // 3) 넓히기: 옆(앞코·뒤꿈치)과 아래(발바닥 쪽)로만. 위로는 넓히지 않아 다리 가장자리를 타고 올라가지 않음
+            //    (위로 번지면 신발 앞쪽이 들린 구두처럼 보임)
+            for (int pass = 0; pass < 12; pass++)
+            {
+                var add = new List<int>();
+                for (int y = 0; y < h - 1; y++)
+                    for (int x = 1; x < w - 1; x++)
+                    {
+                        int i = y * w + x;
+                        if (!dark[i] || boot[i]) continue;
+                        if (!(boot[i - 1] || boot[i + 1] || boot[i + w])) continue;   // 왼쪽·오른쪽·바로 위 칸이 축구화 (그림 데이터는 y+1이 위)
+                        if (Sole(x, y, w, h, opaque, val, 8)) add.Add(i);
+                    }
+                if (add.Count == 0) break;
+                foreach (int i in add) boot[i] = true;
+            }
+
+            // 4) 축구화 모양이 아닌 조각은 지움.
+            //    땅에 닿은 발(인물 맨 아래에서 6줄 안)은 그대로 두고, 들린 발은 다리 아래쪽 30% 안에서
+            //    옆으로 넓고 꽉 찬 덩어리만 축구화로 봄 (들린 다리를 따라 생긴 가늘거나 비스듬한 획은 지움)
+            float liftLimit = minY + (maxY - minY) * 0.3f;
+            foreach (var c in Components(boot, w, h, out _))
+            {
+                int y0 = h, y1 = -1, x0 = w, x1 = -1;
+                foreach (int j in c) { int y = j / w, x = j % w; y0 = Mathf.Min(y0, y); y1 = Mathf.Max(y1, y); x0 = Mathf.Min(x0, x); x1 = Mathf.Max(x1, x); }
+                int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+                bool keep;
+                if (bh < 3 || bw < 3) keep = false;                                         // 한두 줄짜리 윤곽선
+                else if (y0 - minY <= 6) keep = true;                                       // 땅에 닿은 발
+                else keep = y0 <= liftLimit && bw >= 4 && bw >= bh && c.Count >= 0.55f * bw * bh;   // 들린 발
+                if (!keep) foreach (int j in c) boot[j] = false;
+            }
+            return boot;
+        }
+
+        // 축구화를 윗부분·밑창·발목으로 나눕니다.
+        //  밑창: 축구화 칸 중 바로 아래가 그림 바깥이거나 윤곽선인 칸 (발바닥 줄)
+        //  발목: 축구화 맨 위 칸 바로 위(또는 윤곽선 한 줄 위)의 양말 칸
+        static byte[] BootParts(int w, int h, bool[] boot, bool[] opaque, float[] val, float[] sat, bool[] skinMask)
+        {
+            int n = w * h;
+            var part = new byte[n];
+            for (int i = 0; i < n; i++) if (boot[i]) part[i] = 1;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (!boot[i]) continue;
+                    // 바로 아래(그림 데이터는 y-1이 아래)가 축구화가 아니면 밑창
+                    if (y == 0 || !boot[i - w]) part[i] = 2;
+                    // 바로 위가 축구화가 아니면, 그 위의 양말 한 줄을 발목으로
+                    if (y + 1 < h && !boot[i + w])
+                    {
+                        // 2칸 안에 흰 양말이 바로 위에 있을 때만: 사이 윤곽선은 축구화 윗부분, 양말 맨 아래 줄은 발목
+                        int found = 0;
+                        for (int k = 1; k <= 2 && y + k < h; k++)
+                        {
+                            int j = (y + k) * w + x;
+                            if (!opaque[j] || skinMask[j]) break;
+                            if (val[j] > 0.4f && sat[j] < 0.38f) { found = k; break; }
+                            if (val[j] >= 0.24f) break;
+                        }
+                        if (found > 0)
+                        {
+                            for (int k = 1; k < found; k++) part[(y + k) * w + x] = 1;
+                            part[(y + found) * w + x] = 3;
+                        }
+                    }
+                }
+            // 밑창이 축구화의 거의 전부인 얇은 칸(한 줄짜리)은 윗부분으로 (밑창만 보이면 슬리퍼처럼 보임)
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (part[i] == 2 && (y + 1 >= h || part[i + w] == 0 || part[i + w] == 3)) part[i] = 1;
+                }
+            return part;
+        }
+
+        // 아래로 어두운 칸만 지나 6칸 안에 그림 바깥에 닿는지 (발바닥 쪽인지)
+        // 같은 열 바로 위(어두운 칸만 지나 4칸 안)가 양말인지: 양말 바로 밑의 축구화 몸통 열
+        static bool TallOk(int x, int y, int w, int h, bool[] opaque, float[] val, bool[] sock)
+        {
+            for (int k = 1; k <= 4 && y + k < h; k++)
+            {
+                int j = (y + k) * w + x;
+                if (!opaque[j]) return false;
+                if (val[j] < 0.24f) continue;
+                return sock[j];
+            }
+            return false;
+        }
+
+        static bool Sole(int x, int y, int w, int h, bool[] opaque, float[] val, int limit = 5)
+        {
+            for (int k = 1; k <= limit; k++)
+            {
+                if (y - k < 0) return true;
+                int j = (y - k) * w + x;
+                if (!opaque[j]) return true;
+                if (val[j] >= 0.24f) return false;
+            }
+            return false;
+        }
+
         static List<List<int>> Components(bool[] mask, int w, int h, out int[] label)
         {
             int n = w * h;

@@ -33,6 +33,7 @@ namespace MyFootballCareer
 
     public class SquadView
     {
+        public string teamId;        // 유니폼 그림용
         public string division;      // 예: "3부 리그"
         public float strength, required, avgAge, starterAvg;
         public TeamTactic tactic;
@@ -246,7 +247,7 @@ namespace MyFootballCareer
         {
             var team = ms.FindTeam(teamId);
             var squad = Find(save, teamId);
-            var v = new SquadView();
+            var v = new SquadView { teamId = teamId };
             if (team == null || squad == null) return v;
             v.division = division > 0 ? ms.DivisionName(division) : "";
             v.strength = team.strength; v.required = team.requiredRating;

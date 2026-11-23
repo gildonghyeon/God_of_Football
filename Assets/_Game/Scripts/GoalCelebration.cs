@@ -13,6 +13,7 @@ namespace MyFootballCareer
         public bool isAssist;    // 내 도움으로 동료가 넣은 골 (ASSIST! 화면). 이때 matchGoals·seasonGoal은 도움 수
         public string partner;   // 도움일 때 골을 넣은 동료 이름
         public bool isDefense;   // 내 수비 장면 (TACKLE! 등). 이때 matchGoals는 이번 경기 수비 횟수
+        public int oppKit = -1;  // 장면 속 상대 팀 유니폼 (PlayerLook.Kits 번호, -1이면 기본 빨간 유니폼)
         public TrainingStageDrills.DefenseScene defense;
     }
 
@@ -206,6 +207,7 @@ namespace MyFootballCareer
             goalAt = 0f;
             if (scene != null)
             {
+                scene.SetOpponentKit(info.oppKit);
                 if (info.isDefense) scene.PlayScene(TrainingStageDrills.MatchDefense(info.defense, out goalAt));
                 else scene.PlayScene(TrainingStageDrills.MatchGoal(info.scene, out goalAt, info.isAssist || !string.IsNullOrEmpty(info.assist), info.isAssist));
             }

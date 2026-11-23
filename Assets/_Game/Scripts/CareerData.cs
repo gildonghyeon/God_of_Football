@@ -24,6 +24,7 @@ namespace MyFootballCareer
         public Trait trait;
         public float shooting, passing, dribbling, defending, stamina;
         public int hairColor, skinTone, kitColor;   // 외형: PlayerLook의 머리색·피부색·유니폼 번호 (0이 원래 모습)
+        public int bootColor;                       // 축구화 색 (PlayerLook.BootNames, 0이 원래 검정)
 
         public float Get(AttributeKind kind)
         {

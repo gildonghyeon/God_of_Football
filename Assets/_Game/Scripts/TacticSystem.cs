@@ -77,6 +77,13 @@ namespace MyFootballCareer
         {
             if (team == null) return new TeamTactic { formation = Formation.F442, style = TacticStyle.Possession };
             if (cache.TryGetValue(team.id, out var t)) return t;
+            // 팀마다 정한 전술 (그 팀 이름이 떠올리게 하는 클럽의 경기 방식)
+            if (TeamIdentity.TryGet(team.id, out var id))
+            {
+                t = new TeamTactic { formation = id.formation, style = id.style };
+                cache[team.id] = t;
+                return t;
+            }
             int h = 17; unchecked { foreach (char ch in team.id) h = h * 31 + ch; }
             var rng = new System.Random(h ^ 0x7ac71c);
             t = new TeamTactic { formation = (Formation)rng.Next(5) };
@@ -99,18 +106,6 @@ namespace MyFootballCareer
         public static string StyleName(TacticStyle s)
         {
             switch (s) { case TacticStyle.Counter: return "역습"; case TacticStyle.HighPress: return "전방 압박"; case TacticStyle.LowBlock: return "내려선 수비"; case TacticStyle.Wing: return "측면 공격"; default: return "점유"; }
-        }
-
-        public static string StyleNote(TacticStyle s)
-        {
-            switch (s)
-            {
-                case TacticStyle.Counter: return "공을 뺏으면 빠르게 앞으로";
-                case TacticStyle.HighPress: return "높은 곳부터 둘이서 압박";
-                case TacticStyle.LowBlock: return "깊게 내려서 좁게 지킴";
-                case TacticStyle.Wing: return "측면으로 벌려 크로스";
-                default: return "짧은 패스로 공을 지배";
-            }
         }
 
         public static string Describe(TeamTactic t) { return FormationName(t.formation) + " · " + StyleName(t.style); }

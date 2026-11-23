@@ -126,12 +126,35 @@ namespace MyFootballCareer
         readonly List<Actor> extras = new List<Actor>();
         readonly List<UnityEngine.Object> allyObjects = new List<UnityEngine.Object>();
         int allyKey = -1;
+        // 상대(red) 그림을 그 팀 유니폼으로 바꾼 것 (경기 골 장면). 무대마다 따로 만듭니다.
+        readonly List<UnityEngine.Object> oppObjects = new List<UnityEngine.Object>();
+        readonly Dictionary<string, Sprite[]> oppStrips = new Dictionary<string, Sprite[]>();
+        int oppKit = -1;
+
+        // 상대 팀 유니폼 (-1이면 원래 빨간 유니폼). 머리색·피부색은 나·동료와 다르게.
+        public void SetOpponentKit(int kit)
+        {
+            if (share == null || kit == oppKit) return;
+            foreach (var obj in oppObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
+            oppObjects.Clear(); oppStrips.Clear();
+            oppKit = kit;
+            if (kit < 0) { foreach (var kv in share.strips) if (kv.Key.StartsWith("red_")) strips[kv.Key] = kv.Value; return; }
+            int hair = Mathf.Max(0, share.lookHair), skin = Mathf.Max(0, share.lookSkin);
+            int h = (hair + 4) % PlayerLook.HairCount, s = (skin + 2) % PlayerLook.SkinCount;
+            foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
+                foreach (string view in new[] { "front", "side", "back" })
+                    LoadRecoloredStrip("blue_" + anim + "_" + view, "red_" + anim + "_" + view, h, s, kit, oppObjects);
+            foreach (string anim in new[] { "jump", "cheer", "fall" })
+                LoadRecoloredStrip("blue_" + anim + "_x", "red_" + anim + "_x", h, s, kit, oppObjects);
+            foreach (var kv in strips) if (kv.Key.StartsWith("red_")) oppStrips[kv.Key] = kv.Value;
+        }
 
         // 우리 팀 동료 그림(ally): 내 유니폼 색에 머리색·피부색만 다르게. 외형이 바뀌었을 때만 다시 만듭니다.
         void PrepareAlly()
         {
             if (share == null) return;
             foreach (var kv in share.strips) strips[kv.Key] = kv.Value;   // 내 외형이 바뀌었으면 새 그림으로
+            foreach (var kv in oppStrips) strips[kv.Key] = kv.Value;      // 상대 팀 유니폼은 그대로
             int hair = Mathf.Max(0, share.lookHair), skin = Mathf.Max(0, share.lookSkin), kit = Mathf.Max(0, share.lookKit);
             int key = (hair * 31 + skin) * 31 + kit;
             if (key == allyKey) return;
@@ -153,7 +176,12 @@ namespace MyFootballCareer
         }
 
         // 이 무대가 만든 그림을 지웁니다 (경기 영상을 닫을 때)
-        public void Dispose() { DisposeAlly(); }
+        public void Dispose()
+        {
+            DisposeAlly();
+            foreach (var obj in oppObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
+            oppObjects.Clear(); oppStrips.Clear(); oppKit = -1;
+        }
 
         // 한 번 보여 줄 장면을 처음부터 바로 시작합니다 (시작 자리로 걸어가지 않음). Create 뒤에 부르세요.
         public void PlayScene(StageDrill drill)
@@ -181,23 +209,25 @@ namespace MyFootballCareer
         }
 
         // ---------- 내 선수 외형 ----------
-        int lookHair = -1, lookSkin = -1, lookKit = -1;
+        int lookHair = -1, lookSkin = -1, lookKit = -1, lookBoots = -1;
         readonly List<UnityEngine.Object> lookObjects = new List<UnityEngine.Object>();
 
         // 내 선수(blue) 그림을 머리색·피부색·유니폼에 맞춰 다시 만듭니다. 같은 외형이면 아무것도 하지 않습니다.
-        public void SetLook(int hair, int skin, int kit)
+        public void SetLook(int hair, int skin, int kit, int boots = 0)
         {
             hair = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             skin = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             kit = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
-            if (hair == lookHair && skin == lookSkin && kit == lookKit) return;
+            boots = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
+            if (hair == lookHair && skin == lookSkin && kit == lookKit && boots == lookBoots) return;
+            lookBoots = boots;
             foreach (var obj in lookObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
             lookObjects.Clear();
             foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
                 foreach (string view in new[] { "front", "side", "back" })
-                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit);
+                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit, boots);
             foreach (string anim in new[] { "jump", "cheer", "fall" })
-                LoadLookStrip("blue_" + anim + "_x", hair, skin, kit);
+                LoadLookStrip("blue_" + anim + "_x", hair, skin, kit, boots);
             LoadStrideStrips();
             BuildJuggleStrip();
             lookHair = hair; lookSkin = skin; lookKit = kit;
@@ -326,13 +356,13 @@ namespace MyFootballCareer
         }
 
         // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
-        void LoadLookStrip(string prefix, int hair, int skin, int kit)
+        void LoadLookStrip(string prefix, int hair, int skin, int kit, int boots)
         {
-            LoadRecoloredStrip(prefix, prefix, hair, skin, kit, lookObjects);
+            LoadRecoloredStrip(prefix, prefix, hair, skin, kit, lookObjects, boots);
         }
 
         // src 그림(.bytes)을 색 바꿔 읽어 dest 이름으로 둡니다. 만든 텍스처·스프라이트는 owned에 넣어 나중에 지웁니다.
-        void LoadRecoloredStrip(string src, string dest, int hair, int skin, int kit, List<UnityEngine.Object> owned)
+        void LoadRecoloredStrip(string src, string dest, int hair, int skin, int kit, List<UnityEngine.Object> owned, int boots = 0)
         {
             var list = new List<Sprite>();
             for (int i = 0; i < 8; i++)
@@ -341,7 +371,7 @@ namespace MyFootballCareer
                 var asset = Resources.Load<TextAsset>(ArtPath + src + "_" + i);
                 if (asset != null)
                 {
-                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit);
+                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots);
                     if (tex != null)
                     {
                         sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);

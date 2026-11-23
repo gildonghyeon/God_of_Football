@@ -203,6 +203,7 @@ namespace MyFootballCareer
                 data.player.hairColor = Mathf.Clamp(data.player.hairColor, 0, PlayerLook.HairCount - 1);
                 data.player.skinTone = Mathf.Clamp(data.player.skinTone, 0, PlayerLook.SkinCount - 1);
                 data.player.kitColor = Mathf.Clamp(data.player.kitColor, 0, PlayerLook.KitCount - 1);
+                data.player.bootColor = Mathf.Clamp(data.player.bootColor, 0, PlayerLook.BootCount - 1);
             }
             foreach (var match in data.season.matches)
                 if (match != null && match.others == null) match.others = new List<LeagueGame>();

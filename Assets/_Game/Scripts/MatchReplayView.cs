@@ -9,7 +9,7 @@ namespace MyFootballCareer
     //   그림: Resources/Art/Match/ (pitch, dot_blue, dot_red, dot_you, ball, goal_0 ~ goal_7)
     public class MatchReplayView
     {
-        // 아래 두 값은 2배속 기준입니다. 1배속은 절반 속도 (90분이 30초).
+        // 아래 두 값은 2배속 기준입니다. 1배속은 2배속의 32% 속도 (90분이 약 47초).
         const float MinutesPerSecond = 6f;    // 90분 / 15초
         const float SimSpeed = 8f;            // 실제 1초 동안 진행하는 경기 속 시간(초)
         const string SpeedPref = "ReplaySpeed";
@@ -35,6 +35,8 @@ namespace MyFootballCareer
         GameObject root;
         GoalCelebration celebration;   // 내 골 세리머니
         string playerName = "";
+        public int OwnKit, OppKit;           // 두 팀 유니폼 (PlayerLook.Kits 번호, 0이면 기본 파랑·빨강 점)
+        readonly List<UnityEngine.Object> kitObjects = new List<UnityEngine.Object>();   // 유니폼 점 그림 (영상을 닫을 때 지움)
         public TrainingStageView SceneArt;   // 내 골 장면에 쓸 선수 그림 (훈련장과 같은 그림, 없으면 골망 장면)
         public int SeasonGoalsBefore = -1;
         public int SeasonAssistsBefore = -1;   // 이번 경기 전까지 시즌 도움 수 (-1이면 '시즌 N호 도움'을 보여 주지 않음)
@@ -44,7 +46,11 @@ namespace MyFootballCareer
         RectTransform pitchRect, youLabel, clockFill;
         readonly RectTransform[] dotRects = new RectTransform[22];
         RectTransform ballRect;
-        Text callLabel;   // 공 옆에 잠깐 뜨는 판정 (스로인, 코너킥, 프리킥…)
+        Text callLabel;   // 공 옆에 뜨는 판정 (스로인, 코너킥, 프리킥…): 어두운 상자에 큰 글자 + 어느 팀 공인지
+        Text callTeamLabel;
+        RectTransform callBox;
+        CanvasGroup callGroup;
+        Image callStripe;   // 상자 왼쪽 띠: 공을 가진 팀 색
         int lastCallId; float callTimer;   // 판정 글자는 실제 시간으로 0.9초 보여 줌
         Text scoreText, clockText, benchText;
         // 사건 카드 (골, 실점, 도움, 태클, 경기 종료): 경기장 위쪽에 잠깐 내려왔다 사라짐
@@ -236,11 +242,15 @@ namespace MyFootballCareer
             var pitchImage = pitchRect.gameObject.AddComponent<Image>();
             pitchImage.sprite = pitchSprite; pitchImage.raycastTarget = false;
 
+            // 선수 점은 두 팀 유니폼 무늬로 칠합니다 (골키퍼는 초록, 내 선수는 금색 테두리)
+            var ownDot = OwnKit > 0 ? TeamKits.Dot(OwnKit, 25, new Color32(255, 255, 255, 238), 2, kitObjects) : blueSprite;
+            var oppDot = OppKit > 0 ? TeamKits.Dot(OppKit, 25, new Color32(255, 255, 255, 238), 2, kitObjects) : redSprite;
+            var meDot = OwnKit > 0 ? TeamKits.Dot(OwnKit, 35, new Color32(255, 205, 61, 252), 4, kitObjects) : youSprite;
             for (int i = 0; i < 22; i++)
             {
                 var r = NewRect(i < 11 ? "Ours" + i : "Theirs" + (i - 11), pitchRect);
                 var img = r.gameObject.AddComponent<Image>();
-                img.sprite = i == youSlot ? youSprite : ((i % 11) == 0 ? greenSprite : (i < 11 ? blueSprite : redSprite));
+                img.sprite = i == youSlot ? meDot : ((i % 11) == 0 ? greenSprite : (i < 11 ? ownDot : oppDot));
                 img.raycastTarget = false;
                 dotRects[i] = r;
             }
@@ -251,10 +261,20 @@ namespace MyFootballCareer
             var youText = TextNode("나", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
             Anchored(youText.rectTransform, 0, 0, 1, 1);
             youLabel.gameObject.SetActive(youSlot >= 0);
-            callLabel = TextNode("", pitchRect, 22, TextAnchor.MiddleCenter, Color.white);
+            callBox = NewRect("Call", pitchRect);
+            callBox.gameObject.AddComponent<Image>().color = new Color(0.03f, 0.05f, 0.09f, 0.86f);
+            callBox.GetComponent<Image>().raycastTarget = false;
+            callGroup = callBox.gameObject.AddComponent<CanvasGroup>(); callGroup.blocksRaycasts = false;
+            var stripe = NewRect("Stripe", callBox); Anchored(stripe, 0f, 0f, 0.03f, 1f);
+            callStripe = stripe.gameObject.AddComponent<Image>(); callStripe.raycastTarget = false;
+            callLabel = TextNode("", callBox, 30, TextAnchor.MiddleCenter, Color.white);
+            Anchored(callLabel.rectTransform, 0.05f, 0.42f, 0.97f, 0.98f);
             callLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
             callLabel.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, .9f);
-            callLabel.gameObject.SetActive(false);
+            callTeamLabel = TextNode("", callBox, 18, TextAnchor.MiddleCenter, PixelTheme.TextDim);
+            Anchored(callTeamLabel.rectTransform, 0.05f, 0.04f, 0.97f, 0.44f);
+            callTeamLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            callBox.gameObject.SetActive(false);
 
             // 사건 카드 (골!, 실점, 도움!, 태클!, 경기 종료): 테두리 있는 띠에 큰 제목과 설명
             eventCard = NewRect("EventCard", area);
@@ -361,8 +381,8 @@ namespace MyFootballCareer
 
             // 시계: 아직 끝나지 않은 장면이 있으면 90분에서 기다립니다.
             // 코너킥·페널티킥·골문 앞 프리킥은 절반 속도 (시계도 같이 느려져 장면 순서는 그대로)
-            float pace = engine.SetPieceFocus ? 0.5f : 1f;
-            pace *= speed / 2f;   // 1배속은 절반
+            float pace = engine.SetPieceFocus ? 0.4f : engine.RestartFocus ? 0.45f : 1f;
+            pace *= speed == 2 ? 1f : 0.32f;   // 1배속은 2배속의 32%
             if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond * pace);
             if (!engine.SecondHalf) clock = Mathf.Min(clock, 45f);   // 전반 추가 시간: 진영을 바꿀 때까지 45분에서 기다림
             if (clock >= 90f && engine.Busy)   // 혹시 장면이 끝나지 않아도 오래 기다리지 않음
@@ -377,7 +397,11 @@ namespace MyFootballCareer
                 engine.Step(step, clock);
                 sim -= step;
             }
-            if (engine.CallId != lastCallId) { lastCallId = engine.CallId; callTimer = 0.9f; }
+            if (engine.CallId != lastCallId)
+            {
+                lastCallId = engine.CallId; callTimer = 1.6f;   // 판정은 실제 시간으로 1.6초
+                if (engine.CallFoul) SoundFx.Play(Sfx.Whistle, 0.8f);   // 파울은 휘슬
+            }
             callTimer = Mathf.Max(0f, callTimer - dt);
             Render();
 
@@ -409,14 +433,22 @@ namespace MyFootballCareer
             }
             if (callTimer > 0f && !string.IsNullOrEmpty(engine.CallText))
             {
-                callLabel.gameObject.SetActive(true);
+                callBox.gameObject.SetActive(true);
                 callLabel.text = engine.CallText;
-                float cx = Mathf.Clamp(MeterX(engine.ballX), FieldLeft + 110f, FieldRight - 110f);
-                float cy = Mathf.Clamp(MeterY(engine.ballY) - 50f, FieldTop + 24f, FieldBottom - 24f);
-                PlacePx(callLabel.rectTransform, cx, cy, 220f, 36f);
-                var col = callLabel.color; col.a = Mathf.Clamp01(callTimer / 0.25f); callLabel.color = col;
+                int team = engine.CallTeam;
+                callTeamLabel.text = team == 0 ? ownName + " 공" : team == 1 ? oppName + " 공" : "";
+                callStripe.color = team == 0 ? OurGoalColor : team == 1 ? TheirGoalColor : NeutralColor;
+                // 공 근처, 경기장 안쪽에 (가장자리 공이면 안쪽으로 당김)
+                const float bw = 330f, bh = 78f;
+                float cx = Mathf.Clamp(MeterX(engine.ballX), FieldLeft + bw / 2f + 6f, FieldRight - bw / 2f - 6f);
+                float cy = Mathf.Clamp(MeterY(engine.ballY) - 80f, FieldTop + bh / 2f + 6f, FieldBottom - bh / 2f - 6f);
+                PlacePx(callBox, cx, cy, bw, bh);
+                float k = 1.6f - callTimer;                                   // 나타난 뒤 흐른 시간
+                callGroup.alpha = Mathf.Clamp01(callTimer / 0.3f) * Mathf.Clamp01(k / 0.12f);
+                float s = 1f + 0.18f * Mathf.Clamp01(1f - k / 0.15f);         // 처음에 살짝 크게
+                callBox.localScale = new Vector3(s, s, 1f);
             }
-            else callLabel.gameObject.SetActive(false);
+            else callBox.gameObject.SetActive(false);
             UpdateStatsLine(Mathf.Clamp01(clock / 90f));
             clockText.text = Mathf.FloorToInt(Mathf.Min(clock, 90f)) + "'";
             clockFill.anchorMax = new Vector2(Mathf.Clamp01(clock / 90f), 1f);
@@ -564,7 +596,8 @@ namespace MyFootballCareer
                 bannerT = 0f; eventCard.gameObject.SetActive(false);
                 celebration.Play(new GoalInfo
                 {
-                    minute = Minute(), scorer = playerName, isDefense = true, defense = kind, how = "", assist = "",
+                    oppKit = OppKit > 0 ? OppKit : -1,
+                minute = Minute(), scorer = playerName, isDefense = true, defense = kind, how = "", assist = "",
                     ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst, matchGoals = yourTackles
                 });
                 return;
@@ -619,6 +652,7 @@ namespace MyFootballCareer
             bannerT = 0f; eventCard.gameObject.SetActive(false);
             celebration.Play(new GoalInfo
             {
+                oppKit = OppKit > 0 ? OppKit : -1,
                 minute = Minute(), scorer = playerName, isAssist = true, partner = note != null ? note.scorer : "",
                 scene = AssistSceneFor(ev), how = "", assist = "",
                 ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst,
@@ -631,6 +665,7 @@ namespace MyFootballCareer
             bannerT = 0f; eventCard.gameObject.SetActive(false);
             celebration.Play(new GoalInfo
             {
+                oppKit = OppKit > 0 ? OppKit : -1,
                 minute = Minute(), scorer = playerName,
                 how = ((ev.setPiece != SetPiece.None ? MatchReplayPlan.SetPieceName(ev.setPiece) : "") + (ev.header ? " 헤딩" : "") + (ev.longShot ? " 중거리" : "")).Trim(),
                 scene = SceneFor(ev),
@@ -723,6 +758,8 @@ namespace MyFootballCareer
         {
             Active = false;
             if (celebration != null) { celebration.Dispose(); celebration = null; }
+            foreach (var obj in kitObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
+            kitObjects.Clear();
             if (root != null) UnityEngine.Object.Destroy(root);
             var callback = onFinished;
             onFinished = null;

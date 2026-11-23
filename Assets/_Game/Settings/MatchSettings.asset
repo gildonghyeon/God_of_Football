@@ -32,301 +32,301 @@ MonoBehaviour:
     recommendedRating: 10
   teams:
   - id: crownhaven
-    displayName: Crownhaven FC
+    displayName: Madrid Merengues
     division: 1
     strength: 90
     requiredRating: 94
     focus: 1
   - id: kingsport-athletic
-    displayName: Kingsport Athletic
+    displayName: Catalonia Blaugrana
     division: 1
     strength: 88
     requiredRating: 92
     focus: 3
   - id: silverkeep-united
-    displayName: Silverkeep United
+    displayName: Manchester Sky Blues
     division: 1
     strength: 87
     requiredRating: 90
     focus: 0
   - id: goldmoor-city
-    displayName: Goldmoor City
+    displayName: Merseyside Reds
     division: 1
     strength: 85
     requiredRating: 88
     focus: 2
   - id: highspire
-    displayName: Highspire FC
+    displayName: North London Gunners
     division: 1
     strength: 84
     requiredRating: 86
     focus: 4
   - id: stormwatch-rovers
-    displayName: Stormwatch Rovers
+    displayName: Milano Nerazzurri
     division: 1
     strength: 82
     requiredRating: 84
     focus: 1
   - id: starfall-united
-    displayName: Starfall United
+    displayName: Turin Zebras
     division: 1
     strength: 81
     requiredRating: 82
     focus: 3
   - id: valecrest-city
-    displayName: Valecrest City
+    displayName: Madrid Rojiblancos
     division: 1
     strength: 79
     requiredRating: 80
     focus: 0
   - id: thunderpeak
-    displayName: Thunderpeak FC
+    displayName: Milano Rossoneri
     division: 1
     strength: 78
     requiredRating: 78
     focus: 2
   - id: aldercrown-albion
-    displayName: Aldercrown Albion
+    displayName: London Blues
     division: 1
     strength: 76
     requiredRating: 76
     focus: 4
   - id: northbrook
-    displayName: Northbrook FC
+    displayName: Partenopei Azzurri
     division: 2
     strength: 76
     requiredRating: 69
     focus: 2
   - id: eastmere-united
-    displayName: Eastmere United
+    displayName: Manchester Red Devils
     division: 2
     strength: 75
     requiredRating: 67
     focus: 4
   - id: westhollow-city
-    displayName: Westhollow City
+    displayName: North London Lilywhites
     division: 2
     strength: 73
     requiredRating: 65
     focus: 1
   - id: southvale-rovers
-    displayName: Southvale Rovers
+    displayName: Capitolini Giallorossi
     division: 2
     strength: 72
     requiredRating: 63
     focus: 3
   - id: oakridge-athletic
-    displayName: Oakridge Athletic
+    displayName: Bergamo Nerazzurri
     division: 2
     strength: 70
     requiredRating: 61
     focus: 0
   - id: pinecrest
-    displayName: Pinecrest FC
+    displayName: Sevillistas Blancos
     division: 2
     strength: 69
     requiredRating: 59
     focus: 2
   - id: rivermouth-town
-    displayName: Rivermouth Town
+    displayName: Aquile Biancocelesti
     division: 2
     strength: 67
     requiredRating: 57
     focus: 4
   - id: stonegate-united
-    displayName: Stonegate United
+    displayName: Tyneside Magpies
     division: 2
     strength: 66
     requiredRating: 55
     focus: 1
   - id: copperton
-    displayName: Copperton FC
+    displayName: Submarino Amarillo
     division: 2
     strength: 64
     requiredRating: 53
     focus: 3
   - id: brightwater
-    displayName: Brightwater SC
+    displayName: Midlands Villans
     division: 2
     strength: 63
     requiredRating: 51
     focus: 0
   - id: ashgrove
-    displayName: Ashgrove FC
+    displayName: Firenze Viola
     division: 3
     strength: 63
     requiredRating: 47
     focus: 3
   - id: elmstead-town
-    displayName: Elmstead Town
+    displayName: Bilbao Lions
     division: 3
     strength: 62
     requiredRating: 45
     focus: 0
   - id: foxden-united
-    displayName: Foxden United
+    displayName: Donostia Txuri-Urdin
     division: 3
     strength: 60
     requiredRating: 43
     focus: 2
   - id: glenhollow-rovers
-    displayName: Glenhollow Rovers
+    displayName: Seville Verdiblancos
     division: 3
     strength: 59
     requiredRating: 42
     focus: 4
   - id: hollowmere
-    displayName: Hollowmere FC
+    displayName: Toro Granata
     division: 3
     strength: 58
     requiredRating: 40
     focus: 1
   - id: lakeshore-athletic
-    displayName: Lakeshore Athletic
+    displayName: Sussex Seagulls
     division: 3
     strength: 56
     requiredRating: 38
     focus: 3
   - id: millbrook-city
-    displayName: Millbrook City
+    displayName: London Hammers
     division: 3
     strength: 55
     requiredRating: 36
     focus: 0
   - id: nettlefield
-    displayName: Nettlefield FC
+    displayName: Murcielagos Ches
     division: 3
     strength: 54
     requiredRating: 35
     focus: 2
   - id: quarry-hill-united
-    displayName: Quarry Hill United
+    displayName: Vallecas Franjirrojos
     division: 3
     strength: 52
     requiredRating: 33
     focus: 4
   - id: rosewood-town
-    displayName: Rosewood Town
+    displayName: Felsinei Rossoblu
     division: 3
     strength: 51
     requiredRating: 31
     focus: 1
   - id: saltmarsh
-    displayName: Saltmarsh FC
+    displayName: Black Country Wolves
     division: 4
     strength: 51
     requiredRating: 30
     focus: 4
   - id: thistledown-united
-    displayName: Thistledown United
+    displayName: Grifone Rossoblu
     division: 4
     strength: 50
     requiredRating: 28
     focus: 1
   - id: underhill-rovers
-    displayName: Underhill Rovers
+    displayName: Scaligeri Gialloblu
     division: 4
     strength: 49
     requiredRating: 27
     focus: 3
   - id: wheatley-green
-    displayName: Wheatley Green FC
+    displayName: Emilia Neroverdi
     division: 4
     strength: 47
     requiredRating: 25
     focus: 0
   - id: yarrow-town
-    displayName: Yarrow Town
+    displayName: Sardinia Isolani
     division: 4
     strength: 46
     requiredRating: 24
     focus: 2
   - id: brambleton
-    displayName: Brambleton FC
+    displayName: Udine Zebrette
     division: 4
     strength: 45
     requiredRating: 22
     focus: 4
   - id: cinderwick-athletic
-    displayName: Cinderwick Athletic
+    displayName: Hampshire Saints
     division: 4
     strength: 44
     requiredRating: 21
     focus: 1
   - id: dunmore-rangers
-    displayName: Dunmore Rangers
+    displayName: West London Hoops
     division: 4
     strength: 42
     requiredRating: 19
     focus: 3
   - id: fernvale
-    displayName: Fernvale FC
+    displayName: Vigo Celestes
     division: 4
     strength: 41
     requiredRating: 18
     focus: 0
   - id: graniteford-united
-    displayName: Graniteford United
+    displayName: Madrid South Azulones
     division: 4
     strength: 40
     requiredRating: 16
     focus: 2
   - id: red-cedar
-    displayName: Red Cedar United
+    displayName: Trent Forest Reds
     division: 5
     strength: 40
     requiredRating: 16
     focus: 0
   - id: iron-bay
-    displayName: Iron Bay SC
+    displayName: Lancashire Clarets
     division: 5
     strength: 39
     requiredRating: 15
     focus: 2
   - id: blue-ridge
-    displayName: Blue Ridge FC
+    displayName: Merseyside Toffees
     division: 5
     strength: 38
     requiredRating: 13
     focus: 4
   - id: mossbank-united
-    displayName: Mossbank United
+    displayName: Pamplona Rojillos
     division: 5
     strength: 37
     requiredRating: 12
     focus: 1
   - id: maple-hill
-    displayName: Maple Hill FC
+    displayName: 'Conca d''Oro Rosanero'
     division: 5
     strength: 36
     requiredRating: 11
     focus: 3
   - id: lantern-bay-rovers
-    displayName: Lantern Bay Rovers
+    displayName: Hertford Hornets
     division: 5
     strength: 34
     requiredRating: 9
     focus: 0
   - id: kettle-cove
-    displayName: Kettle Cove FC
+    displayName: Balearic Bermellones
     division: 5
     strength: 33
     requiredRating: 8
     focus: 2
   - id: hazelbrook
-    displayName: Hazelbrook FC
+    displayName: Salentini Giallorossi
     division: 5
     strength: 32
     requiredRating: 7
     focus: 4
   - id: sunfield
-    displayName: Sunfield Rovers
+    displayName: Yorkshire Whites
     division: 5
     strength: 31
     requiredRating: 5
     focus: 1
   - id: harbor-town
-    displayName: Harbor Town FC
+    displayName: Lariani Blu
     division: 5
     strength: 30
     requiredRating: 4

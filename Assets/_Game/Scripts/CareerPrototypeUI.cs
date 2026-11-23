@@ -40,11 +40,11 @@ namespace MyFootballCareer
         Font font;
         CareerSettings settings;
         TrainingSettings trainingSettings;
-        Action<string, Position, Trait, int, int, int> onCreate;
+        Action<string, Position, Trait, int, int, int, int> onCreate;   // 이름, 포지션, 특성, 머리색, 피부색, 유니폼, 축구화
         Action onSave, onPlayMatch, onStay, onRebirth;
         Action<string> onChooseOffer;
         Action<AttributeKind> onUpgrade;
-        public Action<int, int, int> OnApplyLook;   // 외형(머리색, 피부색, 유니폼)을 바꾸면 부르는 동작
+        public Action<int, int, int, int> OnApplyLook;   // 외형(머리색, 피부색, 유니폼, 축구화)을 바꾸면 부르는 동작
         public Action OnBuyEffortRate;              // 노력 포인트 증가량을 올리는 동작
         public Action OnPlayFriendly;               // 친선 경기를 하는 동작
         public Action<int> OnBuyFacility;           // 시설 레벨을 올리는 동작 (FacilityKind 번호)
@@ -99,7 +99,7 @@ namespace MyFootballCareer
         Transform Parent { get { return currentParent != null ? currentParent : content; } }
 
         public void Initialize(Font customFont, CareerSettings config, TrainingSettings training,
-            Action<string, Position, Trait, int, int, int> create, Action save,
+            Action<string, Position, Trait, int, int, int, int> create, Action save,
             Action<AttributeKind> upgrade, Action playMatch,
             Action<string> chooseOffer, Action stay, Action rebirth)
         {
@@ -377,7 +377,7 @@ namespace MyFootballCareer
             Clear();
             Label("나의 축구 커리어", 33, 64).color = PixelTheme.Accent;
             Label("첫 선수를 만들어 보세요", 22, 44);
-            newHair = 0; newSkin = 0; newKit = 0;
+            newHair = 0; newSkin = 0; newKit = CreationKit; newBoots = 0;
             var createPreview = AddPreview(content, 190f);
             ApplyPreview(createPreview);
             Label("선수 이름", 22, 40).color = PixelTheme.TextDim;
@@ -410,7 +410,7 @@ namespace MyFootballCareer
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             AddLookButtons(content, createPreview);
             Label("피니셔: 슈팅 / 플레이메이커: 패스\n볼 위너: 수비 (보너스 +" + settings.traitBonus + ")", 22, 76).color = PixelTheme.TextDim;
-            PixelButton("선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit), content, 88f);
+            PixelButton("선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit, newBoots), content, 88f);
             status = Label("버튼을 눌러 포지션과 특성을 고르세요.", 22, 100);
             status.color = PixelTheme.TextDim;
         }
@@ -422,8 +422,8 @@ namespace MyFootballCareer
             status = stripText;
 
             pages[0] = NewPage("HomePage"); pages[1] = NewPage("MatchPage"); pages[2] = NewPage("MissionPage"); pages[3] = NewPage("CareerPage"); pages[4] = NewPage("SettingsPage");
-            lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor;
-            stage.SetLook(lookHair, lookSkin, lookKit);               // 내 선수 그림을 외형에 맞게 준비
+            lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor; lookBoots = p.bootColor;
+            stage.SetLook(lookHair, lookSkin, lookKit, lookBoots);               // 내 선수 그림을 외형에 맞게 준비
             if (stage.Available) stage.Create(pages[0]);   // HOME 맨 위에 훈련장 장면
 
             // HOME: 스크롤 없이 한 화면에 들어오도록 촘촘하게 배치합니다.
@@ -773,9 +773,11 @@ namespace MyFootballCareer
                 var card = NewRect("Current", section);
                 card.gameObject.AddComponent<Image>().color = new Color(.12f, .20f, .34f, 1f);
                 ConfigureStack(card.gameObject, 12, 10, 12, 12, 8);
-                var head = NewRect("Head", card); Height(head.gameObject, 36);
-                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, cur.name, 24, PixelTheme.Text, 0f, 0f, .7f, 1f, TextAnchor.MiddleLeft), 14);
-                MatchResultDialog.Label(head, font, cur.division > 0 ? cur.division + "부" : "", 18, PixelTheme.TextDim, .7f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+                var head = NewRect("Head", card); Height(head.gameObject, 84);
+                TeamKits.PreviewImage(head, TeamKits.Home(cur.teamId), 0f, 0f, .13f, 1f);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, cur.name, 24, PixelTheme.Text, .15f, .45f, .78f, .95f, TextAnchor.MiddleLeft), 14);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, TeamKits.Name(cur.teamId), 16, PixelTheme.TextDim, .15f, .05f, .78f, .45f, TextAnchor.MiddleLeft), 11);
+                MatchResultDialog.Label(head, font, cur.division > 0 ? cur.division + "부" : "", 18, PixelTheme.TextDim, .78f, 0f, 1f, 1f, TextAnchor.MiddleRight);
                 var tiles = TileRow(card);
                 MiniTile(tiles, "전력", cur.strength.ToString("0"), null, PixelTheme.TextDim);
                 MiniTile(tiles, "선발 확률", Mathf.RoundToInt(cur.startChance * 100f) + "%", null, PixelTheme.TextDim);
@@ -817,8 +819,10 @@ namespace MyFootballCareer
                 var card = NewRect("Offer", body);
                 card.gameObject.AddComponent<Image>().color = agreed ? new Color(.30f, .24f, .08f, 1f) : new Color(.13f, .18f, .28f, 1f);
                 ConfigureStack(card.gameObject, 12, 10, 12, 12, 8);
-                var head = NewRect("Head", card); Height(head.gameObject, 36);
-                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, offer.teamName, 24, PixelTheme.Accent, 0f, 0f, .7f, 1f, TextAnchor.MiddleLeft), 14);
+                var head = NewRect("Head", card); Height(head.gameObject, 84);
+                TeamKits.PreviewImage(head, TeamKits.Home(offer.teamId), 0f, 0f, .13f, 1f);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, offer.teamName, 24, PixelTheme.Accent, .15f, .45f, .7f, .95f, TextAnchor.MiddleLeft), 14);
+                MatchResultDialog.Fit(MatchResultDialog.Label(head, font, TeamKits.Name(offer.teamId), 16, PixelTheme.TextDim, .15f, .05f, .7f, .45f, TextAnchor.MiddleLeft), 11);
                 // 부: 지금보다 높은 부면 ▲ 초록, 낮은 부면 ▼ 빨강
                 string divText = offer.division > 0 ? offer.division + "부" : "";
                 Color divColor = PixelTheme.TextDim;
@@ -914,6 +918,8 @@ namespace MyFootballCareer
         public TeamTactic ReplayOwnTactic, ReplayOppTactic;   // 다음 경기 영상의 두 팀 전술 (골 기록과 같은 장면이 나오게)
         public int ReplaySeasonGoals = -1;                    // 다음 경기 영상 전까지의 시즌 골 수 (-1이면 친선 경기 등)
         public int ReplaySeasonAssists = -1;                  // 다음 경기 영상 전까지의 시즌 도움 수
+        public int ReplayOwnKit, ReplayOppKit;                // 다음 경기 영상의 두 팀 유니폼 (PlayerLook.Kits 번호)
+        public int CreationKit;                               // 새 선수 만들기 미리보기의 유니폼 (시작 팀)
         public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished, TeamTactic ownTactic = null, TeamTactic oppTactic = null)
         {
             CloseDialog();
@@ -921,6 +927,7 @@ namespace MyFootballCareer
             {
                 matchView.SeasonGoalsBefore = ReplaySeasonGoals; ReplaySeasonGoals = -1;
                 matchView.SeasonAssistsBefore = ReplaySeasonAssists; ReplaySeasonAssists = -1;
+                matchView.OwnKit = ReplayOwnKit; matchView.OppKit = ReplayOppKit;
             }
             if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished, ownTactic ?? ReplayOwnTactic, oppTactic ?? ReplayOppTactic))
             {
@@ -1008,6 +1015,7 @@ namespace MyFootballCareer
             bool assisted = kind == TrainingStageDrills.GoalScene.Pass || header || (kind == TrainingStageDrills.GoalScene.LongShot && previewCount % 2 == 0);   // 중거리는 혼자/패스 받아 번갈아
             goalPreview.Play(new GoalInfo
             {
+                oppKit = PreviewOppKit(),
                 minute = "67'", scorer = scorer, how = how, assist = assisted ? "J. Teammate" : "",
                 ownName = "My Team", oppName = "Rival FC", goalsFor = goals, goalsAgainst = 1,
                 matchGoals = goals, seasonGoal = 6 + goals, scene = kind,
@@ -1022,9 +1030,22 @@ namespace MyFootballCareer
             goalPreview = new GoalCelebration(font, safeRoot, new Sprite[0], scene);
             goalPreview.Play(new GoalInfo
             {
+                oppKit = PreviewOppKit(),
                 minute = "71'", scorer = name, isDefense = true, defense = kind, how = "", assist = "",
                 ownName = "My Team", oppName = "Rival FC", goalsFor = 1, goalsAgainst = 0, matchGoals = previewCount++ % 5 + 1
             });
+        }
+
+        // 미리보기의 상대 유니폼: 누를 때마다 다른 팀 홈 유니폼 (내 유니폼과 겹치면 다음 팀)
+        int PreviewOppKit()
+        {
+            int teams = (PlayerLook.KitCount - 1) / 2;
+            for (int k = 0; k < teams; k++)
+            {
+                int home = 1 + ((previewCount * 7 + k) % teams) * 2;
+                if (home != lookKit) return home;
+            }
+            return 0;
         }
 
         void TickGoalPreview(float dt)
@@ -1036,8 +1057,8 @@ namespace MyFootballCareer
 
         // ---------- 팝업 ----------
         // ---------- 외형(머리색, 피부색, 유니폼) ----------
-        int lookHair, lookSkin, lookKit;   // 지금 선수의 외형
-        int newHair, newSkin, newKit;      // 선수 생성 화면과 변경 창에서 고르는 외형
+        int lookHair, lookSkin, lookKit, lookBoots;   // 지금 선수의 외형
+        int newHair, newSkin, newKit, newBoots;       // 선수 생성 화면과 변경 창에서 고르는 외형
         Texture2D previewTexture;
         Sprite previewSprite;
 
@@ -1063,16 +1084,17 @@ namespace MyFootballCareer
             var asset = Resources.Load<TextAsset>("Art/Chars/blue_idle_front_0");
             if (asset == null || target == null) return;
             DestroyPreview();
-            previewTexture = PlayerLook.LoadRecolored(asset.bytes, newHair, newSkin, newKit);
+            previewTexture = PlayerLook.LoadRecolored(asset.bytes, newHair, newSkin, newKit, newBoots);
             if (previewTexture == null) return;
             previewSprite = Sprite.Create(previewTexture, new Rect(0, 0, previewTexture.width, previewTexture.height), new Vector2(.5f, .5f), 100f);
             target.sprite = previewSprite; target.enabled = true;
         }
 
-        // 머리색, 피부색, 유니폼을 순서대로 바꾸는 버튼 세 개 (newHair, newSkin, newKit 값을 바꾸고 미리보기를 갱신)
+        // 머리색, 피부색, 축구화를 순서대로 바꾸는 버튼 세 개 (newHair, newSkin, newBoots 값을 바꾸고 미리보기를 갱신).
+        // 유니폼은 고를 수 없고 소속 팀 유니폼을 입습니다.
         void AddLookButtons(Transform parent, Image preview)
         {
-            Button hairButton = null, skinButton = null, kitButton = null;
+            Button hairButton = null, skinButton = null, bootButton = null;
             hairButton = PixelButton("머리: " + PlayerLook.HairNames[newHair], () => {
                 newHair = (newHair + 1) % PlayerLook.HairCount;
                 hairButton.GetComponentInChildren<Text>().text = "머리: " + PlayerLook.HairNames[newHair];
@@ -1083,29 +1105,29 @@ namespace MyFootballCareer
                 skinButton.GetComponentInChildren<Text>().text = "피부: " + PlayerLook.SkinNames[newSkin];
                 ApplyPreview(preview);
             }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            kitButton = PixelButton("유니폼: " + PlayerLook.KitNames[newKit], () => {
-                newKit = (newKit + 1) % PlayerLook.KitCount;
-                kitButton.GetComponentInChildren<Text>().text = "유니폼: " + PlayerLook.KitNames[newKit];
+            bootButton = PixelButton("축구화: " + PlayerLook.BootNames[newBoots], () => {
+                newBoots = (newBoots + 1) % PlayerLook.BootCount;
+                bootButton.GetComponentInChildren<Text>().text = "축구화: " + PlayerLook.BootNames[newBoots];
                 ApplyPreview(preview);
             }, parent, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         void ShowLookDialog()
         {
-            newHair = lookHair; newSkin = lookSkin; newKit = lookKit;
-            var inner = BuildDialog("외형", "머리색, 피부색, 유니폼 색을 고르세요.", 36f);
+            newHair = lookHair; newSkin = lookSkin; newKit = lookKit; newBoots = lookBoots;
+            var inner = BuildDialog("외형", "머리색, 피부색, 축구화를 고르세요. 유니폼은 소속 팀 유니폼입니다.", 36f, 20);
             var preview = AddPreview(inner, 220f);
             ApplyPreview(preview);
             AddLookButtons(inner, preview);
-            PixelButton("적용", () => { CloseDialog(); DestroyPreview(); if (OnApplyLook != null) OnApplyLook(newHair, newSkin, newKit); }, inner, 76f);
+            PixelButton("적용", () => { CloseDialog(); DestroyPreview(); if (OnApplyLook != null) OnApplyLook(newHair, newSkin, newKit, newBoots); }, inner, 76f);
             PixelButton("취소", () => { CloseDialog(); DestroyPreview(); }, inner, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         // 선수의 외형이 바뀌었을 때 훈련장 그림을 갱신합니다.
         public void ApplyLook(PlayerData p)
         {
-            lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor;
-            if (stage != null) stage.SetLook(lookHair, lookSkin, lookKit);
+            lookHair = p.hairColor; lookSkin = p.skinTone; lookKit = p.kitColor; lookBoots = p.bootColor;
+            if (stage != null) stage.SetLook(lookHair, lookSkin, lookKit, lookBoots);
         }
 
         Transform BuildDialog(string title, string body, float bodyHeight, int bodyFont = 24)
@@ -1188,8 +1210,9 @@ namespace MyFootballCareer
             foreach (var t in teams)
             {
                 string id = t.Key;
-                PixelButton(t.Value, () => { CloseDialog(); if (OnShowSquad != null) OnShowSquad(id); }, inner, 52f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
-                    .GetComponentInChildren<Text>().fontSize = 22;
+                var teamButton = PixelButton(t.Value, () => { CloseDialog(); if (OnShowSquad != null) OnShowSquad(id); }, inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+                teamButton.GetComponentInChildren<Text>().fontSize = 22;
+                TeamKits.PreviewImage(teamButton.transform.GetChild(0), TeamKits.Home(id), .01f, .04f, .11f, .96f);   // 왼쪽에 팀 유니폼
             }
             PixelButton("닫기", () => CloseDialog(), inner, 60f);
         }

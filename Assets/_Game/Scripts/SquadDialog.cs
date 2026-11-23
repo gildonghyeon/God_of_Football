@@ -31,12 +31,24 @@ namespace MyFootballCareer
             Stat(card, font, v.starterAvg.ToString("0"), "주전 평균", false);
             Stat(card, font, v.avgAge.ToString("0.0"), "평균 나이", false);
 
+            // 유니폼: 홈·원정 두 벌
+            if (!string.IsNullOrEmpty(v.teamId) && TeamKits.Home(v.teamId) > 0)
+            {
+                var kit = Block(parent, 128);
+                kit.gameObject.AddComponent<Image>().color = Card;
+                TeamKits.PreviewImage(kit, TeamKits.Home(v.teamId), .02f, .16f, .20f, .98f);
+                TeamKits.PreviewImage(kit, TeamKits.Away(v.teamId), .22f, .16f, .40f, .98f);
+                Label(kit, font, "홈", 15, PixelTheme.TextDim, .02f, 0f, .20f, .17f, TextAnchor.MiddleCenter);
+                Label(kit, font, "원정", 15, PixelTheme.TextDim, .22f, 0f, .40f, .17f, TextAnchor.MiddleCenter);
+                Label(kit, font, "유니폼", 15, PixelTheme.TextDim, .44f, .56f, .98f, .86f, TextAnchor.MiddleLeft);
+                Fit(Label(kit, font, TeamKits.Name(v.teamId), 22, PixelTheme.Accent, .44f, .18f, .98f, .58f, TextAnchor.MiddleLeft), 13);
+            }
+
             // 전술: 포메이션 · 스타일 + 설명, 그리고 포메이션 그림
             if (v.tactic != null)
             {
                 var t = Block(parent, 30);
-                Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .45f, 1f, TextAnchor.MiddleLeft);
-                Label(t, font, TacticSystem.StyleNote(v.tactic.style), 16, PixelTheme.TextDim, .45f, 0f, .99f, 1f, TextAnchor.MiddleRight);
+                Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .99f, 1f, TextAnchor.MiddleLeft);
                 if (v.layout != null) Pitch(parent, font, v);
             }
             Header(parent, font, "주전  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);

@@ -51,6 +51,8 @@ namespace MyFootballCareer
             ui.OnStartNew = StartNewGame;
             ui.OnResetSave = ResetSave;
             ui.OnApplyLook = ChangeLook;
+            TeamIdentity.ApplyTo(matchSettings);                         // 팀 이름은 팀 표의 이름으로
+            ui.CreationKit = TeamKits.Home(matchSettings.startTeamId);   // 새 선수 미리보기는 시작 팀 유니폼
             ui.OnBuyEffortRate = BuyEffortRate;
             ui.OnPlayFriendly = PlayFriendly;
             ui.OnBuyFacility = BuyFacility;
@@ -115,6 +117,8 @@ namespace MyFootballCareer
             training = new TrainingSystem(current, settings, trainingSettings);
             SeasonSystem.Prepare(current, matchSettings);
             SeasonSystem.EnsureContract(current, matchSettings, settings);
+            TeamIdentity.MigrateSave(current, matchSettings);           // 저장에 남은 예전 팀 이름을 새 이름으로
+            current.player.kitColor = TeamKits.Home(current.teamId);   // 유니폼은 소속 팀 유니폼 (고를 수 없음)
             OfflineResult offline = null;
             if (applyOffline)
             {
@@ -164,18 +168,19 @@ namespace MyFootballCareer
             RefreshFriendlyUI();
         }
 
-        void ChangeLook(int hair, int skin, int kit)
+        void ChangeLook(int hair, int skin, int kit, int boots)
         {
+            if (current != null) current.player.bootColor = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
             if (blocked || current == null) return;
             current.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             current.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
-            current.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
+            current.player.kitColor = TeamKits.Home(current.teamId);   // 유니폼은 소속 팀 것 그대로
             saves.TrySave(current, out string message);
             ui.ApplyLook(current.player);
             ui.SetStatus("외형을 바꿨습니다. " + message);
         }
 
-        void Create(string rawName, Position position, Trait trait, int hair, int skin, int kit)
+        void Create(string rawName, Position position, Trait trait, int hair, int skin, int kit, int boots)
         {
             if (blocked || current != null) return;
             string name = rawName.Trim();
@@ -186,6 +191,7 @@ namespace MyFootballCareer
             candidate.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             candidate.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             candidate.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
+            candidate.player.bootColor = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
             SeasonSystem.Prepare(candidate, matchSettings);
             if (!saves.TrySave(candidate, out string message)) { ui.SetStatus(message); return; }
             current = candidate;
@@ -471,6 +477,8 @@ namespace MyFootballCareer
             if (SeasonSystem.IsComplete(current))
             {
                 string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings, settings, out var newSeason);   // 이적·승강 안내 (바뀐 게 없으면 null)
+                int teamKit = TeamKits.Home(current.teamId);
+                if (current.player.kitColor != teamKit) { current.player.kitColor = teamKit; ui.ApplyLook(current.player); }   // 이적하면 새 팀 유니폼으로
                 saves.TrySave(current, out string newSeasonMessage);
                 RefreshSeasonUI();
                 ui.SetStatus("새 시즌이 시작되었습니다. " + newSeasonMessage);
@@ -488,6 +496,7 @@ namespace MyFootballCareer
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
             // 경기 영상을 보여 준 뒤(건너뛰기 포함) 순위와 요약을 갱신하고 결과를 알려 줍니다.
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
+            ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
             // 세리머니의 '시즌 N호 골': 이번 경기를 뺀 시즌 골 수
             int seasonGoals = 0, seasonAssists = 0;
             foreach (var sm in current.season.matches) if (sm.played && sm.playerPlayed) { seasonGoals += sm.playerGoals; seasonAssists += sm.playerAssists; }
@@ -524,6 +533,7 @@ namespace MyFootballCareer
             var ownTeam = matchSettings.FindTeam(current.teamId);
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
+            ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshMoneyUI();
