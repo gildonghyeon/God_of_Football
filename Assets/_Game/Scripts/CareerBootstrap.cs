@@ -27,6 +27,9 @@ namespace MyFootballCareer
         MatchSettings clubMs;          // 나만의 팀 리그의 팀 목록 (선수 키우기 설정의 복사본)
         TeamDefinition[] baseTeams;    // 선수 키우기 리그의 원래 팀 목록
         bool inClub;                   // 나만의 팀 모드 화면을 보는 중
+        bool inMenu;                   // 시작 화면(모드 고르기)을 보는 중
+        bool offlineApplied;           // 이번 실행에서 오프라인 보상을 이미 줬는지 (선수 키우기에 처음 들어갈 때)
+        string menuMessage;            // 저장을 읽을 때 나온 안내 (선수 키우기에 들어가면 보여 줌)
         float refreshTimer;
         float autoSaveTimer;
 
@@ -69,6 +72,7 @@ namespace MyFootballCareer
             ui.OnOpenSquads = OpenSquads; ui.OnShowSquad = ShowSquad;
             ui.OnShowLegend = ShowLegend;
             ui.OnRetire = Retire; ui.OnCancelCreation = CancelRetire; ui.OnFoundClub = FoundClub;
+            ui.OnPickCareer = PickCareer; ui.OnPickClub = PickClub;
             ui.OnOpenClub = OpenClubMode; ui.OnClubPlay = ClubPlay; ui.OnClubSquad = ClubSquad; ui.OnClubSign = ClubSign; ui.OnClubBack = ClubBack;
             baseTeams = matchSettings.teams != null ? (TeamDefinition[])matchSettings.teams.Clone() : new TeamDefinition[0];
             clubMs = Instantiate(matchSettings);
@@ -87,7 +91,7 @@ namespace MyFootballCareer
             if (blocked) { ui.ShowError(message, saves.HasValidBackup()); return; }
             if (!string.IsNullOrEmpty(extraMessage))
                 message = string.IsNullOrEmpty(message) ? extraMessage : extraMessage + " " + message;
-            if (current != null) StartPlayer(message, true);
+            if (current != null) { menuMessage = message; ShowModeSelect(); }   // 시작 화면에서 모드를 고름
             else ui.ShowCreation();
         }
 
@@ -133,7 +137,7 @@ namespace MyFootballCareer
 
         void StartPlayer(string message, bool applyOffline)
         {
-            retiring = false; inClub = false;
+            retiring = false; inClub = false; inMenu = false;
             if (ClubSystem.CleanCareer(current)) saves.TrySave(current, out _);   // 예전 버전에서 선수 키우기 리그에 들어갔던 나만의 팀 정리
             current.hasClub = club != null;
             if (club != null) current.myClub = club.myClub;
@@ -165,7 +169,7 @@ namespace MyFootballCareer
         // 모바일에서 앱이 백그라운드에서 돌아왔을 때도 같은 규칙으로 보상합니다.
         void ApplyOfflineOnResume()
         {
-            if (blocked || current == null || training == null || retiring || inClub) return;
+            if (blocked || current == null || training == null || retiring || inClub || inMenu) return;
             var offline = IdleRewardSystem.Apply(current, settings, trainingSettings, System.DateTime.UtcNow.Ticks);
             saves.TrySave(current, out _);
             if (offline.ClockRewound) ui.SetStatus("기기 시계가 뒤로 돌아가 오프라인 보상이 없습니다.");
@@ -643,7 +647,47 @@ namespace MyFootballCareer
         {
             inClub = false;
             ui.ReplayTeamMode = false;
-            StartPlayer(null, false);
+            ShowModeSelect();
+        }
+
+        // ---------- 시작 화면 ----------
+        void ShowModeSelect()
+        {
+            if (blocked || current == null) return;
+            inMenu = true; inClub = false;
+            var p = current.player;
+            var team = matchSettings.FindTeam(current.teamId);
+            var v = new ModeSelectView
+            {
+                playerName = p.playerName, hair = p.hairColor, skin = p.skinTone, kit = p.kitColor, boots = p.bootColor,
+                playerLine = Ko.Pos(p.position) + " · " + (team != null ? team.displayName : "")
+                           + (current.season != null && current.season.division > 0 ? " · " + matchSettings.DivisionName(current.season.division) : "")
+                           + (current.season != null ? " · 시즌 " + Mathf.Max(1, current.season.seasonNumber) : ""),
+                hasClub = club != null, legends = ClubSystem.LegendCount(current), legendNeed = ClubSystem.FoundLegends
+            };
+            if (club != null)
+            {
+                ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+                v.clubName = club.myClub.name; v.clubKit = TeamKits.Home(ClubSystem.ClubId);
+                v.clubLine = clubMs.DivisionName(club.season.division) + " · 시즌 " + club.season.seasonNumber + " · 선수 " + club.legends.Count + "명";
+            }
+            ui.ShowModeSelect(v);
+        }
+
+        void PickCareer()
+        {
+            if (blocked || current == null) return;
+            inMenu = false;
+            bool first = !offlineApplied; offlineApplied = true;
+            string message = menuMessage; menuMessage = null;
+            StartPlayer(message, first);   // 오프라인 보상은 이번 실행에서 처음 들어갈 때 한 번
+        }
+
+        void PickClub()
+        {
+            if (blocked || current == null || club == null) return;
+            inMenu = false;
+            OpenClubMode();
         }
 
         void Rebirth()
@@ -790,7 +834,7 @@ namespace MyFootballCareer
 
         void Update()
         {
-            if (blocked || training == null || current == null || retiring || inClub) return;   // 은퇴 후 새 선수 만들기·나만의 팀 화면에서는 멈춤
+            if (blocked || training == null || current == null || retiring || inClub || inMenu) return;   // 은퇴 후 새 선수 만들기·나만의 팀 화면에서는 멈춤
 
             if (Application.isFocused && !ui.IsMatchPlaying) training.Tick(Time.unscaledDeltaTime);   // 경기 영상 중에는 훈련 중지
 
@@ -811,6 +855,7 @@ namespace MyFootballCareer
         void QuietSave()
         {
             if (blocked || current == null) return;
+            if (!offlineApplied && (inMenu || inClub)) return;   // 선수 키우기에 아직 안 들어갔으면 저장하지 않음 (저장하면 오프라인 보상 기준 시각이 바뀜)
             saves.TrySave(current, out _);
         }
 

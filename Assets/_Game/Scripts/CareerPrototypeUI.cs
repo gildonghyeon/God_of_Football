@@ -58,6 +58,7 @@ namespace MyFootballCareer
         public Action<string, int, Formation, TacticStyle> OnFoundClub;   // 나만의 팀 창단 (이름, 유니폼 디자인, 포메이션, 스타일)
         public Action OnOpenClub, OnClubPlay, OnClubSquad, OnClubBack;   // 나만의 팀 모드: 열기, 경기(또는 다음 시즌), 선수단, 선수 키우기로 돌아가기
         public Action<int> OnClubSign;              // 나만의 팀 모드: 은퇴 선수 무료 영입 (커리어 번호)
+        public Action OnPickCareer, OnPickClub;     // 시작 화면에서 모드 고르기
         public bool ReplayTeamMode;                 // 다음 경기 영상이 나만의 팀 모드 경기인지
         Image retireFill; GameObject foundButton, clubSquadButton;
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
@@ -709,6 +710,32 @@ namespace MyFootballCareer
             if (clubSquadButton != null && clubSquadButton.activeSelf != data.clubActive) clubSquadButton.SetActive(data.clubActive);
         }
 
+        // ---------- 시작 화면: 모드 고르기 ----------
+        // 위는 선수 키우기(지금 키우는 선수), 아래는 나만의 팀. 나만의 팀은 창단 전이면 누를 수 없음
+        public void ShowModeSelect(ModeSelectView v)
+        {
+            CloseDialog();
+            Clear();
+            Label("나의 축구 커리어", 34, 70).color = PixelTheme.Accent;
+            Label("플레이할 모드를 고르세요", 22, 44).color = PixelTheme.TextDim;
+            currentParent = Section(content, "", true);
+            var art = PopupCards.LookSprite(v.hair, v.skin, v.kit, v.boots, ((Component)Parent).gameObject);
+            ClubModeScreen.ModeCard(Parent, font, "선수 키우기", v.playerName, v.playerLine, art, 0, true);
+            PixelButton("선수 키우기 시작", () => { if (OnPickCareer != null) OnPickCareer(); }, Parent, 84f);
+            currentParent = Section(content, "", true);
+            ClubModeScreen.ModeCard(Parent, font, "나만의 팀", v.hasClub ? v.clubName : "창단 전", v.hasClub ? v.clubLine
+                : "은퇴 선수 " + Mathf.Min(v.legends, v.legendNeed) + " / " + v.legendNeed + "명 · 모이면 선수 키우기의 커리어 탭에서 창단", null, v.hasClub ? v.clubKit : 0, v.hasClub);
+            if (v.hasClub) PixelButton("나만의 팀 시작", () => { if (OnPickClub != null) OnPickClub(); }, Parent, 84f);
+            else
+            {
+                var locked = PixelButton("잠김 · 나만의 팀을 먼저 창단하세요", () => SetStatus("은퇴 선수 " + v.legendNeed + "명을 모아 창단하면 열립니다."), Parent, 84f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+                locked.GetComponentInChildren<Text>().color = PixelTheme.TextDim;
+                locked.GetComponentInChildren<Text>().fontSize = 22;
+            }
+            currentParent = null;
+            status = Label("", 20, 50); status.color = PixelTheme.TextDim;
+        }
+
         // ---------- 나만의 팀 모드 ----------
         // 선수 키우기와 다른 모드: 내가 키운 선수들로 꾸린 팀으로 리그를 치릅니다. 탭 없이 한 화면.
         public void ShowClubMode(ClubModeView v)
@@ -739,7 +766,7 @@ namespace MyFootballCareer
                 b.GetComponentInChildren<Text>().fontSize = 22;
             }
             currentParent = null;
-            PixelButton("◀ 선수 키우기 모드로", () => { if (OnClubBack != null) OnClubBack(); }, content, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("◀ 모드 선택으로", () => { if (OnClubBack != null) OnClubBack(); }, content, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             status = Label("", 18, 36); status.color = PixelTheme.TextDim;
         }
 

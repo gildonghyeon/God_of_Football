@@ -20,6 +20,16 @@ namespace MyFootballCareer
         public List<SeasonSummary> history = new List<SeasonSummary>();
     }
 
+    // 게임을 켰을 때의 모드 선택 화면에 보여 줄 내용
+    public class ModeSelectView
+    {
+        public string playerName, playerLine;     // 선수 키우기: 이름, "공격수 · 팀 · 2부 · 시즌 3"
+        public int hair, skin, kit, boots;
+        public bool hasClub;                       // 나만의 팀이 있으면 선택 가능
+        public string clubName = "", clubLine = "";
+        public int clubKit, legends, legendNeed;
+    }
+
     // 나만의 팀 모드 화면의 카드들 (버튼은 CareerPrototypeUI가 붙임)
     public static class ClubModeScreen
     {
@@ -98,6 +108,20 @@ namespace MyFootballCareer
             L(r, f, lg.name, 20, PixelTheme.Text, .14f, .50f, .70f, .96f, TextAnchor.MiddleLeft, 12);
             L(r, f, Ko.Pos(lg.position) + " · 평점 " + Mathf.RoundToInt(lg.rating) + " · " + lg.seasons + "시즌 골 " + lg.goals + " 도움 " + lg.assists, 14, PixelTheme.TextDim, .14f, .06f, .70f, .50f, TextAnchor.MiddleLeft, 10);
             return r;
+        }
+
+        // 모드 카드: 왼쪽 그림(선수 모습 또는 팀 유니폼), 오른쪽 모드 이름·설명. 비활성이면 흐리게
+        public static RectTransform ModeCard(Transform p, Font f, string mode, string title, string line, Sprite art, int kit, bool enabled)
+        {
+            var b = Box(p, enabled ? Tile : new Color(.09f, .11f, .16f, 1f), 200);
+            Color dim = enabled ? Color.white : new Color(1f, 1f, 1f, .35f);
+            if (art != null) { var img = MatchResultDialog.Img(b, dim, .03f, .05f, .30f, .95f); img.sprite = art; img.preserveAspect = true; }
+            else if (kit > 0) { var k = TeamKits.PreviewImage(b, kit, .05f, .15f, .28f, .85f); if (k != null) k.color = dim; }
+            else L(b, f, "?", 64, PixelTheme.TextDim, .03f, .05f, .30f, .95f, TextAnchor.MiddleCenter, 30);
+            L(b, f, mode, 18, enabled ? PixelTheme.TextDim : new Color(.5f, .5f, .55f, 1f), .34f, .74f, .97f, .94f, TextAnchor.MiddleLeft, 12);
+            L(b, f, title, 34, enabled ? PixelTheme.Accent : new Color(.45f, .45f, .5f, 1f), .34f, .40f, .97f, .74f, TextAnchor.MiddleLeft, 16);
+            L(b, f, line, 17, enabled ? PixelTheme.Text : new Color(.45f, .45f, .5f, 1f), .34f, .08f, .97f, .40f, TextAnchor.MiddleLeft, 11);
+            return b;
         }
 
         // 나만의 팀 시즌 결산
