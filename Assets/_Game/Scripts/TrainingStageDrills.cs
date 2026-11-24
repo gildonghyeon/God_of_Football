@@ -126,7 +126,7 @@ namespace MyFootballCareer
         // 골 종류마다 다른 장면 (좌표는 훈련장 배경 픽셀, 위쪽이 상대 골문). 공이 골망에 닿는 시각을 goalTime으로 돌려줍니다.
         // 인물: player(나), gk(상대 골키퍼), extras(ally 우리 팀 동료, red 상대 수비). 기본 상대·동료(attacker, mate)는 화면 밖에 둡니다.
         // 골 뒤에는 내가 오른쪽 앞으로 달려 나가 점프하고 환호하고, 동료가 달려와 같이 환호합니다.
-        public enum GoalScene { Dribble, Pass, Cross, Corner, FreeKick, Penalty, LongShot }
+        public enum GoalScene { Dribble, Pass, Cross, Corner, FreeKick, Penalty, LongShot, KeeperKick, KeeperRoll }   // Keeper*: 골키퍼인 내 도움
         public const float MatchViewBottom = 336f;   // 경기 골 장면은 상자 밖 반원(D) 아래까지 보여 줌
 
         const float SceneEnd = 8f;
@@ -136,6 +136,7 @@ namespace MyFootballCareer
         // 내가 공을 보내고 동료가 넣습니다. 골 뒤에는 넣은 동료가 달려 나가 환호하고 내가 뒤따라가 같이 환호합니다.
         public static StageDrill MatchGoal(GoalScene kind, out float goalTime, bool assisted = false, bool iAssist = false)
         {
+            if (kind == GoalScene.KeeperKick || kind == GoalScene.KeeperRoll) return KeeperAssist(kind, out goalTime);
             var player = new List<StageKey>();
             var ball = new List<StageKey>();
             var gk = new List<StageKey>();
@@ -342,7 +343,7 @@ namespace MyFootballCareer
         // ---------- 경기 중 내 수비 장면 ----------
         // 위쪽 골문이 우리 골문입니다. 상대(red)가 위로 공격해 오고, 내가(나) 막아 냅니다. 골키퍼(gold)는 우리 골키퍼.
         // keyTime: 내가 공을 따내는 순간 (이때 TACKLE! 같은 연출 시작)
-        public enum DefenseScene { Tackle, Block, Clearance, Interception }
+        public enum DefenseScene { Tackle, Block, Clearance, Interception, Save, PenaltySave, CornerCatch, OneOnOne }   // Save~: 골키퍼인 내 선방
 
         public static StageDrill MatchDefense(DefenseScene kind, out float keyTime)
         {
@@ -355,8 +356,13 @@ namespace MyFootballCareer
                 case DefenseScene.Block: keyTime = BlockScene(player, ball, gk, extras); break;
                 case DefenseScene.Clearance: keyTime = ClearanceScene(player, ball, gk, extras); break;
                 case DefenseScene.Interception: keyTime = InterceptionScene(player, ball, gk, extras); break;
+                case DefenseScene.Save: keyTime = SaveScene(player, ball, extras); break;
+                case DefenseScene.PenaltySave: keyTime = PenaltySaveScene(player, ball, extras); break;
+                case DefenseScene.CornerCatch: keyTime = CornerCatchScene(player, ball, extras); break;
+                case DefenseScene.OneOnOne: keyTime = OneOnOneScene(player, ball, extras); break;
                 default: keyTime = TackleScene(player, ball, gk, extras); break;
             }
+            if (gk.Count == 0) gk.AddRange(OffScreen);   // 골키퍼 장면: 골문은 내가 지킴
             return new StageDrill
             {
                 duration = SceneEnd, loop = false, player = player.ToArray(), ball = ball.ToArray(), gk = gk.ToArray(),
@@ -456,6 +462,156 @@ namespace MyFootballCareer
             extras.Add(new StageExtra("ally", new[] { K(0f, 300f, 220f, "stand", 'd'), K(key + 0.3f, 330f, 260f, "auto", '*'), K(key + 1.5f, 380f, 340f, "auto", '*'), K(SceneEnd, 400f, 380f, "auto", '*') }));
             gk.Add(K(0f, HomeGkX, HomeGkY, "stand", 'd')); gk.Add(K(SceneEnd, HomeGkX, HomeGkY, "stand", 'd'));
             return key;
+        }
+
+        // ---------- 골키퍼인 내 선방 장면 ----------
+        // 위쪽 골문이 우리 골문이고 내가 골키퍼(골문 앞 HomeGk 자리). 따로 골키퍼는 나오지 않습니다.
+        const float GkX = HomeGkX, GkY = HomeGkY;
+
+        // 선방 뒤: 일어나 주먹을 쥐고 환호
+        static void KeeperCheer(List<StageKey> player, float at, float x, float y)
+        {
+            player.Add(K(at, x, y, "stand", 'd')); player.Add(K(at + 0.3f, x, y, "cheer", 'd')); player.Add(K(SceneEnd, x, y, "cheer", 'd'));
+        }
+
+        // 경기 중 슈팅 선방: 오른쪽에서 몰고 온 상대가 상자 모서리에서 때린 슛을 왼쪽으로 몸을 날려 쳐냄
+        static float SaveScene(List<StageKey> player, List<StageKey> ball, List<StageExtra> extras)
+        {
+            const float sx = 452f, sy = 236f, kick = 1.05f;
+            extras.Add(new StageExtra("red", new[] {
+                K(0f, 560f, 330f, "carry", '*'), K(kick - 0.05f, sx, sy, "carry", '*'), K(kick, sx, sy, "kick", 'u'),
+                K(kick + 0.4f, sx, sy, "stand", 'u'), K(kick + 1.2f, sx, sy, "stand", 'u'), K(SceneEnd, sx - 10f, sy, "stand", 'u') }));
+            ball.Add(K(0f, 560f, 330f, "hide", '*')); ball.Add(K(kick + 0.38f, sx + 14f, sy - 15f, "hide", '*'));
+            ball.Add(K(kick + 0.4f, sx + 14f, sy - 15f, "auto", '*', 6f));
+            float key = kick + 0.78f;
+            ball.Add(K(key, 344f, GkY - 2f, "auto", '*', 22f));                         // 손끝에 닿음
+            ball.Add(K(key + 0.35f, 300f, 102f, "auto", '*', 30f)); ball.Add(K(key + 0.7f, 262f, 84f, "auto", '*', 4f));   // 골대 옆으로 쳐냄
+            ball.Add(K(key + 0.75f, 258f, 82f, "hide", '*')); ball.Add(K(SceneEnd, 258f, 82f, "hide", '*'));
+            player.Add(K(0f, GkX + 6f, GkY, "stand", 'd')); player.Add(K(kick - 0.2f, GkX + 14f, GkY + 4f, "auto", '*'));
+            player.Add(K(kick + 0.1f, GkX + 14f, GkY + 4f, "stand", 'd'));
+            player.Add(K(kick + 0.45f, GkX + 8f, GkY + 2f, "dive", 'l')); player.Add(K(key + 0.1f, 346f, GkY + 4f, "dive", 'l'));
+            player.Add(K(key + 1.0f, 346f, GkY + 4f, "dive", 'l'));
+            KeeperCheer(player, key + 1.3f, 352f, GkY);
+            extras.Add(new StageExtra("ally", new[] { K(0f, 420f, 250f, "auto", '*'), K(kick, 430f, 214f, "auto", '*'), K(key + 0.4f, 430f, 214f, "stand", 'l'),
+                K(key + 0.8f, 430f, 214f, "cheer", 'd'), K(SceneEnd, 430f, 214f, "cheer", 'd') }));
+            extras.Add(new StageExtra("red", new[] { K(0f, 300f, 300f, "auto", '*'), K(1.6f, 330f, 190f, "auto", '*'), K(SceneEnd, 330f, 190f, "stand", 'u') }));
+            extras.Add(new StageExtra("ally", new[] { K(0f, 320f, 230f, "auto", '*'), K(1.4f, 344f, 196f, "auto", '*'), K(SceneEnd, 344f, 196f, "stand", 'r') }));
+            return key;
+        }
+
+        // 페널티킥 선방: 상대가 차기를 기다렸다가 같은 쪽으로 몸을 날려 막음. 상자 밖에서 다른 선수들이 지켜봄
+        static float PenaltySaveScene(List<StageKey> player, List<StageKey> ball, List<StageExtra> extras)
+        {
+            const float kickX = 366f, kickY = 214f, kick = 1.3f;
+            extras.Add(new StageExtra("red", new[] {
+                K(0f, 378f, 252f, "stand", 'u'), K(0.7f, 378f, 252f, "stand", 'u'), K(0.75f, 378f, 252f, "auto", '*'),
+                K(kick - 0.05f, kickX, kickY, "auto", '*'), K(kick, kickX, kickY, "kick", 'u'), K(kick + 0.4f, kickX, kickY, "stand", 'u'),
+                K(kick + 1.4f, kickX, kickY, "stand", 'u'), K(SceneEnd, kickX, kickY + 4f, "stand", 'd') }));
+            ball.Add(K(0f, kickX + 14f, kickY - 15f, "auto", '*')); ball.Add(K(kick, kickX + 14f, kickY - 15f, "hide", '*'));
+            ball.Add(K(kick + 0.38f, kickX + 14f, kickY - 15f, "hide", '*')); ball.Add(K(kick + 0.4f, kickX + 14f, kickY - 15f, "auto", '*', 2f));
+            float key = kick + 0.72f;
+            ball.Add(K(key, 340f, GkY, "auto", '*', 14f));                              // 몸을 날린 내 손에
+            ball.Add(K(key + 0.3f, 318f, GkY + 26f, "auto", '*', 10f)); ball.Add(K(key + 0.6f, 304f, GkY + 46f, "auto", '*', 0f));
+            ball.Add(K(SceneEnd, 304f, GkY + 46f, "auto", '*', 0f));
+            player.Add(K(0f, GkX, GkY - 4f, "stand", 'd')); player.Add(K(kick + 0.1f, GkX, GkY - 4f, "stand", 'd'));   // 끝까지 기다림
+            player.Add(K(kick + 0.2f, GkX - 4f, GkY - 2f, "dive", 'l')); player.Add(K(key + 0.1f, 342f, GkY + 2f, "dive", 'l'));
+            player.Add(K(key + 1.0f, 342f, GkY + 2f, "dive", 'l'));
+            KeeperCheer(player, key + 1.3f, 350f, GkY);
+            foreach (float x in new[] { 250f, 500f })
+                extras.Add(new StageExtra("red", new[] { K(0f, x, 262f, "stand", 'u'), K(SceneEnd, x, 262f, "stand", 'u') }));
+            foreach (float x in new[] { 290f, 460f })
+                extras.Add(new StageExtra("ally", new[] { K(0f, x, 266f, "stand", 'u'), K(key + 0.3f, x, 266f, "stand", 'u'), K(key + 0.5f, x, 266f, "jump", 'd'),
+                    K(key + 1.2f, x, 266f, "cheer", 'd'), K(SceneEnd, x, 266f, "cheer", 'd') }));
+            return key;
+        }
+
+        // 코너킥 잡아내기: 오른쪽 코너에서 올라온 크로스를 달려 나와 상대보다 먼저 뛰어올라 잡음
+        static float CornerCatchScene(List<StageKey> player, List<StageKey> ball, List<StageExtra> extras)
+        {
+            extras.Add(new StageExtra("red", new[] {
+                K(0f, 762f, 126f, "stand", 'l'), K(0.5f, 762f, 126f, "auto", '*'), K(0.8f, 746f, 106f, "auto", '*'),
+                K(0.82f, 746f, 106f, "kick", 'l'), K(1.22f, 746f, 106f, "stand", 'l'), K(SceneEnd, 746f, 106f, "stand", 'l') }));
+            ball.Add(K(0f, 728f, 94f, "auto", '*')); ball.Add(K(0.82f, 728f, 94f, "hide", '*')); ball.Add(K(1.2f, 728f, 94f, "hide", '*'));
+            ball.Add(K(1.22f, 727f, 94f, "auto", '*', 4f)); ball.Add(K(1.6f, 560f, 112f, "auto", '*', 96f));
+            float key = 1.98f;
+            ball.Add(K(key, 392f, 158f, "auto", '*', 104f));                              // 높이 뛴 내 두 손에
+            ball.Add(K(key + 0.02f, 392f, 158f, "hide", '*')); ball.Add(K(SceneEnd, 392f, 158f, "hide", '*'));   // 공을 품에 안음
+            player.Add(K(0f, GkX, GkY, "stand", 'd')); player.Add(K(1.3f, GkX, GkY, "stand", 'r'));
+            player.Add(K(1.85f, 392f, 156f, "auto", '*')); player.Add(K(1.88f, 392f, 156f, "jump", 'd'));
+            player.Add(K(key + 0.55f, 392f, 156f, "stand", 'd'));
+            KeeperCheer(player, key + 0.9f, 392f, 160f);
+            extras.Add(new StageExtra("red", new[] {                                   // 헤딩하려던 상대: 한발 늦게 뛰어오름
+                K(0f, 420f, 212f, "stand", 'u'), K(1.0f, 420f, 212f, "auto", '*'), K(1.8f, 404f, 172f, "auto", '*'),
+                K(1.95f, 404f, 172f, "jump", 'd'), K(2.6f, 404f, 172f, "stand", 'u'), K(SceneEnd, 404f, 176f, "stand", 'u') }));
+            extras.Add(new StageExtra("ally", new[] { K(0f, 360f, 176f, "stand", 'r'), K(1.8f, 372f, 186f, "auto", '*'), K(SceneEnd, 372f, 186f, "stand", 'u') }));
+            extras.Add(new StageExtra("red", new[] { K(0f, 330f, 196f, "stand", 'r'), K(SceneEnd, 330f, 196f, "stand", 'r') }));
+            extras.Add(new StageExtra("ally", new[] { K(0f, 450f, 150f, "stand", 'r'), K(SceneEnd, 450f, 150f, "stand", 'r') }));
+            return key;
+        }
+
+        // 1대1 선방: 수비 뒤로 빠져나온 상대에게 달려 나가 몸을 던져 발밑의 공을 덮침
+        static float OneOnOneScene(List<StageKey> player, List<StageKey> ball, List<StageExtra> extras)
+        {
+            const float key = 1.45f;
+            extras.Add(new StageExtra("red", new[] {
+                K(0f, 400f, 336f, "carry", '*'), K(key - 0.05f, 386f, 196f, "carry", '*'), K(key, 386f, 196f, "dive", 'l'),
+                K(key + 0.9f, 380f, 196f, "dive", 'l'), K(key + 1.5f, 380f, 196f, "stand", 'u'), K(SceneEnd, 380f, 196f, "stand", 'd') }));
+            extras.Add(new StageExtra("ally", new[] {                                  // 뒤쫓던 수비
+                K(0f, 450f, 300f, "auto", '*'), K(key, 420f, 210f, "auto", '*'), K(key + 0.5f, 420f, 210f, "stand", 'l'), K(SceneEnd, 420f, 210f, "cheer", 'd') }));
+            ball.Add(K(0f, 400f, 336f, "hide", '*')); ball.Add(K(key - 0.02f, 368f, 184f, "hide", '*'));
+            ball.Add(K(key, 368f, 184f, "auto", '*', 0f)); ball.Add(K(key + 0.12f, 366f, 180f, "auto", '*', 0f));
+            ball.Add(K(key + 0.14f, 366f, 180f, "hide", '*')); ball.Add(K(SceneEnd, 366f, 180f, "hide", '*'));   // 내 품에
+            player.Add(K(0f, GkX, GkY, "stand", 'd')); player.Add(K(0.5f, GkX, GkY, "stand", 'd'));
+            player.Add(K(key - 0.2f, 372f, 168f, "auto", '*')); player.Add(K(key - 0.15f, 372f, 168f, "dive", 'r'));
+            player.Add(K(key + 0.3f, 380f, 176f, "dive", 'r')); player.Add(K(key + 1.1f, 380f, 176f, "dive", 'r'));
+            KeeperCheer(player, key + 1.4f, 376f, 172f);
+            return key;
+        }
+
+        // ---------- 골키퍼인 내 도움 장면 ----------
+        // 위쪽이 우리 골문. 내가 공을 잡고 길게 차거나(롱킥) 빠르게 굴려 주면, 동료들이 아래(상대 골문 쪽)로 달려 나가 역습. 골은 화면 밖에서.
+        // goalTime: 공이 떠나고 동료가 받아 달려 나가는 순간 (이때 ASSIST!)
+        static StageDrill KeeperAssist(GoalScene kind, out float goalTime)
+        {
+            var player = new List<StageKey>(); var ball = new List<StageKey>(); var extras = new List<StageExtra>();
+            float kick;
+            if (kind == GoalScene.KeeperKick)
+            {
+                // 공을 안고 상자 끝까지 나와 손에서 떨어뜨려 길게 참
+                kick = 1.4f;
+                player.Add(K(0f, GkX, GkY + 10f, "stand", 'd')); player.Add(K(0.4f, GkX, GkY + 10f, "auto", '*'));
+                player.Add(K(kick - 0.05f, GkX + 4f, 200f, "auto", '*')); player.Add(K(kick, GkX + 4f, 200f, "kick", 'd'));
+                player.Add(K(kick + 0.4f, GkX + 4f, 200f, "stand", 'd'));
+                ball.Add(K(0f, GkX, GkY + 10f, "hide", '*')); ball.Add(K(kick + 0.38f, GkX + 10f, 205f, "hide", '*'));   // 품에 안고 있음
+                ball.Add(K(kick + 0.4f, GkX + 10f, 205f, "auto", '*', 8f));
+                ball.Add(K(kick + 0.9f, 430f, 300f, "auto", '*', 140f)); ball.Add(K(kick + 1.3f, 470f, 380f, "auto", '*', 170f));   // 화면 아래로 높이
+                ball.Add(K(kick + 1.35f, 470f, 390f, "hide", '*')); ball.Add(K(SceneEnd, 470f, 390f, "hide", '*'));
+                foreach (var (x0, x1) in new[] { (300f, 340f), (470f, 520f) })
+                    extras.Add(new StageExtra("ally", new[] { K(0f, x0, 250f, "auto", '*'), K(kick, x0 + 10f, 290f, "auto", '*'), K(kick + 1.4f, x1, 400f, "auto", '*'), K(SceneEnd, x1, 420f, "auto", '*') }));
+                extras.Add(new StageExtra("red", new[] { K(0f, 420f, 230f, "stand", 'u'), K(kick + 0.5f, 420f, 230f, "auto", '*'), K(SceneEnd, 440f, 420f, "auto", '*') }));
+                goalTime = kick + 1.35f;
+            }
+            else
+            {
+                // 공을 잡자마자 측면으로 빠르게 굴려 주고, 동료가 받아 몰고 달려 나감
+                kick = 1.0f;
+                player.Add(K(0f, GkX, GkY + 8f, "stand", 'd')); player.Add(K(0.5f, GkX + 10f, 150f, "auto", '*'));
+                player.Add(K(kick - 0.05f, GkX + 10f, 150f, "stand", 'r')); player.Add(K(kick, GkX + 10f, 150f, "kick", 'r'));
+                player.Add(K(kick + 0.4f, GkX + 10f, 150f, "stand", 'r'));
+                ball.Add(K(0f, GkX, GkY + 8f, "hide", '*')); ball.Add(K(kick + 0.38f, GkX + 29f, 138f, "hide", '*'));
+                ball.Add(K(kick + 0.4f, GkX + 29f, 138f, "auto", '*', 1f)); ball.Add(K(kick + 1.0f, 560f, 210f, "auto", '*', 0f));
+                ball.Add(K(kick + 1.02f, 560f, 210f, "hide", '*')); ball.Add(K(SceneEnd, 560f, 210f, "hide", '*'));   // 그다음은 동료 드리블 그림 안
+                extras.Add(new StageExtra("ally", new[] { K(0f, 620f, 190f, "auto", '*'), K(kick + 0.95f, 572f, 222f, "auto", '*'), K(kick + 1.0f, 572f, 222f, "carry", '*'),
+                    K(kick + 2.2f, 600f, 360f, "carry", '*'), K(SceneEnd, 620f, 420f, "carry", '*') }));
+                extras.Add(new StageExtra("ally", new[] { K(0f, 420f, 240f, "auto", '*'), K(kick + 0.8f, 440f, 300f, "auto", '*'), K(SceneEnd, 470f, 420f, "auto", '*') }));
+                extras.Add(new StageExtra("red", new[] { K(0f, 470f, 170f, "stand", 'r'), K(kick + 0.6f, 500f, 200f, "auto", '*'), K(SceneEnd, 560f, 330f, "auto", '*') }));
+                goalTime = kick + 1.6f;
+            }
+            player.Add(K(goalTime + 0.3f, player[player.Count - 1].x, player[player.Count - 1].y, "jump", 'd'));
+            player.Add(K(goalTime + 1.0f, player[player.Count - 1].x, player[player.Count - 1].y, "cheer", 'd'));
+            player.Add(K(SceneEnd, player[player.Count - 1].x, player[player.Count - 1].y, "cheer", 'd'));
+            return new StageDrill { duration = SceneEnd, loop = false, player = player.ToArray(), ball = ball.ToArray(), gk = OffScreen,
+                attacker = OffScreen, mate = OffScreen, extras = extras.ToArray() };
         }
 
         // 발로 차기: kick 시각부터 차는 그림 0.4초(공이 그림 안에 있음), 그다음 공이 날아가 골망으로. 골 시각을 돌려줍니다.

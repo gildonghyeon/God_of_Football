@@ -14,12 +14,8 @@ namespace MyFootballCareer
             var p = new PlayerData { playerName = name, position = position, trait = trait,
                 shooting = initial, passing = initial, dribbling = initial,
                 defending = initial, stamina = initial };
-            switch (trait)
-            {
-                case Trait.Finisher: p.shooting = Mathf.Min(attributeCap, initial + traitBonus); break;
-                case Trait.Playmaker: p.passing = Mathf.Min(attributeCap, initial + traitBonus); break;
-                case Trait.BallWinner: p.defending = Mathf.Min(attributeCap, initial + traitBonus); break;
-            }
+            var kind = Ko.TraitAttribute(trait);   // 특성에 맞는 능력치에 보너스
+            p.Set(kind, Mathf.Min(attributeCap, initial + traitBonus));
             return p;
         }
     }

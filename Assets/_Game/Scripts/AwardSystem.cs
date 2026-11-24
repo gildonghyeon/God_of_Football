@@ -11,7 +11,7 @@ namespace MyFootballCareer
     // 내 팀 동료의 골·도움은 내 경기 기록에 남은 득점자(GoalNote)로 셉니다. 내 자리의 주전은 내가 대신합니다.
     public static class AwardSystem
     {
-        static readonly Position[] Positions = { Position.Forward, Position.Midfielder, Position.Defender };
+        static readonly Position[] Positions = { Position.Forward, Position.Midfielder, Position.Defender, Position.Goalkeeper };
         static readonly float[] DivisionWeight = { 1f, 0.85f, 0.72f, 0.6f, 0.5f };   // 올해의 축구선수: 1부부터의 점수 배율
         const float BestElevenMinApps = 0.5f;   // 베스트 11 후보가 되려면 이 비율 이상 출전
         const float StatAwardBonus = 4f;        // 올해의 축구선수 점수: 득점·도움·수비왕 하나당
@@ -61,7 +61,7 @@ namespace MyFootballCareer
             }
         }
 
-        static int BestElevenSlots(Position p) { return p == Position.Defender ? 4 : 3; }   // 4-3-3
+        static int BestElevenSlots(Position p) { return p == Position.Goalkeeper ? 1 : p == Position.Defender ? 4 : 3; }   // 4-3-3 + 골키퍼
 
         // 이 팀들의 주전 필드 선수(영상 자리 1~10)가 한 시즌(서로 홈·원정)을 치른 기록. skipTeam의 skipSlot 자리는 내 선수라 비웁니다.
         static List<Rival> SimulateRivals(SaveData save, MatchSettings ms, CareerSettings career, List<TeamDefinition> teams, int division,
@@ -74,7 +74,7 @@ namespace MyFootballCareer
             foreach (var team in teams)
             {
                 var xi = SquadSystem.Starters(save, ms, team.id);
-                for (int slot = 1; slot < xi.Length; slot++)
+                for (int slot = 0; slot < xi.Length; slot++)   // 0번은 골키퍼 (베스트 11 골키퍼 자리)
                 {
                     var sp = xi[slot];
                     if (sp == null || (team.id == skipTeam && slot == skipSlot)) continue;
@@ -93,10 +93,10 @@ namespace MyFootballCareer
                             var m = new MatchRecord { home = leg == 0, seed = mr.Next() };
                             MatchSimulation.Play(m, p, team, opp, ms, career.attributeCap, kind);
                             r.played++;
-                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = m.defensiveActions, rating = m.rating });
+                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = pos == Position.Goalkeeper ? 0 : m.defensiveActions, rating = m.rating });   // 골키퍼의 선방은 수비 순위에서 뺌
                             if (!m.playerPlayed) continue;
                             r.apps++; r.ratingSum += m.rating;
-                            r.goals += m.playerGoals; r.assists += m.playerAssists; r.defense += m.defensiveActions;
+                            r.goals += m.playerGoals; r.assists += m.playerAssists; if (pos != Position.Goalkeeper) r.defense += m.defensiveActions;
                         }
                     }
                     list.Add(r);
@@ -188,7 +188,7 @@ namespace MyFootballCareer
             {
                 var m = season.matches[i]; me.played++;
                 if (!m.played || !m.playerPlayed) continue;
-                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; me.defense += m.defensiveActions;
+                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; if (pos != Position.Goalkeeper) me.defense += m.defensiveActions;
             }
 
             var sb = new StringBuilder();
@@ -226,7 +226,7 @@ namespace MyFootballCareer
             {
                 var m = season.matches[i]; me.played++;
                 if (!m.played || !m.playerPlayed) continue;
-                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; me.defense += m.defensiveActions;
+                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; if (pos != Position.Goalkeeper) me.defense += m.defensiveActions;
             }
             header = season.matches.Count + "라운드 중 " + games + "라운드 진행";
             var blocks = new List<LeaderBlockView> {
@@ -308,6 +308,7 @@ namespace MyFootballCareer
         {
             if (!SeasonSystem.IsComplete(save) || save.awardsSeason == save.season.seasonNumber) return false;
             SeasonSystem.EnsureSeasonEnd(save, ms);
+            if (save.teamMode) { save.awardsSeason = save.season.seasonNumber; save.awardLines = new List<string>(); return true; }   // 나만의 팀 모드: 개인 시상 없음
             var season = save.season;
             save.awardsSeason = season.seasonNumber;
             save.awardLines = new List<string>();
@@ -327,7 +328,7 @@ namespace MyFootballCareer
             void Give(TrophyKind kind, string detail)
             {
                 won.Add(kind);
-                save.trophies.Add(new TrophyRecord { kind = kind, career = save.rebirthCount + 1, season = season.seasonNumber, division = div, teamName = team, detail = detail });
+                save.trophies.Add(new TrophyRecord { kind = kind, career = ClubSystem.CareerNumber(save), season = season.seasonNumber, division = div, teamName = team, detail = detail });
             }
 
             if (mine.finalPosition == 1) { Give(TrophyKind.LeagueTitle, "승점 " + mine.points); lines.Add("* 리그 우승! " + ms.DivisionName(div) + " 챔피언!"); }
@@ -353,7 +354,8 @@ namespace MyFootballCareer
             }
             StatAward(TrophyKind.TopScorer, "득점왕", "골", goals, r => r.goals);
             StatAward(TrophyKind.TopAssists, "도움왕", "도움", assists, r => r.assists);
-            StatAward(TrophyKind.TopDefender, "수비왕", "회 수비", defense, r => r.defense);
+            if (pos != Position.Goalkeeper)   // 골키퍼의 기록은 선방이라 수비왕 경쟁에서 뺌
+                StatAward(TrophyKind.TopDefender, "수비왕", "회 수비", defense, r => r.position == Position.Goalkeeper ? 0 : r.defense);
 
             // 베스트 11: 내 포지션 평균 평점 상위 (출전 절반 이상)
             int slots = BestElevenSlots(pos);
@@ -404,7 +406,7 @@ namespace MyFootballCareer
             var list = new List<TrophyRecord>();
             if (save.trophies == null || save.season == null) return list;
             foreach (var t in save.trophies)
-                if (t.career == save.rebirthCount + 1 && t.season == save.season.seasonNumber) list.Add(t);
+                if (t.career == ClubSystem.CareerNumber(save) && t.season == save.season.seasonNumber) list.Add(t);
             return list;
         }
 
@@ -418,7 +420,8 @@ namespace MyFootballCareer
         // 트로피 진열장: 종류별 개수와 최근 트로피
         public static string DescribeTrophyRoom(SaveData save)
         {
-            var list = save.trophies;
+            int careerNo = ClubSystem.CareerNumber(save);   // 지금 선수의 트로피만
+            var list = save.trophies == null ? null : save.trophies.FindAll(t => t.career == careerNo);
             if (list == null || list.Count == 0) return "아직 트로피가 없습니다. 우승과 시즌 시상으로 채워 보세요.";
             var counts = new int[System.Enum.GetValues(typeof(TrophyKind)).Length];
             foreach (var t in list) counts[(int)t.kind]++;

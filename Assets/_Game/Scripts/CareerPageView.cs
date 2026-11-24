@@ -29,6 +29,13 @@ namespace MyFootballCareer
         public int rebirthCount; public float bonus, speed; public bool canRebirth;
         public List<RebirthCondition> conditions = new List<RebirthCondition>();
         public bool hasLastCareer; public CareerSummary lastCareer;
+        // 은퇴 · 내가 키운 선수 · 나만의 팀
+        public bool canRetire;
+        public List<RetiredPlayer> legends = new List<RetiredPlayer>();   // 평점 높은 순
+        public int legendNeed;
+        public bool hasClub, clubActive;
+        public string clubName, clubTactic, clubDivision;
+        public int clubKit; public float clubStrength;
     }
 
     // 커리어 탭의 카드들: 선수 프로필, 트로피 룸, 시즌 기록 표, 환생 조건.
@@ -43,8 +50,10 @@ namespace MyFootballCareer
         static readonly Color BarBack = new Color(.04f, .06f, .10f, 1f);
 
         readonly Font font;
-        RectTransform profileRoot, trophyRoot, historyRoot, rebirthRoot;
+        RectTransform profileRoot, trophyRoot, historyRoot, rebirthRoot, retireRoot, legendRoot;
         string lastKey;
+
+        public Action<int> OnLegend;   // 내가 키운 선수 줄을 누르면 (커리어 번호)
 
         public CareerPageView(Font font) { this.font = font; }
 
@@ -52,6 +61,8 @@ namespace MyFootballCareer
         public void BuildTrophies(Transform parent) { trophyRoot = Stack(parent, "Trophies", 6); }
         public void BuildHistory(Transform parent) { historyRoot = Stack(parent, "History", 2); }
         public void BuildRebirth(Transform parent) { rebirthRoot = Stack(parent, "Rebirth", 6); }
+        public void BuildRetire(Transform parent) { retireRoot = Stack(parent, "Retire", 6); }
+        public void BuildLegends(Transform parent) { legendRoot = Stack(parent, "Legends", 4); }
 
         // 0.2초마다 불려도 값이 바뀌었을 때만 다시 만듭니다.
         public void Set(CareerPageData d)
@@ -60,7 +71,7 @@ namespace MyFootballCareer
             string key = JsonUtility.ToJson(d);
             if (key == lastKey) return;
             lastKey = key;
-            SetProfile(d); SetTrophies(d); SetHistory(d); SetRebirth(d);
+            SetProfile(d); SetTrophies(d); SetHistory(d); SetRebirth(d); SetRetire(d); SetLegends(d);
         }
 
         // ---------- 프로필 ----------
@@ -173,6 +184,60 @@ namespace MyFootballCareer
                 string best = c.bestPosition > 0 ? "최고 " + (c.bestDivision > 0 ? c.bestDivision + "부 " : "") + c.bestPosition + "위 · " : "";
                 Note(rebirthRoot, "지난 커리어 " + c.careerNumber + ": " + c.seasons + "시즌 · " + best + "골 " + c.goals + " 도움 " + c.assists
                      + " · +" + c.bonusGainedPercent.ToString("0.#") + "%", PixelTheme.TextDim, 15);
+            }
+        }
+
+        // ---------- 은퇴 ----------
+        void SetRetire(CareerPageData d)
+        {
+            if (retireRoot == null) return;
+            Clear(retireRoot);
+            Note(retireRoot, d.canRetire ? "시즌이 끝났습니다. 원하면 지금 은퇴할 수 있습니다." : "시즌이 끝나면 은퇴할 수 있습니다.",
+                 d.canRetire ? PixelTheme.Accent : PixelTheme.TextDim);
+            Note(retireRoot, "은퇴한 선수는 '내가 키운 선수'에 남고, 새 선수로 다시 시작합니다.", PixelTheme.TextDim, 15);
+        }
+
+        // ---------- 내가 키운 선수 · 나만의 팀 ----------
+        void SetLegends(CareerPageData d)
+        {
+            if (legendRoot == null) return;
+            Clear(legendRoot);
+            if (d.hasClub)
+            {
+                var card = Box(legendRoot, GoldFill, 104);
+                TeamKits.PreviewImage(card, d.clubKit, .02f, .06f, .16f, .94f);
+                Fit(Label(card, d.clubName, 26, PixelTheme.Accent, .19f, .52f, .74f, .96f, TextAnchor.MiddleLeft), 14);
+                Fit(Label(card, d.clubTactic, 16, PixelTheme.TextDim, .19f, .06f, .74f, .48f, TextAnchor.MiddleLeft), 11);
+                Fit(Label(card, d.clubActive ? d.clubDivision : "다음 시즌 참가", 18, PixelTheme.Text, .70f, .52f, .97f, .96f, TextAnchor.MiddleRight), 11);
+                Fit(Label(card, "전력 " + d.clubStrength.ToString("0"), 18, PixelTheme.Text, .70f, .06f, .97f, .48f, TextAnchor.MiddleRight), 11);
+            }
+            else
+            {
+                int n = d.legends.Count;
+                var cap = Block(legendRoot, 30);
+                Label(cap, "나만의 팀 창단", 16, PixelTheme.TextDim, 0f, 0f, .5f, 1f, TextAnchor.MiddleLeft);
+                Label(cap, Mathf.Min(n, d.legendNeed) + " / " + d.legendNeed, 16, n >= d.legendNeed ? GoodText : PixelTheme.Accent, .5f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+                var bar = Box(legendRoot, BarBack, 12);
+                Img(bar, n >= d.legendNeed ? PixelTheme.Bar : PixelTheme.Accent, 0f, 0f, Mathf.Clamp01(d.legendNeed > 0 ? (float)n / d.legendNeed : 1f), 1f);
+                Note(legendRoot, n >= d.legendNeed ? "창단할 수 있습니다! 은퇴 선수로 팀을 만들어 리그에 참가하세요."
+                                                    : "은퇴 선수 " + d.legendNeed + "명을 모으면 나만의 팀을 창단할 수 있습니다.",
+                     n >= d.legendNeed ? PixelTheme.Accent : PixelTheme.TextDim, 15);
+            }
+            if (d.legends.Count == 0) { Note(legendRoot, "아직 은퇴한 선수가 없습니다.", PixelTheme.TextDim); return; }
+            Note(legendRoot, "선수를 누르면 커리어 기록을 볼 수 있습니다.", PixelTheme.TextDim, 14);
+            for (int i = 0; i < d.legends.Count; i++)
+            {
+                var lg = d.legends[i];
+                var r = Box(legendRoot, i % 2 == 0 ? RowA : RowB, 56);
+                var img = r.GetComponent<Image>(); img.raycastTarget = true;
+                var button = r.gameObject.AddComponent<Button>(); button.targetGraphic = img;
+                int careerNo = lg.careerNumber;
+                button.onClick.AddListener(() => { if (OnLegend != null) OnLegend(careerNo); });
+                Label(r, Mathf.RoundToInt(lg.rating).ToString(), 24, PixelTheme.Accent, .01f, 0f, .12f, 1f, TextAnchor.MiddleCenter);
+                Fit(Label(r, lg.name, 19, PixelTheme.Text, .13f, .48f, .58f, 1f, TextAnchor.MiddleLeft), 11);
+                Fit(Label(r, Ko.Pos(lg.position) + " · " + Ko.TraitName(lg.trait) + " · 커리어" + lg.careerNumber, 14, PixelTheme.TextDim, .13f, 0f, .58f, .50f, TextAnchor.MiddleLeft), 10);
+                Fit(Label(r, lg.seasons + "시즌 · 골 " + lg.goals + " · 도움 " + lg.assists, 15, PixelTheme.Text, .58f, .48f, .99f, 1f, TextAnchor.MiddleRight), 10);
+                Fit(Label(r, (lg.trophies > 0 ? "★ " + lg.trophies + " · " : "") + lg.lastTeam + "  ›", 14, lg.trophies > 0 ? PixelTheme.Accent : PixelTheme.TextDim, .58f, 0f, .99f, .50f, TextAnchor.MiddleRight), 10);
             }
         }
 

@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 namespace MyFootballCareer
 {
-    public enum Position { Forward, Midfielder, Defender }
-    public enum Trait { Finisher, Playmaker, BallWinner }
+    public enum Position { Forward, Midfielder, Defender, Goalkeeper }
+    // 특성: 앞의 셋은 예전 저장과 같은 번호. 포지션마다 고를 수 있는 특성이 다릅니다 (Ko.TraitsFor)
+    public enum Trait { Finisher, Playmaker, BallWinner, Dribbler, Pressing, BoxToBox, Stopper, BallPlaying, Overlapping, ShotStopper, SweeperKeeper }
     public enum AttributeKind { Shooting, Passing, Dribbling, Defending, Stamina }
     public enum TrophyKind { LeagueTitle, Promotion, TopScorer, TopAssists, TopDefender, BestEleven, PlayerOfTheYear }
 
@@ -96,6 +97,12 @@ namespace MyFootballCareer
         public int nextSquadPlayerId;                                      // 새 선수 번호
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
+        public bool teamMode;                                              // 나만의 팀 모드의 저장 (내 선수 없이 팀으로 경기)
+        public int retireCount;                                            // 은퇴한 횟수 (환생처럼 커리어를 끝냄)
+        public List<RetiredPlayer> legends = new List<RetiredPlayer>();    // 내가 키운 선수 (은퇴한 선수들)
+        public bool hasClub;                                               // 나만의 팀을 창단했는지
+        public MyClubData myClub = new MyClubData();
+        public List<string> droppedTeams = new List<string>();             // 나만의 팀에 자리를 넘기고 리그에서 빠진 팀
     }
 
     // 한 팀의 소속 부 (1부가 가장 높음)

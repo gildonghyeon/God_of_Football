@@ -81,7 +81,7 @@ namespace MyFootballCareer
             var team = ms.FindTeam(save.teamId);
             var summary = new CareerSummary
             {
-                careerNumber = save.rebirthCount + 1,
+                careerNumber = ClubSystem.CareerNumber(save),
                 seasons = done.Count,
                 teamName = team != null ? team.displayName : save.teamId,
                 bonusGainedPercent = gain

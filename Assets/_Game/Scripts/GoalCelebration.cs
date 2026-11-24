@@ -15,6 +15,7 @@ namespace MyFootballCareer
         public bool isDefense;   // 내 수비 장면 (TACKLE! 등). 이때 matchGoals는 이번 경기 수비 횟수
         public int oppKit = -1;  // 장면 속 상대 팀 유니폼 (PlayerLook.Kits 번호, -1이면 기본 빨간 유니폼)
         public TrainingStageDrills.DefenseScene defense;
+        public bool keeper;      // 내가 골키퍼 (수비 장면은 선방, 정보 줄은 선방 수)
     }
 
     // 내가 골을 넣었을 때의 화면.
@@ -188,7 +189,7 @@ namespace MyFootballCareer
             {
                 parts.Clear();
                 parts.Add(DefenseKind(info.defense));
-                if (info.matchGoals > 0) parts.Add("이번 경기 수비 " + info.matchGoals + "회");
+                if (info.matchGoals > 0) parts.Add((info.keeper ? "이번 경기 선방 " : "이번 경기 수비 ") + info.matchGoals + "회");
             }
             detailText.text = parts.Count > 0 ? string.Join("   ·   ", parts) : "멋진 골!";
             goalLabel.text = info.isDefense ? DefenseTitle(info.defense) : info.isAssist ? "ASSIST!" : "GOAL!";
@@ -342,6 +343,9 @@ namespace MyFootballCareer
                 case TrainingStageDrills.DefenseScene.Block: return "BLOCKED!";
                 case TrainingStageDrills.DefenseScene.Clearance: return "CLEARED!";
                 case TrainingStageDrills.DefenseScene.Interception: return "INTERCEPT!";
+                case TrainingStageDrills.DefenseScene.Save: case TrainingStageDrills.DefenseScene.OneOnOne: return "SAVE!";
+                case TrainingStageDrills.DefenseScene.PenaltySave: return "PK SAVE!";
+                case TrainingStageDrills.DefenseScene.CornerCatch: return "CAUGHT!";
                 default: return "TACKLE!";
             }
         }
@@ -353,6 +357,10 @@ namespace MyFootballCareer
                 case TrainingStageDrills.DefenseScene.Block: return "슈팅을 몸으로 막는다!";
                 case TrainingStageDrills.DefenseScene.Clearance: return "골문 앞 위기!";
                 case TrainingStageDrills.DefenseScene.Interception: return "패스 길을 읽었다!";
+                case TrainingStageDrills.DefenseScene.Save: return "골문 구석으로 향하는 슈팅!";
+                case TrainingStageDrills.DefenseScene.PenaltySave: return "페널티킥! 끝까지 기다린다";
+                case TrainingStageDrills.DefenseScene.CornerCatch: return "코너킥! 크로스가 올라온다";
+                case TrainingStageDrills.DefenseScene.OneOnOne: return "1대1 위기!";
                 default: return "상대 돌파를 막는다!";
             }
         }
@@ -364,6 +372,10 @@ namespace MyFootballCareer
                 case TrainingStageDrills.DefenseScene.Block: return "슈팅 블록";
                 case TrainingStageDrills.DefenseScene.Clearance: return "골라인 걷어내기";
                 case TrainingStageDrills.DefenseScene.Interception: return "가로채기 후 역습";
+                case TrainingStageDrills.DefenseScene.Save: return "다이빙 선방";
+                case TrainingStageDrills.DefenseScene.PenaltySave: return "페널티킥 선방";
+                case TrainingStageDrills.DefenseScene.CornerCatch: return "코너킥 캐칭";
+                case TrainingStageDrills.DefenseScene.OneOnOne: return "1대1 선방";
                 default: return "슬라이딩 태클";
             }
         }
@@ -375,6 +387,8 @@ namespace MyFootballCareer
                 case TrainingStageDrills.GoalScene.Cross: return "크로스!";
                 case TrainingStageDrills.GoalScene.Corner: return "코너킥!";
                 case TrainingStageDrills.GoalScene.LongShot: return "슈팅 자리로 내준 패스!";
+                case TrainingStageDrills.GoalScene.KeeperKick: return "롱킥 한 방으로 역습!";
+                case TrainingStageDrills.GoalScene.KeeperRoll: return "빠른 배급으로 역습!";
                 default: return "스루 패스!";
             }
         }
@@ -386,6 +400,8 @@ namespace MyFootballCareer
                 case TrainingStageDrills.GoalScene.Cross: return "크로스 도움";
                 case TrainingStageDrills.GoalScene.Corner: return "코너킥 도움";
                 case TrainingStageDrills.GoalScene.LongShot: return "내준 패스 도움";
+                case TrainingStageDrills.GoalScene.KeeperKick: return "골키퍼 롱킥 도움";
+                case TrainingStageDrills.GoalScene.KeeperRoll: return "골키퍼 배급 도움";
                 default: return "패스 도움";
             }
         }

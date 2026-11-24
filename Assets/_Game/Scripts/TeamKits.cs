@@ -122,6 +122,49 @@ namespace MyFootballCareer
             ("harbor-town",         Solid("파랑·흰색 하의", Royal, White, Royal, None)),                                           // 라리아니 (파랑)
         };
 
+        // 나만의 팀이 고를 수 있는 유니폼
+        static readonly KitDesign[] ClubDesigns =
+        {
+            Solid("검정·금색 장식", Black, Black, Black, Gold),
+            Kit("남색·금색 줄무늬", KitPattern.Stripes, Navy, Gold, 4, Navy, Navy, Gold),
+            Kit("흰색·초록 어깨띠", KitPattern.Sash, White, Green, 6, White, Green, Green),
+            Kit("주황·검정 후프", KitPattern.Hoops, Orange, Black, 4, Black, Orange, None),
+            Kit("청록·흰색 반반", KitPattern.Halves, Teal, White, 4, Teal, White, None),
+            Kit("보라·금색 줄무늬", KitPattern.Stripes, Purple, Gold, 5, Black, Purple, Gold),
+            Solid("회색·분홍 장식", Grey, Grey, Grey, Pink),
+            Kit("하늘·남색 후프", KitPattern.Hoops, Sky, Navy, 5, Navy, Sky, None),
+        };
+        public static int ClubDesignCount { get { return ClubDesigns.Length; } }
+        public static string ClubDesignName(int i) { return ClubDesigns[Mathf.Clamp(i, 0, ClubDesigns.Length - 1)].name; }
+        static readonly List<int> clubHome = new List<int>(), clubAway = new List<int>();
+        // 골키퍼 유니폼: 팀 홈 유니폼과 겹치지 않는 첫 번째 것
+        static readonly KitDesign[] KeeperDesigns =
+        {
+            Solid("골키퍼 형광 연두", new Color32(170, 230, 40, 255), Black, new Color32(170, 230, 40, 255), Black),
+            Solid("골키퍼 주황", Orange, Black, Orange, Black),
+            Solid("골키퍼 검정", Black, Black, Black, Yellow),
+            Solid("골키퍼 분홍", Pink, Navy, Pink, Navy),
+        };
+        static readonly List<int> keeperIndex = new List<int>();
+
+        public static int Keeper(string teamId)
+        {
+            PlayerLook.EnsureKits();
+            if (keeperIndex.Count == 0) return Home(teamId);
+            var home = PlayerLook.Kit(Home(teamId));
+            foreach (int i in keeperIndex) if (!Clash(home, PlayerLook.Kit(i))) return i;
+            return keeperIndex[0];
+        }
+
+        // 내 선수가 입는 유니폼: 골키퍼면 골키퍼 유니폼, 아니면 팀 홈 유니폼
+        public static int PlayerKit(string teamId, Position position) { return position == Position.Goalkeeper ? Keeper(teamId) : Home(teamId); }
+        static int clubKit = -1;
+
+        // 나만의 팀 유니폼 (-1이면 창단 전)
+        public static void SetClubKit(int design) { clubKit = design < 0 ? -1 : Mathf.Clamp(design, 0, ClubDesigns.Length - 1); }
+        // 유니폼 고르기 화면용: 그 디자인의 그림 번호
+        public static int ClubPreview(int design) { PlayerLook.EnsureKits(); return clubHome.Count > 0 ? clubHome[Mathf.Clamp(design, 0, clubHome.Count - 1)] : 0; }
+
         static readonly Dictionary<string, int> homeIndex = new Dictionary<string, int>();
         static readonly Dictionary<string, int> awayIndex = new Dictionary<string, int>();
 
@@ -132,6 +175,14 @@ namespace MyFootballCareer
             {
                 homeIndex[id] = kits.Count; kits.Add(kit);
                 awayIndex[id] = kits.Count; kits.Add(AwayOf(kit));
+            }
+            keeperIndex.Clear();
+            foreach (var kit in KeeperDesigns) { keeperIndex.Add(kits.Count); kits.Add(kit); }
+            clubHome.Clear(); clubAway.Clear();
+            foreach (var kit in ClubDesigns)
+            {
+                clubHome.Add(kits.Count); kits.Add(kit);
+                clubAway.Add(kits.Count); kits.Add(AwayOf(kit));
             }
         }
 
@@ -150,12 +201,14 @@ namespace MyFootballCareer
         public static int Home(string teamId)
         {
             PlayerLook.EnsureKits();
+            if (teamId == ClubSystem.ClubId) return clubKit >= 0 && clubKit < clubHome.Count ? clubHome[clubKit] : 0;
             return teamId != null && homeIndex.TryGetValue(teamId, out int i) ? i : 0;
         }
 
         public static int Away(string teamId)
         {
             PlayerLook.EnsureKits();
+            if (teamId == ClubSystem.ClubId) return clubKit >= 0 && clubKit < clubAway.Count ? clubAway[clubKit] : 0;
             return teamId != null && awayIndex.TryGetValue(teamId, out int i) ? i : 0;
         }
 
@@ -178,6 +231,7 @@ namespace MyFootballCareer
 
         public static string Name(string teamId)
         {
+            if (teamId == ClubSystem.ClubId) return clubKit >= 0 ? ClubDesigns[clubKit].name : "";
             foreach (var (id, kit) in Homes) if (id == teamId) return kit.name;
             return "";
         }

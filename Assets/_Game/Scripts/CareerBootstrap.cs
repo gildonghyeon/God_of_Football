@@ -19,6 +19,14 @@ namespace MyFootballCareer
         bool temporaryTraining;
         bool temporaryMatch;
         bool temporaryRebirth;
+        bool clonedMatch;      // 실행 중 팀 목록(나만의 팀)을 바꾸므로 설정의 복사본을 씁니다
+        bool retiring;         // 은퇴 후 새 선수 만들기 화면
+        // 나만의 팀 모드: 따로 저장되는 팀·리그 (선수 키우기와 다른 모드)
+        CareerSaveSystem clubSaves;
+        SaveData club;                 // 없으면 아직 창단 전
+        MatchSettings clubMs;          // 나만의 팀 리그의 팀 목록 (선수 키우기 설정의 복사본)
+        TeamDefinition[] baseTeams;    // 선수 키우기 리그의 원래 팀 목록
+        bool inClub;                   // 나만의 팀 모드 화면을 보는 중
         float refreshTimer;
         float autoSaveTimer;
 
@@ -43,6 +51,7 @@ namespace MyFootballCareer
                 temporaryRebirth = true;
                 Debug.LogWarning("Rebirth Settings is not assigned on GameRoot. Using temporary default values.");
             }
+            if (!temporaryMatch) { matchSettings = Instantiate(matchSettings); clonedMatch = true; }   // 원본 설정 파일은 바꾸지 않음
             saves = new CareerSaveSystem();
             ui = gameObject.AddComponent<CareerPrototypeUI>();
             ui.Initialize(uiFont, settings, trainingSettings, Create, Save, UpgradeAttribute, PlayMatch, ChooseOffer, StayWithTeam, Rebirth);
@@ -58,6 +67,13 @@ namespace MyFootballCareer
             ui.OnBuyFacility = BuyFacility;
             ui.OnClaimAttendance = ClaimAttendance; ui.OnClaimMission = ClaimMission; ui.OnClaimBonus = ClaimDailyBonus;
             ui.OnOpenSquads = OpenSquads; ui.OnShowSquad = ShowSquad;
+            ui.OnShowLegend = ShowLegend;
+            ui.OnRetire = Retire; ui.OnCancelCreation = CancelRetire; ui.OnFoundClub = FoundClub;
+            ui.OnOpenClub = OpenClubMode; ui.OnClubPlay = ClubPlay; ui.OnClubSquad = ClubSquad; ui.OnClubSign = ClubSign; ui.OnClubBack = ClubBack;
+            baseTeams = matchSettings.teams != null ? (TeamDefinition[])matchSettings.teams.Clone() : new TeamDefinition[0];
+            clubMs = Instantiate(matchSettings);
+            clubSaves = new CareerSaveSystem("football-club-v1.json");
+            LoadClub();
             Debug.Log("Save folder: " + Application.persistentDataPath);
             LoadAndShow(null);
         }
@@ -67,6 +83,7 @@ namespace MyFootballCareer
         {
             training = null;
             blocked = !saves.TryLoad(out current, out string message);
+            retiring = false;
             if (blocked) { ui.ShowError(message, saves.HasValidBackup()); return; }
             if (!string.IsNullOrEmpty(extraMessage))
                 message = string.IsNullOrEmpty(message) ? extraMessage : extraMessage + " " + message;
@@ -91,7 +108,8 @@ namespace MyFootballCareer
         void DoStartNew()
         {
             if (!saves.ArchiveSave(out string message)) { ui.ShowError(message, saves.HasValidBackup()); return; }
-            blocked = false; current = null; training = null;
+            blocked = false; current = null; training = null; retiring = false;
+            ArchiveClub();
             ui.ShowCreation();
         }
 
@@ -107,18 +125,23 @@ namespace MyFootballCareer
             if (blocked || current == null) return;
             saves.TrySave(current, out _);
             if (!saves.ArchiveSave(out string message)) { ui.SetStatus(message); return; }
-            current = null; training = null;
+            current = null; training = null; retiring = false;
+            ArchiveClub();
             ui.ShowCreation();
             ui.SetStatus(message + " 새 선수를 만드세요.");
         }
 
         void StartPlayer(string message, bool applyOffline)
         {
+            retiring = false; inClub = false;
+            if (ClubSystem.CleanCareer(current)) saves.TrySave(current, out _);   // 예전 버전에서 선수 키우기 리그에 들어갔던 나만의 팀 정리
+            current.hasClub = club != null;
+            if (club != null) current.myClub = club.myClub;
             training = new TrainingSystem(current, settings, trainingSettings);
             SeasonSystem.Prepare(current, matchSettings);
             SeasonSystem.EnsureContract(current, matchSettings, settings);
             TeamIdentity.MigrateSave(current, matchSettings);           // 저장에 남은 예전 팀 이름을 새 이름으로
-            current.player.kitColor = TeamKits.Home(current.teamId);   // 유니폼은 소속 팀 유니폼 (고를 수 없음)
+            current.player.kitColor = TeamKits.PlayerKit(current.teamId, current.player.position);   // 유니폼은 소속 팀 유니폼 (골키퍼는 골키퍼 유니폼)
             OfflineResult offline = null;
             if (applyOffline)
             {
@@ -142,7 +165,7 @@ namespace MyFootballCareer
         // 모바일에서 앱이 백그라운드에서 돌아왔을 때도 같은 규칙으로 보상합니다.
         void ApplyOfflineOnResume()
         {
-            if (blocked || current == null || training == null) return;
+            if (blocked || current == null || training == null || retiring || inClub) return;
             var offline = IdleRewardSystem.Apply(current, settings, trainingSettings, System.DateTime.UtcNow.Ticks);
             saves.TrySave(current, out _);
             if (offline.ClockRewound) ui.SetStatus("기기 시계가 뒤로 돌아가 오프라인 보상이 없습니다.");
@@ -174,7 +197,7 @@ namespace MyFootballCareer
             if (blocked || current == null) return;
             current.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             current.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
-            current.player.kitColor = TeamKits.Home(current.teamId);   // 유니폼은 소속 팀 것 그대로
+            current.player.kitColor = TeamKits.PlayerKit(current.teamId, current.player.position);   // 유니폼은 소속 팀 것 그대로
             saves.TrySave(current, out string message);
             ui.ApplyLook(current.player);
             ui.SetStatus("외형을 바꿨습니다. " + message);
@@ -182,12 +205,14 @@ namespace MyFootballCareer
 
         void Create(string rawName, Position position, Trait trait, int hair, int skin, int kit, int boots)
         {
-            if (blocked || current != null) return;
+            if (blocked || (current != null && !retiring)) return;
             string name = rawName.Trim();
             if (string.IsNullOrWhiteSpace(name) || name.Length > settings.maxNameLength)
             { ui.SetStatus("이름을 입력하세요 (1~" + settings.maxNameLength + "자)."); return; }
             foreach (char c in name) if (char.IsControl(c)) { ui.SetStatus("이름에 쓸 수 없는 문자가 있습니다."); return; }
-            var candidate = new SaveData { player = settings.CreatePlayer(name, position, trait) };
+            var newPlayer = settings.CreatePlayer(name, position, trait);
+            if (retiring) { DoRetire(newPlayer, hair, skin, boots); return; }
+            var candidate = new SaveData { player = newPlayer };
             candidate.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             candidate.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             candidate.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
@@ -395,24 +420,230 @@ namespace MyFootballCareer
                 name = current.player.playerName, position = Ko.Pos(current.player.position), trait = Ko.TraitName(current.player.trait),
                 team = team != null ? team.displayName : current.teamId,
                 division = current.season.division > 0 ? matchSettings.DivisionName(current.season.division) : "",
-                season = current.season.seasonNumber, career = current.rebirthCount + 1,
+                season = current.season.seasonNumber, career = ClubSystem.CareerNumber(current),
                 money = current.money, pay = FacilitySystem.MatchPay(current, matchSettings),
                 agentPercent = Mathf.RoundToInt((FacilitySystem.WageMultiplier(current, matchSettings) - 1f) * 100f), wage = current.weeklyWage,
                 rebirthCount = current.rebirthCount, bonus = current.rebirthBonusPercent, speed = RebirthSystem.TrainingMultiplier(current),
                 canRebirth = RebirthSystem.CanRebirth(current, rebirthSettings),
-                conditions = RebirthSystem.Conditions(current, rebirthSettings)
+                conditions = RebirthSystem.Conditions(current, rebirthSettings),
+                canRetire = ClubSystem.CanRetire(current), legendNeed = ClubSystem.FoundLegends,
+                hasClub = club != null, clubActive = club != null
             };
+            if (current.legends != null) { d.legends.AddRange(current.legends); d.legends.Sort((a, b) => b.rating.CompareTo(a.rating)); }
+            if (club != null)
+            {
+                var clubTeam = clubMs.FindTeam(ClubSystem.ClubId) ?? ClubSystem.ClubTeam(club, clubMs);
+                d.clubName = club.myClub.name; d.clubKit = TeamKits.Home(ClubSystem.ClubId); d.clubStrength = clubTeam.strength;
+                int free = ClubSystem.FreeAgents(current, club).Count;
+                d.clubTactic = TacticSystem.FormationName(club.myClub.formation) + " · " + TacticSystem.StyleName(club.myClub.style) + " · 선수 " + club.legends.Count + "명"
+                             + (free > 0 ? " · 영입 가능 " + free + "명" : "");
+                d.clubDivision = clubMs.DivisionName(SeasonSystem.DivisionOf(club, clubMs, ClubSystem.ClubId)) + " · 시즌 " + club.season.seasonNumber;
+            }
             d.trophyCounts = new int[System.Enum.GetValues(typeof(TrophyKind)).Length];
             if (current.trophies != null)
             {
-                foreach (var t in current.trophies) d.trophyCounts[(int)t.kind]++;
-                d.trophyTotal = current.trophies.Count;
-                for (int i = current.trophies.Count - 1; i >= 0 && d.recent.Count < 4; i--) d.recent.Add(current.trophies[i]);
+                // 트로피 룸에는 지금 선수(이번 커리어)의 트로피만. 지난 선수의 트로피는 내가 키운 선수 기록에서 봄
+                int careerNo = ClubSystem.CareerNumber(current);
+                foreach (var t in current.trophies) if (t.career == careerNo) { d.trophyCounts[(int)t.kind]++; d.trophyTotal++; }
+                for (int i = current.trophies.Count - 1; i >= 0 && d.recent.Count < 4; i--) if (current.trophies[i].career == careerNo) d.recent.Add(current.trophies[i]);
             }
             for (int i = current.seasonHistory.Count - 1; i >= 0 && d.history.Count < 5; i--) d.history.Add(current.seasonHistory[i]);
             if (current.careers != null && current.careers.Count > 0) { d.hasLastCareer = true; d.lastCareer = current.careers[current.careers.Count - 1]; }
             ui.SetCareer(d);
             ui.SetCurrentTeam(SeasonSystem.CurrentTeamInfo(current, matchSettings, settings));
+        }
+
+        // ---------- 은퇴 ----------
+        void Retire()
+        {
+            if (blocked || current == null) return;
+            if (!ClubSystem.CanRetire(current)) { ui.SetStatus("시즌이 끝나야 은퇴할 수 있습니다."); return; }
+            var record = ClubSystem.CurrentRecord(current, matchSettings, settings);
+            int legends = ClubSystem.LegendCount(current), need = current.hasClub ? 0 : ClubSystem.FoundLegends;
+            ui.ShowCardsConfirm("은퇴할까요?", (body, font) => PopupCards.RetireConfirm(body, font, record, legends, need),
+                "은퇴하고 새 선수 만들기", () =>
+            {
+                if (blocked || current == null || !ClubSystem.CanRetire(current)) return;
+                saves.TrySave(current, out _);
+                retiring = true;
+                ui.ShowCreation(true);   // 새 선수를 만들면 그때 은퇴합니다 (취소하면 그대로)
+            });
+        }
+
+        // 내가 키운 선수 한 명의 커리어 기록
+        void ShowLegend(int careerNumber)
+        {
+            if (blocked || current == null || current.legends == null) return;
+            var lg = current.legends.Find(x => x.careerNumber == careerNumber);
+            if (lg == null) return;
+            var record = ClubSystem.LegendRecord(current, lg);
+            ui.ShowCards("내가 키운 선수", (body, font) => PopupCards.CareerRecord(body, font, record, "은퇴 · 마지막 팀 " + lg.lastTeam), null, "닫기");
+        }
+
+        void CancelRetire()
+        {
+            if (!retiring || current == null) return;
+            StartPlayer(null, false);
+        }
+
+        void DoRetire(PlayerData newPlayer, int hair, int skin, int boots)
+        {
+            if (current == null || !ClubSystem.CanRetire(current)) { retiring = false; return; }
+            newPlayer.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
+            newPlayer.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
+            newPlayer.bootColor = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
+            var legend = ClubSystem.Retire(current, matchSettings, settings, newPlayer);
+            saves.TrySave(current, out _);
+            StartPlayer(legend.name + " 은퇴. 새 커리어 시작.", false);
+            int count = ClubSystem.LegendCount(current);
+            bool canFound = ClubSystem.CanFound(current);
+            string newName = newPlayer.playerName;
+            ui.ShowCards("은퇴 완료", (body, font) => PopupCards.RetireDone(body, font, legend.name, newName, count, ClubSystem.FoundLegends, canFound || current.hasClub));
+        }
+
+        // ---------- 나만의 팀 ----------
+        void FoundClub(string name, int kit, Formation formation, TacticStyle style)
+        {
+            if (blocked || current == null) return;
+            if (club != null || !ClubSystem.CanFound(current)) { ui.SetStatus("은퇴 선수 " + ClubSystem.FoundLegends + "명이 있어야 창단할 수 있습니다."); return; }
+            if (name.Length > 24) name = name.Substring(0, 24);
+            club = ClubSystem.Found(current, clubMs, baseTeams, name, kit, formation, style);
+            if (!clubSaves.TrySave(club, out string message)) { club = null; current.hasClub = false; ui.SetStatus(message); return; }
+            saves.TrySave(current, out _);
+            var team = clubMs.FindTeam(ClubSystem.ClubId);
+            int kitIndex = TeamKits.Home(ClubSystem.ClubId), legends = club.legends.Count;
+            string tactic = TacticSystem.FormationName(formation) + " · " + TacticSystem.StyleName(style);
+            string division = clubMs.DivisionName(club.season.division);
+            SoundFx.Play(Sfx.Buy);
+            OpenClubMode();
+            ui.ShowCards("창단 완료", (body, font) => PopupCards.ClubFounded(body, font, name, kitIndex, tactic, legends, team != null ? team.strength : 0f, division, false));
+        }
+
+        void LoadClub()
+        {
+            club = null;
+            if (!clubSaves.TryLoad(out var loaded, out _) || loaded == null || !loaded.teamMode) return;
+            club = loaded;
+            ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+            SeasonSystem.Prepare(club, clubMs);
+        }
+
+        // 저장 초기화: 나만의 팀 저장도 옆으로 옮겨 둠
+        void ArchiveClub()
+        {
+            if (club != null) clubSaves.TrySave(club, out _);
+            clubSaves.ArchiveSave(out _);
+            club = null; inClub = false;
+        }
+
+        // ---------- 나만의 팀 모드 ----------
+        void OpenClubMode()
+        {
+            if (blocked || current == null || club == null) return;
+            inClub = true;
+            ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+            SeasonSystem.Prepare(club, clubMs);
+            ShowClubScreen();
+        }
+
+        void ShowClubScreen()
+        {
+            var team = clubMs.FindTeam(ClubSystem.ClubId);
+            var s = club.season;
+            var v = new ClubModeView
+            {
+                name = club.myClub.name, kit = TeamKits.Home(ClubSystem.ClubId), season = s.seasonNumber, legends = club.legends.Count,
+                tactic = TacticSystem.FormationName(club.myClub.formation) + " · " + TacticSystem.StyleName(club.myClub.style),
+                division = clubMs.DivisionName(s.division), strength = team != null ? team.strength : 0f,
+                complete = SeasonSystem.IsComplete(club), round = s.nextMatchIndex, rounds = s.matches.Count,
+                table = SeasonSystem.TableView(club, clubMs)
+            };
+            foreach (var m in s.matches)
+            {
+                if (!m.played) continue;
+                v.gf += m.goalsFor; v.ga += m.goalsAgainst;
+                if (m.goalsFor > m.goalsAgainst) v.w++; else if (m.goalsFor == m.goalsAgainst) v.d++; else v.l++;
+            }
+            for (int i = s.nextMatchIndex - 1; i >= 0 && v.recent.Count < 3; i--)
+            {
+                var m = s.matches[i];
+                v.recent.Add((m.goalsFor > m.goalsAgainst ? "승 " : m.goalsFor == m.goalsAgainst ? "무 " : "패 ") + m.goalsFor + "-" + m.goalsAgainst + " " + m.opponentName);
+            }
+            if (!v.complete)
+            {
+                var next = s.matches[s.nextMatchIndex];
+                v.nextText = next.round + "라운드 · " + (next.home ? "홈" : "원정") + " · " + next.opponentName;
+            }
+            v.free = ClubSystem.FreeAgents(current, club);
+            ui.ShowClubMode(v);
+        }
+
+        void ClubPlay()
+        {
+            if (club == null || ui.IsMatchPlaying) return;
+            if (SeasonSystem.IsComplete(club))
+            {
+                SeasonSystem.StartNextSeason(club, clubMs, settings, out var info);
+                clubSaves.TrySave(club, out _);
+                ShowClubScreen();
+                ui.ShowCards("새 시즌", (body, font) => PopupCards.NewSeason(body, font, info));
+                return;
+            }
+            var record = SeasonSystem.PlayNext(club, clubMs, settings);
+            if (record == null) { ui.SetStatus("경기를 할 수 없습니다."); return; }
+            clubSaves.TrySave(club, out _);
+            var own = clubMs.FindTeam(ClubSystem.ClubId);
+            ui.ReplayOwnTactic = TacticSystem.Of(own); ui.ReplayOppTactic = TacticSystem.Of(clubMs.FindTeam(record.opponentId));
+            ui.ReplayOwnKit = TeamKits.Home(ClubSystem.ClubId); ui.ReplayOppKit = TeamKits.Opponent(ClubSystem.ClubId, record.opponentId);
+            ui.ReplayYouKit = 0; ui.ReplayTeamMode = true;
+            ui.ShowMatchReplay(record, club.player, club.myClub.name, () =>
+            {
+                ShowClubScreen();
+                System.Action after = null;
+                if (SeasonSystem.IsComplete(club)) after = ShowClubSeasonEnd;
+                ui.ShowMatchResult("경기 결과", SeasonSystem.ResultData(record, club, clubMs, null), after);
+            });
+        }
+
+        void ShowClubSeasonEnd()
+        {
+            SeasonSystem.EnsureSeasonEnd(club, clubMs);
+            clubSaves.TrySave(club, out _);
+            var sum = SeasonSystem.Summarize(club, clubMs);
+            int teams = club.season.teamIds.Count, div = club.season.division, next = club.season.nextDivision;
+            int move = next > 0 && div > 0 ? (next < div ? 1 : next > div ? -1 : 0) : 0;
+            string name = club.myClub.name, division = clubMs.DivisionName(div);
+            ShowClubScreen();
+            ui.ShowCards("시즌 종료", (body, font) => ClubModeScreen.SeasonEnd(body, font, name, sum.finalPosition, teams, division, move, sum.wins, sum.draws, sum.losses, sum.goalsFor, sum.goalsAgainst));
+        }
+
+        void ClubSquad()
+        {
+            if (club == null) return;
+            int div = SeasonSystem.DivisionOf(club, clubMs, ClubSystem.ClubId);
+            ui.ShowSquad(club.myClub.name, SquadSystem.View(club, clubMs, settings, ClubSystem.ClubId, div, null));
+        }
+
+        void ClubSign(int careerNumber)
+        {
+            if (club == null || current == null) return;
+            var lg = current.legends.Find(x => x.careerNumber == careerNumber);
+            if (lg == null) return;
+            float before = clubMs.FindTeam(ClubSystem.ClubId).strength;
+            if (!ClubSystem.Sign(current, club, clubMs, baseTeams, careerNumber)) return;
+            clubSaves.TrySave(club, out _);
+            float after = clubMs.FindTeam(ClubSystem.ClubId).strength;
+            string name = club.myClub.name;
+            SoundFx.Play(Sfx.Buy);
+            ShowClubScreen();
+            ui.ShowCards("무료 영입", (body, font) => ClubModeScreen.Signed(body, font, lg, name, before, after));
+        }
+
+        void ClubBack()
+        {
+            inClub = false;
+            ui.ReplayTeamMode = false;
+            StartPlayer(null, false);
         }
 
         void Rebirth()
@@ -477,7 +708,7 @@ namespace MyFootballCareer
             if (SeasonSystem.IsComplete(current))
             {
                 string changeMessage = SeasonSystem.StartNextSeason(current, matchSettings, settings, out var newSeason);   // 이적·승강 안내 (바뀐 게 없으면 null)
-                int teamKit = TeamKits.Home(current.teamId);
+                int teamKit = TeamKits.PlayerKit(current.teamId, current.player.position);
                 if (current.player.kitColor != teamKit) { current.player.kitColor = teamKit; ui.ApplyLook(current.player); }   // 이적하면 새 팀 유니폼으로
                 saves.TrySave(current, out string newSeasonMessage);
                 RefreshSeasonUI();
@@ -497,6 +728,7 @@ namespace MyFootballCareer
             // 경기 영상을 보여 준 뒤(건너뛰기 포함) 순위와 요약을 갱신하고 결과를 알려 줍니다.
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
+            ui.ReplayYouKit = current.player.kitColor; ui.ReplayTeamMode = false;
             // 세리머니의 '시즌 N호 골': 이번 경기를 뺀 시즌 골 수
             int seasonGoals = 0, seasonAssists = 0;
             foreach (var sm in current.season.matches) if (sm.played && sm.playerPlayed) { seasonGoals += sm.playerGoals; seasonAssists += sm.playerAssists; }
@@ -534,6 +766,7 @@ namespace MyFootballCareer
             string ownName = ownTeam != null ? ownTeam.displayName : current.teamId;
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
+            ui.ReplayYouKit = current.player.kitColor; ui.ReplayTeamMode = false;
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshMoneyUI();
@@ -557,7 +790,7 @@ namespace MyFootballCareer
 
         void Update()
         {
-            if (blocked || training == null || current == null) return;
+            if (blocked || training == null || current == null || retiring || inClub) return;   // 은퇴 후 새 선수 만들기·나만의 팀 화면에서는 멈춤
 
             if (Application.isFocused && !ui.IsMatchPlaying) training.Tick(Time.unscaledDeltaTime);   // 경기 영상 중에는 훈련 중지
 
@@ -592,7 +825,7 @@ namespace MyFootballCareer
         {
             if (temporarySettings && settings != null) Destroy(settings);
             if (temporaryTraining && trainingSettings != null) Destroy(trainingSettings);
-            if (temporaryMatch && matchSettings != null) Destroy(matchSettings);
+            if ((temporaryMatch || clonedMatch) && matchSettings != null) Destroy(matchSettings);
             if (temporaryRebirth && rebirthSettings != null) Destroy(rebirthSettings);
         }
     }

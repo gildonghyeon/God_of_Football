@@ -135,6 +135,80 @@ namespace MyFootballCareer
                                 ("노력 속도", "x" + speed.ToString("0.00"), 2) });
         }
 
+        // 한 선수의 커리어: 포지션·평점, 통산 기록, 트로피, 거쳐 간 팀, 시즌별 기록
+        public static void CareerRecord(Transform p, Font f, CareerRecordView v, string top)
+        {
+            if (v.hasLook) Portrait(p, f, v, top);
+            else Hero(p, f, top, v.name, PixelTheme.Accent, v.position + " · " + v.trait + " · 평점 " + Mathf.RoundToInt(v.rating) + " · 커리어 " + v.careerNumber);
+            Tiles(p, f, new[] { ("시즌", v.seasons.ToString(), 0), ("출전", v.apps.ToString(), 0),
+                                ("골", v.goals.ToString(), v.goals > 0 ? 1 : 0), ("도움", v.assists.ToString(), v.assists > 0 ? 1 : 0) });
+            Tiles(p, f, new[] { ("평균 평점", v.avgRating > 0f ? v.avgRating.ToString("0.00") : "-", v.avgRating >= 7f ? 2 : 0),
+                                ("최고 성적", string.IsNullOrEmpty(v.best) ? "-" : v.best, v.best.EndsWith(" 1위") ? 1 : 0),
+                                ("트로피", v.trophyTotal.ToString(), v.trophyTotal > 0 ? 1 : 0) });
+            if (v.trophies.Count > 0)
+            {
+                var chips = new List<string>();
+                foreach (var t in v.trophies) chips.Add("★ " + AwardSystem.KindName(t.Key) + (t.Value > 1 ? " ×" + t.Value : ""));
+                Chips(p, f, "트로피", chips.ToArray(), GoldRow, PixelTheme.Accent);
+            }
+            if (v.teams.Count > 0)
+            {
+                Caption(p, f, "거쳐 간 팀");
+                Note(p, f, string.Join("  →  ", v.teams), PixelTheme.Text, 16, v.teams.Count > 3 ? 52 : 30);
+            }
+            Caption(p, f, "시즌 기록");
+            if (v.history.Count == 0) { Note(p, f, "끝낸 시즌이 없습니다", PixelTheme.TextDim); return; }
+            var head = MatchResultDialog.Block(p, 24);
+            MatchResultDialog.Label(head, f, "시즌", 14, PixelTheme.TextDim, .01f, 0f, .11f, 1f, TextAnchor.MiddleCenter);
+            MatchResultDialog.Label(head, f, "순위", 14, PixelTheme.TextDim, .11f, 0f, .29f, 1f, TextAnchor.MiddleCenter);
+            MatchResultDialog.Label(head, f, "팀", 14, PixelTheme.TextDim, .30f, 0f, .64f, 1f, TextAnchor.MiddleLeft);
+            MatchResultDialog.Label(head, f, "골 · 도움", 14, PixelTheme.TextDim, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
+            MatchResultDialog.Label(head, f, "평점", 14, PixelTheme.TextDim, .84f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
+            for (int i = 0; i < v.history.Count; i++)
+            {
+                var h = v.history[i];
+                bool champ = h.finalPosition == 1;
+                var r = Box(p, champ ? GoldRow : RowColor, 34);
+                MatchResultDialog.Label(r, f, (i + 1).ToString(), 17, PixelTheme.Text, .01f, 0f, .11f, 1f, TextAnchor.MiddleCenter);
+                string pos = (h.division > 0 ? h.division + "부 " : "") + (h.finalPosition > 0 ? h.finalPosition + "위" : "-");
+                MatchResultDialog.Fit(MatchResultDialog.Label(r, f, pos, 16, champ ? PixelTheme.Accent : PixelTheme.Text, .11f, 0f, .29f, 1f, TextAnchor.MiddleCenter), 10);
+                MatchResultDialog.Fit(MatchResultDialog.Label(r, f, h.teamName, 15, PixelTheme.TextDim, .30f, 0f, .64f, 1f, TextAnchor.MiddleLeft), 10);
+                MatchResultDialog.Label(r, f, h.playerGoals + " · " + h.playerAssists, 16, h.playerGoals + h.playerAssists > 0 ? PixelTheme.Accent : PixelTheme.Text, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
+                MatchResultDialog.Label(r, f, h.appearances > 0 ? h.averageRating.ToString("0.0") : "-", 16, h.averageRating >= 7f ? UpText : PixelTheme.Text, .84f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
+            }
+        }
+
+        // 은퇴 확인: 이번 커리어 기록과 은퇴 후 안내
+        public static void RetireConfirm(Transform p, Font f, CareerRecordView v, int legends, int need)
+        {
+            CareerRecord(p, f, v, "은퇴하면 '내가 키운 선수'에 남습니다");
+            Caption(p, f, "은퇴 후");
+            Note(p, f, "내가 키운 선수 " + (legends + 1) + "명이 됩니다", PixelTheme.Text);
+            Note(p, f, need > 0 ? "은퇴 선수는 나만의 팀 모드의 선수가 됩니다" : "나만의 팀 모드에서 무료로 영입할 수 있습니다", PixelTheme.TextDim, 15);
+            Note(p, f, "새 선수를 만들어 처음부터 시작합니다.", PixelTheme.Text);
+            Note(p, f, "환생 보너스 · 트로피 · 리그 상황은 그대로", PixelTheme.TextDim, 15);
+            if (need > 0)
+                Note(p, f, legends + 1 >= need ? "나만의 팀을 창단할 수 있게 됩니다!" : "나만의 팀 창단까지 " + (need - legends - 1) + "명 더", PixelTheme.Accent, 15);
+        }
+
+        public static void RetireDone(Transform p, Font f, string oldName, string newName, int legends, int need, bool canFound)
+        {
+            Hero(p, f, oldName + " 은퇴", newName, PixelTheme.Accent, "새 커리어가 시작됩니다");
+            Tiles(p, f, new[] { ("내가 키운 선수", legends + "명", 1), ("창단 조건", Mathf.Min(legends, need) + " / " + need, canFound ? 2 : 0) });
+            if (canFound) Note(p, f, "커리어 탭에서 나만의 팀 모드를 시작할 수 있습니다!", PixelTheme.Accent);
+        }
+
+        public static void ClubFounded(Transform p, Font f, string name, int kitIndex, string tactic, int legends, float strength, string division, bool offered)
+        {
+            Hero(p, f, "나만의 팀 창단", name, PixelTheme.Accent, tactic);
+            var kit = Box(p, Tile, 120);
+            TeamKits.PreviewImage(kit, kitIndex, .36f, .04f, .64f, .96f);
+            Tiles(p, f, new[] { ("은퇴 선수", legends + "명", 1), ("팀 전력", strength.ToString("0"), 0) });
+            Note(p, f, division + "에서 시작합니다", PixelTheme.Text);
+            Note(p, f, "은퇴 선수 " + legends + "명 + 새 선수들로 팀을 꾸렸습니다", PixelTheme.TextDim, 15);
+            Note(p, f, "앞으로 은퇴하는 선수는 무료로 영입할 수 있습니다", PixelTheme.TextDim, 15);
+        }
+
         public static void TransferConfirm(Transform p, Font f, string team, string division, int startPercent, int wage, int currentWage)
         {
             Hero(p, f, "다음 시즌에 뛸 팀", team, PixelTheme.Accent, division);
@@ -164,6 +238,36 @@ namespace MyFootballCareer
             if (colon > 0 && (bang < 0 || colon < bang)) { label = s.Substring(0, colon); text = s.Substring(colon + 2); }
             else if (bang > 0) { label = s.Substring(0, bang); text = s.Substring(bang + 2); }
             return new AwardRow { level = level, label = label, text = text };
+        }
+
+        // 선수 모습 카드: 왼쪽에 선수 그림(그 선수의 머리색·피부색·유니폼·축구화), 오른쪽에 이름과 포지션
+        static void Portrait(Transform p, Font f, CareerRecordView v, string top)
+        {
+            var b = Box(p, Tile, 190);
+            var sprite = LookSprite(v.hair, v.skin, v.kit, v.boots, b.gameObject);
+            if (sprite != null)
+            {
+                var img = MatchResultDialog.Img(b, Color.white, .02f, .03f, .36f, .97f);
+                img.sprite = sprite; img.preserveAspect = true;
+            }
+            float x0 = sprite != null ? .38f : .03f;
+            MatchResultDialog.Fit(MatchResultDialog.Label(b, f, top, 16, PixelTheme.TextDim, x0, .78f, .97f, .96f, TextAnchor.MiddleLeft), 11);
+            MatchResultDialog.Fit(MatchResultDialog.Label(b, f, v.name, 40, PixelTheme.Accent, x0, .44f, .97f, .78f, TextAnchor.MiddleLeft), 20);
+            MatchResultDialog.Fit(MatchResultDialog.Label(b, f, v.position + " · " + v.trait, 20, PixelTheme.Text, x0, .25f, .97f, .44f, TextAnchor.MiddleLeft), 12);
+            MatchResultDialog.Fit(MatchResultDialog.Label(b, f, "평점 " + Mathf.RoundToInt(v.rating) + " · 커리어 " + v.careerNumber, 17, PixelTheme.TextDim, x0, .05f, .97f, .25f, TextAnchor.MiddleLeft), 11);
+        }
+
+        // 정면 대기 그림에 외형을 입힌 그림. 그림은 owner가 사라질 때 같이 지웁니다.
+        public static Sprite LookSprite(int hair, int skin, int kit, int boots, GameObject owner)
+        {
+            var asset = Resources.Load<TextAsset>("Art/Chars/blue_idle_front_0");
+            if (asset == null) return null;
+            var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots);
+            if (tex == null) return null;
+            var sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
+            var owned = owner.GetComponent<OwnedObjects>() ?? owner.AddComponent<OwnedObjects>();
+            owned.items.Add(tex); owned.items.Add(sprite);
+            return sprite;
         }
 
         // ---------- 부품 ----------

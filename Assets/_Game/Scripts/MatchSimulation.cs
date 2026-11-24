@@ -17,7 +17,7 @@ namespace MyFootballCareer
 
         // kind: 포메이션 속 내 자리 역할 (없으면 팀 포메이션과 포지션으로 정함)
         public static void Play(MatchRecord m, PlayerData p, TeamDefinition own, TeamDefinition opp,
-            MatchSettings ms, float attributeCap, SlotKind? kind = null)
+            MatchSettings ms, float attributeCap, SlotKind? kind = null, bool teamOnly = false)
         {
             var ownT = TacticSystem.Of(own); var oppT = TacticSystem.Of(opp);
             var rng = new System.Random(m.seed);
@@ -27,6 +27,7 @@ namespace MyFootballCareer
             // 0) 출전 여부: 팀이 요구하는 수준보다 낮으면 벤치에 앉을 수 있습니다.
             float posRating = PositionRating(profile, p, cap);
             bool started = rng.NextDouble() < StartChance(own, posRating);
+            if (teamOnly) started = false;   // 나만의 팀 모드: 내 선수 없이 팀 전력으로만
             m.playerPlayed = started;
 
             // 능력치는 상대 수준과 비교해 얼마나 통하는지(0~1, 0.5가 리그 평균)로 씁니다. 높은 리그일수록 숫자도 조금 커지게 절대값도 섞습니다.
@@ -59,6 +60,8 @@ namespace MyFootballCareer
                 m.played = true;
                 return;
             }
+
+            if (p.position == Position.Goalkeeper) { PlayKeeper(m, p, profile, rng, forL, againstL, passingN, defendingN, staminaN, activity); return; }
 
             // 2) 내 슈팅과 골: 슈팅이 좋을수록 많이 차고 잘 넣고, 드리블이 좋을수록 기회를 더 만듭니다.
             float shotBase = profile.shotsPerMatch * shotMul;
@@ -105,6 +108,35 @@ namespace MyFootballCareer
             else if (p.position == Position.Defender) rating -= 0.15f * Mathf.Max(0, m.goalsAgainst - 1);
             m.rating = Mathf.Round(Mathf.Clamp(rating, 3f, 10f) * 10f) / 10f;
 
+            m.played = true;
+        }
+
+        // 골키퍼: 슈팅은 없고, 선방(defensiveActions에 기록)·실점·킥 배급·드문 도움으로 평가합니다.
+        static void PlayKeeper(MatchRecord m, PlayerData p, PositionProfile profile, System.Random rng, float forL, float againstL,
+                               float passingN, float defendingN, float staminaN, float activity)
+        {
+            float keepN = 0.8f * defendingN + 0.2f * staminaN;   // 선방 능력 (수비 = 반사신경, 체력 = 집중력)
+            m.playerShots = 0; m.playerGoals = 0;
+            m.goalsFor = Poisson(rng, Mathf.Clamp(forL * (1f + 0.08f * (passingN - 0.5f)), 0.2f, 4.5f));   // 킥이 좋으면 역습이 조금 더
+            float faced = againstL;                                                                       // 막아야 할 위기의 양
+            m.goalsAgainst = Poisson(rng, Mathf.Clamp(againstL * (1f - 0.5f * (keepN - 0.5f)), 0.15f, 4.5f));
+            m.defensiveActions = Poisson(rng, (1.2f + faced * 1.3f) * (0.55f + 0.9f * keepN));          // 선방 수
+            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * (0.8f + 0.4f * (float)rng.NextDouble()));
+            float passRate = 0.55f + 0.4f * passingN;
+            int completed = 0;
+            for (int i = 0; i < m.passesAttempted; i++) if (rng.NextDouble() < passRate) completed++;
+            m.passesCompleted = completed;
+            float assistChance = Mathf.Clamp01(profile.assistChance * (0.4f + 1.6f * passingN));
+            int assists = 0;
+            for (int i = 0; i < m.goalsFor; i++) if (rng.NextDouble() < assistChance) assists++;
+            m.playerAssists = assists;
+            float rating = 6.1f;
+            rating += m.goalsFor > m.goalsAgainst ? 0.4f : (m.goalsFor < m.goalsAgainst ? -0.3f : 0f);
+            rating += m.defensiveActions * 0.22f + m.playerAssists * 0.6f;
+            if (m.goalsAgainst == 0) rating += 0.8f;                          // 무실점
+            else rating -= 0.3f * Mathf.Max(0, m.goalsAgainst - 1);
+            rating += (completed / Mathf.Max(1f, m.passesAttempted) - 0.75f) * 1.2f;
+            m.rating = Mathf.Round(Mathf.Clamp(rating, 3f, 10f) * 10f) / 10f;
             m.played = true;
         }
 

@@ -53,12 +53,13 @@ namespace MyFootballCareer
     // 내 팀에서는 내 포지션 자리(영상의 내 자리)를 내가 차지합니다.
     public static class SquadSystem
     {
-        static readonly SquadRole[] Shape = {
+        internal static readonly SquadRole[] SquadShape = {
             SquadRole.GK, SquadRole.GK,
             SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF,
             SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF,
             SquadRole.FW, SquadRole.FW, SquadRole.FW, SquadRole.FW,
         };   // 16명: 주전 11 + 교체 5
+        static SquadRole[] Shape { get { return SquadShape; } }
         static readonly int[] StarterCount = { 1, 4, 4, 2 };   // GK, DF, MF, FW (4-4-2)
 
         static readonly string Initials = "ABCDEFGHIJKLMNOPRSTVWY";
@@ -78,7 +79,7 @@ namespace MyFootballCareer
 
         public static Position ToPosition(SquadRole role)
         {
-            return role == SquadRole.FW ? Position.Forward : role == SquadRole.MF ? Position.Midfielder : Position.Defender;
+            return role == SquadRole.FW ? Position.Forward : role == SquadRole.MF ? Position.Midfielder : role == SquadRole.GK ? Position.Goalkeeper : Position.Defender;
         }
 
         // ---------- 만들기 ----------
@@ -92,6 +93,7 @@ namespace MyFootballCareer
             foreach (var team in ms.teams)
             {
                 if (team == null || string.IsNullOrEmpty(team.id) || Find(save, team.id) != null) continue;
+                if (team.id == ClubSystem.ClubId) { ClubSystem.SyncSquad(save); made = true; continue; }   // 나만의 팀은 은퇴 선수로
                 if (used == null) used = UsedNames(save);
                 var rng = new System.Random(StableHash(team.id) ^ 0x51ed27);
                 var squad = new TeamSquad { teamId = team.id };
@@ -106,6 +108,16 @@ namespace MyFootballCareer
                 made = true;
             }
             return made;
+        }
+
+        internal static SquadPlayer MakePlayer(SaveData save, System.Random rng, HashSet<string> used, SquadRole role, int age, float rating) { return NewPlayer(save, rng, used, role, age, rating); }
+
+        // 다른 팀 선수와 겹치지 않게 (이 팀 선수 이름은 빼고)
+        internal static HashSet<string> UsedNamesExcept(SaveData save, string teamId)
+        {
+            var set = new HashSet<string>();
+            if (save.squads != null) foreach (var s in save.squads) if (s.teamId != teamId) foreach (var p in s.players) set.Add(p.name);
+            return set;
         }
 
         static SquadPlayer NewPlayer(SaveData save, System.Random rng, HashSet<string> used, SquadRole role, int age, float rating)
@@ -222,7 +234,7 @@ namespace MyFootballCareer
             foreach (var squad in save.squads)
             {
                 var team = ms.FindTeam(squad.teamId);
-                if (team == null) continue;
+                if (team == null || squad.teamId == ClubSystem.ClubId) continue;   // 나만의 팀(은퇴 선수)은 나이를 먹지 않음
                 var rng = new System.Random(StableHash(squad.teamId) ^ (save.squadSeason * 7919) ^ save.rebirthCount);
                 float target = team.requiredRating + 5f;   // 팀 수준 (주전 평균 정도)
                 for (int i = 0; i < squad.players.Count; i++)
@@ -255,7 +267,7 @@ namespace MyFootballCareer
             var tactic = TacticSystem.Of(team);
             var layout = TacticSystem.Layout(tactic.formation);
             v.tactic = tactic; v.layout = layout;
-            bool mine = teamId == save.teamId;
+            bool mine = teamId == save.teamId && !save.teamMode;   // 나만의 팀 모드에는 내 선수가 없음
             int youSlot = mine ? MySlot(save, ms) : -1;
             float ageSum = 0f; foreach (var p in squad.players) ageSum += p.age;
             v.avgAge = squad.players.Count > 0 ? ageSum / squad.players.Count : 0f;
@@ -318,7 +330,7 @@ namespace MyFootballCareer
             if (team == null || squad == null) return "선수단 정보가 없습니다.";
             var xi = Starters(save, ms, teamId);
             var starters = new HashSet<SquadPlayer>(xi);
-            bool mine = teamId == save.teamId;
+            bool mine = teamId == save.teamId && !save.teamMode;   // 나만의 팀 모드에는 내 선수가 없음
             int youSlot = mine ? MySlot(save, ms) : -1;
             var sb = new StringBuilder();
             sb.Append(division > 0 ? division + "부  " : "").Append("전력 ").Append(team.strength.ToString("0"))

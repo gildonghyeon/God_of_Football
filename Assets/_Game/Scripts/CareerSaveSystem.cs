@@ -9,7 +9,9 @@ namespace MyFootballCareer
     public class CareerSaveSystem
     {
         const int CurrentVersion = 20;
-        public string FilePath => Path.Combine(Application.persistentDataPath, "football-career-v1.json");
+        readonly string fileName;
+        public CareerSaveSystem(string fileName = "football-career-v1.json") { this.fileName = fileName; }   // 나만의 팀 모드는 다른 파일
+        public string FilePath => Path.Combine(Application.persistentDataPath, fileName);
 
         static bool Valid(SaveData data)
         {

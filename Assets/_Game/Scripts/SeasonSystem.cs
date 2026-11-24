@@ -34,6 +34,8 @@ namespace MyFootballCareer
 
         // ---------- 리그 소속 ----------
         // 설정에 있는 모든 팀이 소속 부를 갖게 합니다. 새로 생긴 팀은 설정의 처음 부로, 없어진 팀은 지웁니다.
+        public static void EnsureLeagueNow(SaveData save, MatchSettings ms) { EnsureLeague(save, ms); }
+
         static void EnsureLeague(SaveData save, MatchSettings ms)
         {
             if (save.league == null) save.league = new List<TeamDivision>();
@@ -142,12 +144,15 @@ namespace MyFootballCareer
             var own = ms.FindTeam(save.teamId);
             var opp = ms.FindTeam(match.opponentId);
             if (own == null || opp == null) return null;
-            MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap);
+            MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap, null, save.teamMode);   // 나만의 팀 모드: 팀 전력으로만
             SquadSystem.FillGoalNotes(match, save, ms, career, own.id, opp.id);
             GenerateOthers(match, save, ms);
-            EnsureContract(save, ms, career);
-            match.wage = FacilitySystem.MatchPay(save, ms);   // 경기 한 번 = 1주 (에이전트 보너스 포함)
-            save.money += match.wage;
+            if (!save.teamMode)
+            {
+                EnsureContract(save, ms, career);
+                match.wage = FacilitySystem.MatchPay(save, ms);   // 경기 한 번 = 1주 (에이전트 보너스 포함)
+                save.money += match.wage;
+            }
             season.nextMatchIndex++;
             return match;
         }
@@ -411,7 +416,7 @@ namespace MyFootballCareer
         // 성적이 나쁘면 제안이 하나도 없을 수 있습니다 (그러면 지금 팀에 남음). 새로 정했으면 true.
         public static bool EnsureOffers(SaveData save, MatchSettings ms, CareerSettings career)
         {
-            if (!IsComplete(save)) return false;
+            if (!IsComplete(save) || save.teamMode) return false;
             EnsureSeasonEnd(save, ms);
             if (save.offersSeason == save.season.seasonNumber) return false;
             save.offers = new List<TransferOffer>();
@@ -723,7 +728,7 @@ namespace MyFootballCareer
                 own = TeamName(save, ms), opp = m.opponentName, gf = m.goalsFor, ga = m.goalsAgainst,
                 outcome = m.goalsFor > m.goalsAgainst ? "승리" : (m.goalsFor < m.goalsAgainst ? "패배" : "무승부"),
                 bench = !m.playerPlayed, rating = m.rating, myGoals = m.playerGoals, myAssists = m.playerAssists,
-                shots = m.playerShots, defense = m.defensiveActions,
+                shots = m.playerShots, defense = m.defensiveActions, keeper = save.player.position == Position.Goalkeeper, teamMode = save.teamMode,
                 passText = m.passesCompleted + "/" + m.passesAttempted,
             };
             if (m.goalNotes != null) v.goals.AddRange(m.goalNotes);

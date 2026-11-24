@@ -52,6 +52,14 @@ namespace MyFootballCareer
         public Action<int> OnClaimMission;          // 일일 미션 보상 받기 (0~2)
         public Action OnOpenSquads;                 // 순위표의 '팀 선수단 보기'
         public Action<string> OnShowSquad;          // 이 팀의 선수단 보기 (팀 ID)
+        public Action OnRetire;                     // 은퇴하기
+        public Action<int> OnShowLegend;            // 내가 키운 선수의 커리어 보기 (커리어 번호)
+        public Action OnCancelCreation;             // 은퇴 후 새 선수 만들기에서 취소
+        public Action<string, int, Formation, TacticStyle> OnFoundClub;   // 나만의 팀 창단 (이름, 유니폼 디자인, 포메이션, 스타일)
+        public Action OnOpenClub, OnClubPlay, OnClubSquad, OnClubBack;   // 나만의 팀 모드: 열기, 경기(또는 다음 시즌), 선수단, 선수 키우기로 돌아가기
+        public Action<int> OnClubSign;              // 나만의 팀 모드: 은퇴 선수 무료 영입 (커리어 번호)
+        public bool ReplayTeamMode;                 // 다음 경기 영상이 나만의 팀 모드 경기인지
+        Image retireFill; GameObject foundButton, clubSquadButton;
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -372,11 +380,12 @@ namespace MyFootballCareer
         }
 
         // ---------- 화면 ----------
-        public void ShowCreation()
+        // retireMode: 은퇴한 뒤 다음 선수를 만드는 화면 (취소하면 은퇴하지 않음)
+        public void ShowCreation(bool retireMode = false)
         {
             Clear();
-            Label("나의 축구 커리어", 33, 64).color = PixelTheme.Accent;
-            Label("첫 선수를 만들어 보세요", 22, 44);
+            Label(retireMode ? "새 커리어" : "나의 축구 커리어", 33, 64).color = PixelTheme.Accent;
+            Label(retireMode ? "은퇴한 뒤 키울 새 선수를 만드세요" : "첫 선수를 만들어 보세요", 22, 44);
             newHair = 0; newSkin = 0; newKit = CreationKit; newBoots = 0;
             var createPreview = AddPreview(content, 190f);
             ApplyPreview(createPreview);
@@ -398,19 +407,31 @@ namespace MyFootballCareer
             placeholder.rectTransform.offsetMin = new Vector2(16, 6); placeholder.rectTransform.offsetMax = new Vector2(-16, -6);
             placeholder.color = PixelTheme.TextDim; nameInput.placeholder = placeholder;
 
-            Button positionButton = null;
-            positionButton = PixelButton("포지션: " + Ko.Pos(position), () => {
-                position = (Position)(((int)position + 1) % 3);
-                positionButton.GetComponentInChildren<Text>().text = "포지션: " + Ko.Pos(position);
-            }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            Button traitButton = null;
-            traitButton = PixelButton("특성: " + Ko.TraitName(trait), () => {
-                trait = (Trait)(((int)trait + 1) % 3);
+            if (System.Array.IndexOf(Ko.TraitsFor(position), trait) < 0) trait = Ko.TraitsFor(position)[0];
+            Button positionButton = null, traitButton = null;
+            Text traitHelp = null;
+            System.Action refreshTrait = () => {
                 traitButton.GetComponentInChildren<Text>().text = "특성: " + Ko.TraitName(trait);
+                var names = new System.Collections.Generic.List<string>();
+                foreach (var t in Ko.TraitsFor(position)) names.Add(Ko.TraitName(t) + ": " + Ko.Attr(Ko.TraitAttribute(t)));
+                traitHelp.text = string.Join(" / ", names) + "\n(보너스 +" + settings.traitBonus + ")";
+            };
+            positionButton = PixelButton("포지션: " + Ko.Pos(position), () => {
+                position = (Position)(((int)position + 1) % 4);
+                positionButton.GetComponentInChildren<Text>().text = "포지션: " + Ko.Pos(position);
+                trait = Ko.TraitsFor(position)[0];   // 포지션이 바뀌면 그 포지션의 첫 특성으로
+                refreshTrait();
+            }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            traitButton = PixelButton("특성: " + Ko.TraitName(trait), () => {
+                var list = Ko.TraitsFor(position);
+                trait = list[(System.Array.IndexOf(list, trait) + 1) % list.Length];
+                refreshTrait();
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             AddLookButtons(content, createPreview);
-            Label("피니셔: 슈팅 / 플레이메이커: 패스\n볼 위너: 수비 (보너스 +" + settings.traitBonus + ")", 22, 76).color = PixelTheme.TextDim;
-            PixelButton("선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit, newBoots), content, 88f);
+            traitHelp = Label("", 20, 76); traitHelp.color = PixelTheme.TextDim;
+            refreshTrait();
+            PixelButton(retireMode ? "은퇴하고 새 선수로 시작" : "선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit, newBoots), content, 88f);
+            if (retireMode) PixelButton("취소 (은퇴하지 않음)", () => { if (OnCancelCreation != null) OnCancelCreation(); }, content, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             status = Label("버튼을 눌러 포지션과 특성을 고르세요.", 22, 100);
             status.color = PixelTheme.TextDim;
         }
@@ -477,6 +498,7 @@ namespace MyFootballCareer
 
             // CAREER: 선수 프로필, 이적 제안, 트로피 룸, 시즌 기록, 환생 (카드와 표로 보여 줌)
             careerPage = new CareerPageView(font);
+            careerPage.OnLegend = n => { if (OnShowLegend != null) OnShowLegend(n); };
             currentParent = Section(pages[3], "", true);
             careerPage.BuildProfile(Parent);
             PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
@@ -491,6 +513,15 @@ namespace MyFootballCareer
             careerPage.BuildRebirth(Parent);
             var rebirth = PixelButton("환생하기", () => onRebirth(), Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
             rebirthFill = (Image)rebirth.targetGraphic;
+            currentParent = Section(pages[3], "은퇴", true);
+            careerPage.BuildRetire(Parent);
+            var retire = PixelButton("은퇴하기", () => { if (OnRetire != null) OnRetire(); }, Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            retireFill = (Image)retire.targetGraphic;
+            currentParent = Section(pages[3], "내가 키운 선수", true);
+            careerPage.BuildLegends(Parent);
+            foundButton = PixelButton("나만의 팀 창단", () => ShowFoundDialog(), Parent, 68f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).gameObject;
+            clubSquadButton = PixelButton("나만의 팀 모드 ▶", () => { if (OnOpenClub != null) OnOpenClub(); }, Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).gameObject;
+            foundButton.SetActive(false); clubSquadButton.SetActive(false);
 
             // 미션: 출석 보상, 일일 미션
             currentParent = Section(pages[2], "출석 보상", true);
@@ -534,11 +565,14 @@ namespace MyFootballCareer
                 currentParent = Section(pages[4], "골 장면 미리보기 (개발용)", true);
                 Label("경기 중 내가 골을 넣을 때의 장면을 바로 봅니다. 누를 때마다 1골 → 멀티골 → 해트트릭 순으로 배지가 바뀝니다.", 18, 52).color = PixelTheme.TextDim;
                 string previewName = p.playerName;
-                var kinds = (TrainingStageDrills.GoalScene[])Enum.GetValues(typeof(TrainingStageDrills.GoalScene));
+                // 골 장면 (골키퍼 도움 장면은 도움 줄에)
+                var kinds = System.Array.FindAll((TrainingStageDrills.GoalScene[])Enum.GetValues(typeof(TrainingStageDrills.GoalScene)),
+                    g => g != TrainingStageDrills.GoalScene.KeeperKick && g != TrainingStageDrills.GoalScene.KeeperRoll);
                 string[] names = { "드리블", "패스", "크로스 헤딩", "코너킥 헤딩", "프리킥", "페널티킥", "중거리 슛" };
                 // 수비 장면
                 var defKinds = (TrainingStageDrills.DefenseScene[])Enum.GetValues(typeof(TrainingStageDrills.DefenseScene));
-                string[] defNames = { "수비: 태클", "수비: 슈팅 블록", "수비: 골라인", "수비: 가로채기" };
+                string[] defNames = { "수비: 태클", "수비: 슈팅 블록", "수비: 골라인", "수비: 가로채기",
+                                      "골키퍼: 다이빙 선방", "골키퍼: PK 선방", "골키퍼: 코너킥 캐칭", "골키퍼: 1대1 선방" };
                 for (int i = 0; i < defKinds.Length; i += 2)
                 {
                     var drow = NewRect("DefensePreviewRow", Parent); Height(drow.gameObject, 60);
@@ -547,19 +581,20 @@ namespace MyFootballCareer
                     for (int k = i; k < i + 2 && k < defKinds.Length; k++)
                     {
                         var dk = defKinds[k];
-                        PixelButton(defNames[k], () => PlayDefensePreview(dk, previewName), drow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+                        PixelButton(k < defNames.Length ? defNames[k] : dk.ToString(), () => PlayDefensePreview(dk, previewName), drow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
                             .GetComponentInChildren<Text>().fontSize = 20;
                     }
                 }
                 // 도움 장면: 내가 공을 보내고 동료가 넣음
-                var assistKinds = new[] { TrainingStageDrills.GoalScene.Pass, TrainingStageDrills.GoalScene.Cross, TrainingStageDrills.GoalScene.Corner, TrainingStageDrills.GoalScene.LongShot };
-                string[] assistNames = { "도움: 스루 패스", "도움: 크로스", "도움: 코너킥", "도움: 내준 패스" };
+                var assistKinds = new[] { TrainingStageDrills.GoalScene.Pass, TrainingStageDrills.GoalScene.Cross, TrainingStageDrills.GoalScene.Corner, TrainingStageDrills.GoalScene.LongShot,
+                                          TrainingStageDrills.GoalScene.KeeperKick, TrainingStageDrills.GoalScene.KeeperRoll };
+                string[] assistNames = { "도움: 스루 패스", "도움: 크로스", "도움: 코너킥", "도움: 내준 패스", "골키퍼 도움: 롱킥", "골키퍼 도움: 빠른 배급" };
                 for (int i = 0; i < assistKinds.Length; i += 2)
                 {
                     var arow = NewRect("AssistPreviewRow", Parent); Height(arow.gameObject, 60);
                     var ah = arow.gameObject.AddComponent<HorizontalLayoutGroup>();
                     ah.spacing = 8; ah.childControlWidth = true; ah.childControlHeight = true; ah.childForceExpandWidth = true; ah.childForceExpandHeight = true;
-                    for (int k = i; k < i + 2; k++)
+                    for (int k = i; k < i + 2 && k < assistKinds.Length; k++)
                     {
                         var kind = assistKinds[k];
                         PixelButton(assistNames[k], () => PlayGoalPreview(kind, previewName, true), arow, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
@@ -664,7 +699,102 @@ namespace MyFootballCareer
         public void SetTrophies(string text) { if (trophyText != null) SetLines(trophyText, text, 2); }
 
         // 커리어 탭 카드 (프로필, 트로피, 시즌 기록, 환생 조건)
-        public void SetCareer(CareerPageData data) { if (careerPage != null) careerPage.Set(data); }
+        public void SetCareer(CareerPageData data)
+        {
+            if (careerPage != null) careerPage.Set(data);
+            if (data == null) return;
+            if (retireFill != null) retireFill.color = data.canRetire ? PixelTheme.RebirthFill : PixelTheme.QuietFill;
+            bool canFound = !data.hasClub && data.legends.Count >= data.legendNeed;
+            if (foundButton != null && foundButton.activeSelf != canFound) foundButton.SetActive(canFound);
+            if (clubSquadButton != null && clubSquadButton.activeSelf != data.clubActive) clubSquadButton.SetActive(data.clubActive);
+        }
+
+        // ---------- 나만의 팀 모드 ----------
+        // 선수 키우기와 다른 모드: 내가 키운 선수들로 꾸린 팀으로 리그를 치릅니다. 탭 없이 한 화면.
+        public void ShowClubMode(ClubModeView v)
+        {
+            CloseDialog();
+            Clear();
+            Label("나만의 팀 모드", 30, 54).color = PixelTheme.Accent;
+            currentParent = Section(content, "", true);
+            ClubModeScreen.Header(Parent, font, v);
+            currentParent = Section(content, "다음 경기", true);
+            ClubModeScreen.Next(Parent, font, v);
+            PixelButton(v.complete ? "다음 시즌 시작" : "경기 하기", () => { if (OnClubPlay != null) OnClubPlay(); }, Parent, 84f);
+            PixelButton("선수단 보기", () => { if (OnClubSquad != null) OnClubSquad(); }, Parent, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            currentParent = Section(content, "순위표 · " + v.division, true);
+            ClubModeScreen.Table(Parent, font, v);
+            currentParent = Section(content, "무료 영입 · 내가 키운 선수", true);
+            if (v.free.Count == 0)
+                Label("영입할 수 있는 은퇴 선수가 없습니다.\n선수 키우기 모드에서 은퇴한 선수는 여기서 무료로 영입할 수 있습니다.", 18, 60).color = PixelTheme.TextDim;
+            for (int i = 0; i < v.free.Count; i++)
+            {
+                var lg = v.free[i];
+                var row = ClubModeScreen.FreeRow(Parent, font, lg, i);
+                int careerNo = lg.careerNumber;
+                var b = PixelButton("영입", () => { if (OnClubSign != null) OnClubSign(careerNo); }, row, 0f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
+                var br = (RectTransform)b.transform;
+                var le = b.GetComponent<LayoutElement>(); if (le != null) le.ignoreLayout = true;
+                br.anchorMin = new Vector2(.72f, .14f); br.anchorMax = new Vector2(.98f, .86f); br.offsetMin = br.offsetMax = Vector2.zero;
+                b.GetComponentInChildren<Text>().fontSize = 22;
+            }
+            currentParent = null;
+            PixelButton("◀ 선수 키우기 모드로", () => { if (OnClubBack != null) OnClubBack(); }, content, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            status = Label("", 18, 36); status.color = PixelTheme.TextDim;
+        }
+
+        // 나만의 팀 창단 창: 팀 이름, 유니폼, 포메이션, 스타일
+        public void ShowFoundDialog()
+        {
+            int kit = 0; var formation = Formation.F433; var style = TacticStyle.Possession;
+            var inner = BuildDialog("나만의 팀 창단", "은퇴 선수 5명과 새 선수들로 팀을 만듭니다.\n나만의 팀 모드에서 가장 아래 부부터 시작합니다.", 70f, 20);
+            var input = NameField(inner, "팀 이름 (예: Legends FC)", 20);
+            var kitRow = NewRect("KitRow", inner); Height(kitRow.gameObject, 130);
+            kitRow.gameObject.AddComponent<Image>().color = PixelTheme.BarBack;
+            var kitImage = TeamKits.PreviewImage(kitRow, TeamKits.ClubPreview(kit), .38f, .04f, .62f, .96f);
+            Button kitButton = null, formationButton = null, styleButton = null;
+            kitButton = PixelButton("유니폼: " + TeamKits.ClubDesignName(kit), () => {
+                kit = (kit + 1) % TeamKits.ClubDesignCount;
+                kitButton.GetComponentInChildren<Text>().text = "유니폼: " + TeamKits.ClubDesignName(kit);
+                if (kitImage != null) kitImage.sprite = TeamKits.Preview(TeamKits.ClubPreview(kit));
+            }, inner, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            formationButton = PixelButton("포메이션: " + TacticSystem.FormationName(formation), () => {
+                formation = (Formation)(((int)formation + 1) % System.Enum.GetValues(typeof(Formation)).Length);
+                formationButton.GetComponentInChildren<Text>().text = "포메이션: " + TacticSystem.FormationName(formation);
+            }, inner, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            styleButton = PixelButton("스타일: " + TacticSystem.StyleName(style), () => {
+                style = (TacticStyle)(((int)style + 1) % System.Enum.GetValues(typeof(TacticStyle)).Length);
+                styleButton.GetComponentInChildren<Text>().text = "스타일: " + TacticSystem.StyleName(style);
+            }, inner, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("창단하기", () => {
+                string name = input.text.Trim();
+                if (name.Length == 0) name = "Legends FC";
+                CloseDialog();
+                if (OnFoundClub != null) OnFoundClub(name, kit, formation, style);
+            }, inner, 76f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
+            PixelButton("취소", () => CloseDialog(), inner, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
+        // 한 줄 글자 입력 칸
+        InputField NameField(Transform parent, string hint, int limit)
+        {
+            var outer = NewRect("NameInput", parent);
+            outer.gameObject.AddComponent<Image>().color = PixelTheme.PanelEdge;
+            Height(outer.gameObject, 72);
+            var fill = NewRect("Fill", outer);
+            Stretch(fill); fill.offsetMin = new Vector2(4, 4); fill.offsetMax = new Vector2(-4, -4);
+            var fillImage = fill.gameObject.AddComponent<Image>(); fillImage.color = PixelTheme.BarBack;
+            var field = outer.gameObject.AddComponent<InputField>();
+            field.targetGraphic = fillImage;
+            var text = TextNode("", fill, 26); Stretch(text.rectTransform);
+            text.rectTransform.offsetMin = new Vector2(16, 6); text.rectTransform.offsetMax = new Vector2(-16, -6);
+            field.textComponent = text; field.characterLimit = limit;
+            field.lineType = InputField.LineType.SingleLine;
+            var placeholder = TextNode(hint, fill, 22); Stretch(placeholder.rectTransform);
+            placeholder.rectTransform.offsetMin = new Vector2(16, 6); placeholder.rectTransform.offsetMax = new Vector2(-16, -6);
+            placeholder.color = PixelTheme.TextDim; field.placeholder = placeholder;
+            return field;
+        }
 
         // ---------- 미션 탭 ----------
         static void SetButton(Button b, string label, bool ready, Color fill, Color quiet)
@@ -919,6 +1049,7 @@ namespace MyFootballCareer
         public int ReplaySeasonGoals = -1;                    // 다음 경기 영상 전까지의 시즌 골 수 (-1이면 친선 경기 등)
         public int ReplaySeasonAssists = -1;                  // 다음 경기 영상 전까지의 시즌 도움 수
         public int ReplayOwnKit, ReplayOppKit;                // 다음 경기 영상의 두 팀 유니폼 (PlayerLook.Kits 번호)
+        public int ReplayYouKit;                              // 내 선수 유니폼 (골키퍼 유니폼일 수 있음)
         public int CreationKit;                               // 새 선수 만들기 미리보기의 유니폼 (시작 팀)
         public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished, TeamTactic ownTactic = null, TeamTactic oppTactic = null)
         {
@@ -927,7 +1058,7 @@ namespace MyFootballCareer
             {
                 matchView.SeasonGoalsBefore = ReplaySeasonGoals; ReplaySeasonGoals = -1;
                 matchView.SeasonAssistsBefore = ReplaySeasonAssists; ReplaySeasonAssists = -1;
-                matchView.OwnKit = ReplayOwnKit; matchView.OppKit = ReplayOppKit;
+                matchView.OwnKit = ReplayOwnKit; matchView.OppKit = ReplayOppKit; matchView.YouKit = ReplayYouKit; matchView.TeamMode = ReplayTeamMode;
             }
             if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished, ownTactic ?? ReplayOwnTactic, oppTactic ?? ReplayOppTactic))
             {
@@ -1031,7 +1162,7 @@ namespace MyFootballCareer
             goalPreview.Play(new GoalInfo
             {
                 oppKit = PreviewOppKit(),
-                minute = "71'", scorer = name, isDefense = true, defense = kind, how = "", assist = "",
+                minute = "71'", scorer = name, isDefense = true, defense = kind, how = "", assist = "", keeper = kind >= TrainingStageDrills.DefenseScene.Save,
                 ownName = "My Team", oppName = "Rival FC", goalsFor = 1, goalsAgainst = 0, matchGoals = previewCount++ % 5 + 1
             });
         }

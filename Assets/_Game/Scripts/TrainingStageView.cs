@@ -125,6 +125,7 @@ namespace MyFootballCareer
         public float ViewBottom { get; private set; } = TrainingStageDrills.BandBottom;
         readonly List<Actor> extras = new List<Actor>();
         readonly List<UnityEngine.Object> allyObjects = new List<UnityEngine.Object>();
+        public int AllyKit = -1;   // 장면 속 동료 유니폼 (-1이면 내 유니폼. 내가 골키퍼면 팀 유니폼을 넣음)
         int allyKey = -1;
         // 상대(red) 그림을 그 팀 유니폼으로 바꾼 것 (경기 골 장면). 무대마다 따로 만듭니다.
         readonly List<UnityEngine.Object> oppObjects = new List<UnityEngine.Object>();
@@ -155,7 +156,7 @@ namespace MyFootballCareer
             if (share == null) return;
             foreach (var kv in share.strips) strips[kv.Key] = kv.Value;   // 내 외형이 바뀌었으면 새 그림으로
             foreach (var kv in oppStrips) strips[kv.Key] = kv.Value;      // 상대 팀 유니폼은 그대로
-            int hair = Mathf.Max(0, share.lookHair), skin = Mathf.Max(0, share.lookSkin), kit = Mathf.Max(0, share.lookKit);
+            int hair = Mathf.Max(0, share.lookHair), skin = Mathf.Max(0, share.lookSkin), kit = AllyKit > 0 ? AllyKit : Mathf.Max(0, share.lookKit);
             int key = (hair * 31 + skin) * 31 + kit;
             if (key == allyKey) return;
             DisposeAlly();

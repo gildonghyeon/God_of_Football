@@ -36,6 +36,8 @@ namespace MyFootballCareer
         GoalCelebration celebration;   // 내 골 세리머니
         string playerName = "";
         public int OwnKit, OppKit;           // 두 팀 유니폼 (PlayerLook.Kits 번호, 0이면 기본 파랑·빨강 점)
+        public int YouKit;                   // 내 선수 점의 유니폼 (골키퍼면 골키퍼 유니폼, 0이면 OwnKit)
+        public bool TeamMode;                // 나만의 팀 모드: 내 선수 없이 팀 경기 (벤치 안내 없음)
         readonly List<UnityEngine.Object> kitObjects = new List<UnityEngine.Object>();   // 유니폼 점 그림 (영상을 닫을 때 지움)
         public TrainingStageView SceneArt;   // 내 골 장면에 쓸 선수 그림 (훈련장과 같은 그림, 없으면 골망 장면)
         public int SeasonGoalsBefore = -1;
@@ -133,7 +135,7 @@ namespace MyFootballCareer
             feedItems.Clear(); scorePulse = 0f; lastCallId = 0; callTimer = 0f;
             try { speed = Mathf.Clamp(PlayerPrefs.GetInt(SpeedPref, 2), 1, 2); } catch { speed = 2; }
             BuildUi(parent);
-            Feed("0'", m.playerPlayed ? "킥오프" : "킥오프 (벤치 대기)", NeutralColor);
+            Feed("0'", m.playerPlayed || TeamMode ? "킥오프" : "킥오프 (벤치 대기)", NeutralColor);
             SoundFx.Play(Sfx.Whistle);
             Active = true;
             Tick(0f);
@@ -245,7 +247,8 @@ namespace MyFootballCareer
             // 선수 점은 두 팀 유니폼 무늬로 칠합니다 (골키퍼는 초록, 내 선수는 금색 테두리)
             var ownDot = OwnKit > 0 ? TeamKits.Dot(OwnKit, 25, new Color32(255, 255, 255, 238), 2, kitObjects) : blueSprite;
             var oppDot = OppKit > 0 ? TeamKits.Dot(OppKit, 25, new Color32(255, 255, 255, 238), 2, kitObjects) : redSprite;
-            var meDot = OwnKit > 0 ? TeamKits.Dot(OwnKit, 35, new Color32(255, 205, 61, 252), 4, kitObjects) : youSprite;
+            int meKit = YouKit > 0 ? YouKit : OwnKit;
+            var meDot = meKit > 0 ? TeamKits.Dot(meKit, 35, new Color32(255, 205, 61, 252), 4, kitObjects) : youSprite;
             for (int i = 0; i < 22; i++)
             {
                 var r = NewRect(i < 11 ? "Ours" + i : "Theirs" + (i - 11), pitchRect);
@@ -306,7 +309,7 @@ namespace MyFootballCareer
             var chipLayout = chipRow.gameObject.AddComponent<HorizontalLayoutGroup>();
             chipLayout.spacing = 6; chipLayout.childControlWidth = true; chipLayout.childControlHeight = true;
             chipLayout.childForceExpandWidth = true; chipLayout.childForceExpandHeight = true;
-            string[] chipNames = { "골", "도움", "슈팅", "패스", "태클" };
+            string[] chipNames = { "골", "도움", "슈팅", "패스", youPosition == Position.Goalkeeper ? "선방" : "태클" };
             for (int i = 0; i < chipNames.Length; i++)
             {
                 var chip = NewRect("Chip", chipRow);
@@ -319,7 +322,7 @@ namespace MyFootballCareer
             benchText = TextNode("벤치 대기 중", rootRect, 20, TextAnchor.MiddleCenter, PixelTheme.TextDim);
             benchText.rectTransform.anchorMin = new Vector2(0, 0); benchText.rectTransform.anchorMax = new Vector2(1, 0); benchText.rectTransform.pivot = new Vector2(0, 0);
             benchText.rectTransform.offsetMin = new Vector2(16, 102); benchText.rectTransform.offsetMax = new Vector2(-16, 140);
-            chipRow.gameObject.SetActive(youSlot >= 0); benchText.gameObject.SetActive(youSlot < 0);
+            chipRow.gameObject.SetActive(youSlot >= 0); benchText.gameObject.SetActive(youSlot < 0 && !TeamMode);
             // 진행 기록: 분 배지 + 내용, 3줄
             for (int i = 0; i < FeedRows; i++)
             {
@@ -349,7 +352,9 @@ namespace MyFootballCareer
             Anchored(skipText.rectTransform, 0, 0, 1, 1);
 
             // 내 골 세리머니 (평소에는 숨김)
-            celebration = new GoalCelebration(font, rootRect, goalFrames, SceneArt != null && SceneArt.Available ? new TrainingStageView(SceneArt) : null);
+            var sceneStage = SceneArt != null && SceneArt.Available ? new TrainingStageView(SceneArt) : null;
+            if (sceneStage != null) sceneStage.AllyKit = OwnKit;   // 장면 속 동료는 팀 유니폼 (내가 골키퍼여도)
+            celebration = new GoalCelebration(font, rootRect, goalFrames, sceneStage);
         }
 
         // ---------- 매 프레임 ----------
@@ -578,6 +583,7 @@ namespace MyFootballCareer
 
         void OnShot(ReplayEvent ev)
         {
+            if (ev.type == ReplayEventType.SaveYou) { OnKeeperSave(ev); return; }
             Feed(Minute(), ev.saved ? "내 슈팅, 골키퍼 선방" : "내 슈팅, 골문을 벗어남", NeutralColor);
         }
 
@@ -604,6 +610,33 @@ namespace MyFootballCareer
             }
             SoundFx.Play(Sfx.Tackle, 0.8f);
             ShowEvent("태클!", Minute() + "  공을 빼앗았다", TackleColor, 0.9f);
+        }
+
+        // 골키퍼인 내 선방: 경기마다 두 번까지 선방 장면 (첫 선방, 그리고 페널티킥 선방은 언제나). 나머지는 짧은 카드만
+        void OnKeeperSave(ReplayEvent ev)
+        {
+            yourTackles++;
+            var kind = ev.setPiece == SetPiece.Penalty ? TrainingStageDrills.DefenseScene.PenaltySave
+                     : ev.setPiece == SetPiece.Corner ? TrainingStageDrills.DefenseScene.CornerCatch
+                     : (Mathf.Abs((int)(clock * 7.3f)) + yourTackles) % 3 == 0 ? TrainingStageDrills.DefenseScene.OneOnOne : TrainingStageDrills.DefenseScene.Save;
+            string feed = kind == TrainingStageDrills.DefenseScene.PenaltySave ? "페널티킥 선방!" : kind == TrainingStageDrills.DefenseScene.CornerCatch ? "코너킥을 잡아냈다!"
+                        : kind == TrainingStageDrills.DefenseScene.OneOnOne ? "1대1 선방!" : "선방! 몸을 날려 막았다";
+            Feed(Minute(), feed, TackleColor);
+            bool scene = celebration != null && (defenseShown == 0 || kind == TrainingStageDrills.DefenseScene.PenaltySave || (defenseShown == 1 && clock >= 60f));
+            if (scene)
+            {
+                defenseShown++;
+                bannerT = 0f; eventCard.gameObject.SetActive(false);
+                celebration.Play(new GoalInfo
+                {
+                    oppKit = OppKit > 0 ? OppKit : -1, keeper = true,
+                    minute = Minute(), scorer = playerName, isDefense = true, defense = kind, how = "", assist = "",
+                    ownName = ownName, oppName = oppName, goalsFor = goalsFor, goalsAgainst = goalsAgainst, matchGoals = yourTackles
+                });
+                return;
+            }
+            SoundFx.Play(Sfx.Tackle, 0.8f);
+            ShowEvent("선방!", Minute() + "  " + feed, TackleColor, 0.9f);
         }
 
         // 수비 장면 종류: 포지션마다 자주 나오는 수비가 다름 (수비수는 블록·걷어내기, 미드필더는 가로채기, 공격수는 전방 압박 태클)
@@ -641,6 +674,8 @@ namespace MyFootballCareer
         // 내 도움 장면 종류: 코너킥, 크로스(동료 헤딩), 슈팅 자리로 내준 패스(동료 중거리), 그 밖에는 스루 패스
         static TrainingStageDrills.GoalScene AssistSceneFor(ReplayEvent ev)
         {
+            if (ev.assisterSlot == 0)   // 골키퍼인 내 도움: 롱킥 또는 빠른 배급
+                return ((int)ev.minute) % 2 == 0 ? TrainingStageDrills.GoalScene.KeeperKick : TrainingStageDrills.GoalScene.KeeperRoll;
             if (ev.setPiece == SetPiece.Corner) return TrainingStageDrills.GoalScene.Corner;
             if (ev.header) return TrainingStageDrills.GoalScene.Cross;
             if (ev.longShot) return TrainingStageDrills.GoalScene.LongShot;

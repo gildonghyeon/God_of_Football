@@ -13,6 +13,8 @@ namespace MyFootballCareer
         public bool bench;
         public float rating;
         public int myGoals, myAssists, shots, defense;
+        public bool keeper;                  // 골키퍼: 수비 칸은 선방 수
+        public bool teamMode;                // 나만의 팀 모드: 개인 기록 없음
         public string passText;              // 예: "16/21"
         public List<string> extras = new List<string>();   // 예: "주급 +2,640", "친선 경기 보상: 노력 포인트 +816"
     }
@@ -67,7 +69,8 @@ namespace MyFootballCareer
 
             // 3) 내 기록 타일
             Block(parent, 6);   // 간격
-            if (v.bench)
+            if (v.teamMode) { }   // 나만의 팀 모드: 개인 기록 없음
+            else if (v.bench)
             {
                 var b = Block(parent, 56);
                 b.gameObject.AddComponent<Image>().color = Tile;
@@ -76,7 +79,8 @@ namespace MyFootballCareer
             else
             {
                 Tiles(parent, font, new[] { ("평점", v.rating.ToString("0.0"), true), ("골", v.myGoals.ToString(), v.myGoals > 0), ("도움", v.myAssists.ToString(), v.myAssists > 0) });
-                Tiles(parent, font, new[] { ("슈팅", v.shots.ToString(), false), ("패스", v.passText, false), ("수비", v.defense.ToString(), false) });
+                if (v.keeper) Tiles(parent, font, new[] { ("선방", v.defense.ToString(), v.defense > 0), ("패스", v.passText, false), ("실점", v.ga.ToString(), false) });
+                else Tiles(parent, font, new[] { ("슈팅", v.shots.ToString(), false), ("패스", v.passText, false), ("수비", v.defense.ToString(), false) });
             }
 
             // 4) 보상 줄

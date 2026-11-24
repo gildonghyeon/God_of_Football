@@ -73,6 +73,10 @@ namespace MyFootballCareer
         // ---------- 팀마다 고정된 전술 ----------
         static readonly Dictionary<string, TeamTactic> cache = new Dictionary<string, TeamTactic>();
 
+        // 나만의 팀처럼 전술이 바뀔 수 있는 팀
+        public static void Forget(string teamId) { if (teamId != null) cache.Remove(teamId); }
+        public static void SetClubTactic(TeamTactic t) { cache[ClubSystem.ClubId] = t; }
+
         public static TeamTactic Of(TeamDefinition team)
         {
             if (team == null) return new TeamTactic { formation = Formation.F442, style = TacticStyle.Possession };
@@ -125,6 +129,7 @@ namespace MyFootballCareer
         // 내 포지션이 이 포메이션에서 맡는 자리: 공격수는 스트라이커, 미드필더는 공격형 → 중앙, 수비수는 센터백
         public static int YouSlot(Formation f, Position p)
         {
+            if (p == Position.Goalkeeper) return 0;   // 골키퍼는 0번 자리
             var l = Layouts[f];
             SlotKind[] prefer = p == Position.Forward ? new[] { SlotKind.ST, SlotKind.W }
                               : p == Position.Midfielder ? new[] { SlotKind.AM, SlotKind.CM, SlotKind.DM, SlotKind.WM }

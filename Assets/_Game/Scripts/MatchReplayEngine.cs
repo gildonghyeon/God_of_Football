@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 namespace MyFootballCareer
 {
-    public enum ReplayEventType { GoalOurs, GoalTheirs, ShotYou, TackleYou }
+    public enum ReplayEventType { GoalOurs, GoalTheirs, ShotYou, TackleYou, SaveYou }   // SaveYou: 골키퍼인 내가 막는 상대 슈팅
     public enum SetPiece { None, Corner, FreeKick, Penalty }   // 세트피스로 나온 골
 
     // 경기 영상에서 보여줄 한 장면. 실제 경기 결과(득점·도움·슈팅 수)와 어긋나지 않게 미리 짜 둡니다.
@@ -89,8 +89,24 @@ namespace MyFootballCareer
                 list.Add(new ReplayEvent { type = ReplayEventType.ShotYou, scorerSlot = youSlot, saved = rng.NextDouble() < 0.3 + 0.6 * shootN });   // 슈팅이 좋을수록 유효 슈팅(선방)이 많음
 
             int tackleEvents = youPlayed ? Mathf.Min(Mathf.Max(0, tackles), Mathf.Max(0, 10 - list.Count)) : 0;
-            for (int i = 0; i < tackleEvents; i++)
-                list.Add(new ReplayEvent { type = ReplayEventType.TackleYou, scorerSlot = -1 });
+            if (youPlayed && youSlot == 0)
+            {
+                // 골키퍼: 수비 기록은 선방 수. 상대가 공격해 와 슈팅하고 내가 막는 장면 (경기 중 슈팅, 페널티킥, 코너킥 헤딩)
+                // 득점 기록과 순서가 어긋나지 않도록 따로 만든 난수를 씁니다.
+                var kr = new System.Random(m.seed ^ 0x6b33f);
+                for (int i = 0; i < Mathf.Min(tackleEvents, 5); i++)
+                {
+                    var e = new ReplayEvent { type = ReplayEventType.SaveYou, saved = true, scorerSlot = RandomMate(kr, -1, -1, lt) };
+                    double r = kr.NextDouble();
+                    if (r < 0.16) e.setPiece = SetPiece.Penalty;
+                    else if (r < 0.40) { e.setPiece = SetPiece.Corner; e.assisterSlot = RandomMate(kr, e.scorerSlot, -1, lt); }
+                    else if (kr.NextDouble() < 0.5) e.assisterSlot = RandomMate(kr, e.scorerSlot, -1, lt);
+                    list.Add(e);
+                }
+            }
+            else
+                for (int i = 0; i < tackleEvents; i++)
+                    list.Add(new ReplayEvent { type = ReplayEventType.TackleYou, scorerSlot = -1 });
 
             // 세트피스 골: 실제 축구처럼 골의 약 1/4. 도움이 있으면 코너킥, 없으면 페널티킥이나 직접 프리킥.
             // 저장된 득점 기록과 순서가 어긋나지 않도록 따로 만든 난수를 씁니다.
@@ -1564,7 +1580,7 @@ namespace MyFootballCareer
             // 장면을 시작할 선수(도움 또는 득점)가 공을 잡을 때까지(Gather): 우리 공이면 그 선수에게 패스,
             // 상대 공이면 가장 가까운 우리 선수가 달려가 빼앗은 뒤 패스. 공은 순간이동하지 않습니다.
             script = ev; phase = Phase.Gather; phaseT = 0f;
-            scriptTeam = ev.type == ReplayEventType.GoalTheirs ? 1 : 0;
+            scriptTeam = ev.type == ReplayEventType.GoalTheirs || ev.type == ReplayEventType.SaveYou ? 1 : 0;
             gatherSlot = ev.assisterSlot >= 0 ? ev.assisterSlot : ev.scorerSlot;
             gatherPassed = false;
         }
@@ -1579,6 +1595,7 @@ namespace MyFootballCareer
             lastPoss = scriptTeam;
             buildY = DepthY(scriptTeam, ev.assisterSlot >= 0 ? 0.68f : 0.80f);
             buildX = Mathf.Clamp(c.x + (34f - c.x) * 0.4f + Rand(-6f, 6f), 8f, 60f);
+            if (gatherSlot == 0) { buildX = c.x; buildY = DepthY(scriptTeam, 0.08f); }   // 골키퍼의 도움: 공을 잡고 골문 앞에서 길게 차 줌
             // 측면 공격 팀: 측면 선수가 도움이면 터치라인 깊숙이 몰고 가서 크로스
             var adef = ev.assisterSlot >= 0 ? lay[scriptTeam][ev.assisterSlot] : default(SlotDef);
             bool wideAssist = ev.assisterSlot >= 0 && (adef.kind == SlotKind.W || adef.kind == SlotKind.WM || adef.kind == SlotKind.WB || adef.kind == SlotKind.FB);
@@ -1710,6 +1727,7 @@ namespace MyFootballCareer
             ev.header = header;
             if (ShotTaken != null && (ev.youScore || ev.type == ReplayEventType.ShotYou)) ShotTaken(ev);
             if (ev.type == ReplayEventType.ShotYou) StartShot(c, ev.saved ? KindSaved : KindWide);
+            else if (ev.type == ReplayEventType.SaveYou) StartShot(c, KindSaved, z);   // 내가(골키퍼) 막는 슈팅
             else StartShot(c, KindGoal, z);
             phase = Phase.Shot;
         }
@@ -1750,7 +1768,7 @@ namespace MyFootballCareer
             var gk = dots[Idx(1 - scriptTeam, 0)];
             if (phase == Phase.Shot && flying)
             {
-                if (ev.type != ReplayEventType.ShotYou) gk.tx = 34f - shotSide * 3f;          // 골: 골키퍼는 반대 방향으로 몸을 던짐
+                if (ev.type != ReplayEventType.ShotYou && ev.type != ReplayEventType.SaveYou) gk.tx = 34f - shotSide * 3f;   // 골: 골키퍼는 반대 방향으로 몸을 던짐
                 else if (ev.saved) { gk.tx = shotGx; gk.ty = fTy; }                         // 선방: 공 오는 곳으로 몸을 날림
                 gk.maxSpeed = KeeperDive;
             }
