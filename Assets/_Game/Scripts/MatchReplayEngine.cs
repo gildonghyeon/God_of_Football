@@ -275,6 +275,13 @@ namespace MyFootballCareer
         const float KeeperDive = 8.5f;  // 슈팅이 날아올 때 골키퍼가 몸을 날리는 속도
         float gkHoldT;                  // 공을 잡은 골키퍼가 안고 앞으로 나오는 남은 시간
         int gatherSlot;                 // 장면을 시작할 선수 (도움 또는 득점 선수)
+        // 골 세리머니: 득점자가 코너 쪽으로 달려 나가고, 가까운 동료들이 모여 함께 기뻐한 뒤 킥오프
+        public const float CelebrateTime = 4f;
+        int celebScorer = -1;
+        public bool CelebrateSolo;      // 이번 세리머니는 득점자 혼자 관중석 쪽으로 (확인용으로 공개)
+        float celebX, celebY;
+        readonly List<int> celebMates = new List<int>();
+        public bool Celebrating { get { return phase == Phase.After && script != null; } }
         bool gatherPassed;              // 그 선수에게 패스를 보냈는지
 
         public readonly ReplayDot[] dots = new ReplayDot[22];
@@ -1105,6 +1112,7 @@ namespace MyFootballCareer
             {
                 ballX = fTx; ballY = shooterTeam == 0 ? -1.2f : L + 1.2f; ballZ = 0f;   // 골망 안
                 phase = Phase.After; phaseT = 0f;
+                StartCelebration();
                 if (GoalScored != null && script != null) GoalScored(script);
             }
             else
@@ -1697,7 +1705,7 @@ namespace MyFootballCareer
             }
             else if (phase == Phase.After)
             {
-                if (phaseT > 1.4f)
+                if (phaseT > CelebrateTime)
                 {
                     Kickoff(1 - scriptTeam);
                     script = null; phase = Phase.None;
@@ -1732,10 +1740,70 @@ namespace MyFootballCareer
             phase = Phase.Shot;
         }
 
+        // 골 순간: 세리머니할 자리와 모여들 동료를 정합니다.
+        void StartCelebration()
+        {
+            celebMates.Clear(); celebScorer = -1;
+            if (script == null || script.scorerSlot < 0) return;
+            celebScorer = Idx(scriptTeam, script.scorerSlot);
+            var s = dots[celebScorer];
+            // 가끔(약 1/3)은 득점자 혼자 가까운 쪽 터치라인 너머 관중석으로 달려가 세리머니
+            CelebrateSolo = rng.NextDouble() < 0.35;
+            if (CelebrateSolo)
+            {
+                float sx = s.x < W / 2f ? 0.6f : W - 0.6f;
+                float ddx = sx - s.x, ddy = DepthY(scriptTeam, 0.78f) - s.y, dl = Mathf.Sqrt(ddx * ddx + ddy * ddy), go = Mathf.Min(dl, 20f);
+                celebX = dl > 0.01f ? s.x + ddx / dl * go : s.x; celebY = dl > 0.01f ? s.y + ddy / dl * go : s.y;
+                return;   // 동료는 모이지 않고 자기 자리로
+            }
+            // 득점자는 가까운 쪽 코너 깃발 방향으로 달려 나감 (상자 옆 측면)
+            float cx = s.x < W / 2f ? Rand(6f, 11f) : W - Rand(6f, 11f), cy = DepthY(scriptTeam, Rand(0.84f, 0.9f));
+            float dx = cx - s.x, dy = cy - s.y, len = Mathf.Sqrt(dx * dx + dy * dy), run = Mathf.Min(len, 9f);   // 너무 멀리 가지 않게 (동료가 따라올 수 있게)
+            celebX = len > 0.01f ? s.x + dx / len * run : s.x; celebY = len > 0.01f ? s.y + dy / len * run : s.y;
+            // 득점자에게 가까운 필드 동료 5명 (도움 선수는 꼭 포함)이 달려와 모임
+            var near = new List<int>();
+            for (int k = 1; k <= 10; k++) { int i = Idx(scriptTeam, k); if (i != celebScorer) near.Add(i); }
+            near.Sort((a, b) => DistTo(dots[a], s.x, s.y).CompareTo(DistTo(dots[b], s.x, s.y)));
+            if (script.assisterSlot > 0) { int a = Idx(scriptTeam, script.assisterSlot); near.Remove(a); near.Insert(0, a); }
+            for (int k = 0; k < near.Count && celebMates.Count < 5; k++)
+                if (celebMates.Count < 2 || DistTo(dots[near[k]], s.x, s.y) < 32f) celebMates.Add(near[k]);   // 너무 먼 동료는 제자리로
+        }
+
+        // 세리머니 동안의 움직임: 득점자는 코너 쪽으로 뛰어가 멈추고, 동료들은 그 둘레로 모여 듦.
+        // 나머지 동료는 천천히 자기 진영으로, 실점한 팀은 고개를 숙이고 자기 진영으로 걸어 돌아감.
+        void CelebrationTargets()
+        {
+            if (celebScorer < 0) return;
+            var s = dots[celebScorer];
+            s.tx = celebX; s.ty = celebY; s.maxSpeed = CelebrateSolo ? 8.5f : phaseT < 1.4f ? 7.5f : 1.5f;   // 혼자일 때는 관중석까지 전력 질주
+            float hx = s.x, hy = s.y;   // 모이는 곳: 득점자 자리
+            for (int k = 0; k < celebMates.Count; k++)
+            {
+                var m = dots[celebMates[k]];
+                float ang = (k + 0.5f) / celebMates.Count * Mathf.PI * 2f + phaseT * 0.6f;   // 득점자 둘레를 천천히 돌며 껴안음
+                float r = phaseT < 0.9f ? 4f : 1.6f;
+                m.tx = Mathf.Clamp(hx + Mathf.Cos(ang) * r, 1f, W - 1f); m.ty = Mathf.Clamp(hy + Mathf.Sin(ang) * r, 1f, L - 1f);
+                m.maxSpeed = 8.5f;
+            }
+            for (int t = 0; t < 2; t++)
+                for (int k = 0; k < 11; k++)
+                {
+                    int i = Idx(t, k);
+                    if (i == celebScorer || celebMates.Contains(i)) continue;
+                    var d = dots[i];
+                    if (k == 0) { d.tx = W / 2f; d.ty = DepthY(t, 0.03f); d.maxSpeed = 1.5f; continue; }   // 골키퍼는 골문 앞
+                    // 자기 진영 안쪽(킥오프 자리 쪽)으로 천천히
+                    d.tx = d.x + (d.def.x * (t == 0 ? 1f : -1f) + (t == 0 ? 0f : W) - d.x) * 0.3f;
+                    d.ty = DepthY(t, Mathf.Min(Dp(t, d.y), 0.45f));
+                    d.maxSpeed = t == scriptTeam ? 3f : 2.2f;   // 실점한 팀은 더 느리게 걸음
+                }
+        }
+
         void ApplyScriptTargets()
         {
             var ev = script;
             if (phase == Phase.SetPiece) return;   // 세트피스 자리는 재개 쪽에서 정함
+            if (phase == Phase.After) { CelebrationTargets(); return; }
             if (phase == Phase.Gather)
             {
                 if (carrier >= 0 && dots[carrier].team == scriptTeam) return;   // 우리 공: 평소 움직임 (패스를 받으러)

@@ -386,7 +386,7 @@ namespace MyFootballCareer
 
             // 시계: 아직 끝나지 않은 장면이 있으면 90분에서 기다립니다.
             // 코너킥·페널티킥·골문 앞 프리킥은 절반 속도 (시계도 같이 느려져 장면 순서는 그대로)
-            float pace = engine.SetPieceFocus ? 0.4f : engine.RestartFocus ? 0.45f : 1f;
+            float pace = engine.SetPieceFocus ? 0.4f : engine.RestartFocus ? 0.45f : engine.Celebrating ? 0.5f : 1f;   // 골 세리머니도 천천히
             pace *= speed == 2 ? 1f : 0.32f;   // 1배속은 2배속의 32%
             if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond * pace);
             if (!engine.SecondHalf) clock = Mathf.Min(clock, 45f);   // 전반 추가 시간: 진영을 바꿀 때까지 45분에서 기다림
@@ -414,10 +414,7 @@ namespace MyFootballCareer
             {
                 finishing = true; finishT = 1.3f;
                 SnapStats();
-                bool cleanSheet = youSlot >= 0 && goalsAgainst == 0 && youPosition != Position.Forward;
-                ShowEvent(cleanSheet ? "무실점!" : "경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName + (cleanSheet ? "  ·  골문을 지켰다" : ""),
-                          cleanSheet ? TackleColor : NeutralColor, cleanSheet ? 1.6f : 1.3f);
-                if (cleanSheet) finishT = 1.6f;
+                ShowEvent("경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName, NeutralColor, 1.3f);
                 SoundFx.Play(Sfx.FullTime);
                 Feed("90'", "경기 종료", NeutralColor);
             }
