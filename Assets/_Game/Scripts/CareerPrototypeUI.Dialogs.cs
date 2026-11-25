@@ -35,6 +35,45 @@ namespace MyFootballCareer
             return inner;
         }
 
+        // 베스트 11 스쿼드: 4-3-3 포메이션 그림과 명단 (내 선수·우리 팀 선수는 금색)
+        public Action<BestElevenPick, Action> OnBestElevenPlayer;   // 베스트 11에서 선수를 누르면 세부 능력치 (닫으면 다시 베스트 11)
+
+        public void ShowBestEleven(BestElevenSquadView b)
+        {
+            if (b == null) return;
+            var inner = BuildDialog("베스트 11", b.title, 30f, 18);
+            var layout = TacticSystem.Layout(Formation.F433);
+            var queues = new Dictionary<SquadRole, Queue<BestElevenPick>>();
+            foreach (SquadRole r in Enum.GetValues(typeof(SquadRole))) queues[r] = new Queue<BestElevenPick>();
+            foreach (var p in b.picks) queues[p.role].Enqueue(p);
+            var sv = new SquadView { layout = layout };
+            foreach (var slot in layout)
+            {
+                var q = queues[slot.role];
+                var p = q.Count > 0 ? q.Dequeue() : null;
+                sv.starters.Add(new SquadRowView { role = slot.role, name = p != null ? p.name : "-", rating = p != null ? p.avg : 0f, id = p != null ? b.picks.IndexOf(p) : -1 });
+            }
+            Action<BestElevenPick> open = p => { if (p != null && OnBestElevenPlayer != null) OnBestElevenPlayer(p, () => ShowBestEleven(b)); };
+            SquadDialog.Pitch(inner, font, sv, r => { if (r.id >= 0) open(b.picks[r.id]); }, null, null, true);   // 점을 누르면 세부 능력치
+            foreach (var p in b.picks)   // 명단: 포지션 · 이름 · 팀 · 평균 평점 (출전)
+            {
+                var row = NewRect("Pick", inner); Height(row.gameObject, 40);
+                var bg = row.gameObject.AddComponent<Image>(); bg.color = p.mine ? new Color(.42f, .33f, .10f, 1f) : new Color(.12f, .16f, .25f, 1f);
+                var rb = row.gameObject.AddComponent<Button>(); rb.targetGraphic = bg;   // 줄을 눌러도 세부 능력치
+                var rc = rb.colors; rc.pressedColor = new Color(.65f, .65f, .65f, 1f); rc.fadeDuration = .06f; rb.colors = rc;
+                var pick = p; rb.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); open(pick); });
+                var t = TextNode("<color=#" + ColorUtility.ToHtmlStringRGB(SquadDialog.RoleColor(p.role)) + ">" + p.role + "</color>  " + p.name + (p.mine ? " ★" : "") + "  <color=#8A93A6>" + p.team + "</color>", row, 17);
+                t.rectTransform.anchorMin = new Vector2(.02f, 0f); t.rectTransform.anchorMax = new Vector2(.76f, 1f); t.rectTransform.offsetMin = t.rectTransform.offsetMax = Vector2.zero;
+                t.alignment = TextAnchor.MiddleLeft; t.resizeTextForBestFit = true; t.resizeTextMinSize = 11; t.resizeTextMaxSize = 17; t.color = p.mine ? Color.white : PixelTheme.Text;
+                var a = TextNode(p.avg.ToString("0.00") + "  (" + p.apps + "경기)", row, 16);
+                a.rectTransform.anchorMin = new Vector2(.74f, 0f); a.rectTransform.anchorMax = new Vector2(.98f, 1f); a.rectTransform.offsetMin = a.rectTransform.offsetMax = Vector2.zero;
+                a.alignment = TextAnchor.MiddleRight; a.color = p.mine ? PixelTheme.Accent : PixelTheme.Text;
+            }
+            if (b.picks.Count > 0) { var hint = TextNode("포메이션 그림이나 명단에서 선수를 누르면 세부 능력치를 볼 수 있습니다", inner, 15); hint.color = PixelTheme.TextDim; hint.alignment = TextAnchor.MiddleCenter; Height(hint.gameObject, 30); }
+            if (b.picks.Count == 0) { var none = TextNode("출전 수가 기준(경기 수의 절반)을 채운 선수가 없습니다.", inner, 17); Height(none.gameObject, 40); none.color = PixelTheme.TextDim; }
+            PixelButton("닫기", () => CloseDialog(), inner, 64f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
         void CloseDialog() { if (overlay != null) Destroy(overlay); overlay = null; }
 
         public void ShowPopup(string title, string body, float bodyHeight = 190f, Action onClose = null, int bodyFont = 24)
@@ -83,8 +122,8 @@ namespace MyFootballCareer
             var body = NewRect("SquadBody", inner);
             ConfigureStack(body.gameObject, 0, 0, 0, 0, 3);
             SquadDialog.Build(body, font, view, r =>   // 선수를 누르면 세부 능력치, 닫으면 선수단으로 돌아옴
-                ShowCards(r.name, (b, f) => PopupCards.PlayerDetail(b, f, r, view.division), () => ShowSquad(title, view, back), "◀ 선수단으로"));
-            if (back != null) PixelButton("◀ 팀 목록으로", () => back(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+                ShowCards(r.name, (b, f) => PopupCards.PlayerDetail(b, f, r, view.division), () => ShowSquad(title, view, back), "◀ 뒤로"));
+            if (back != null) PixelButton("◀ 뒤로", () => back(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             PixelButton("닫기", () => CloseDialog(), inner, 64f);
         }
 

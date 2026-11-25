@@ -67,6 +67,13 @@ namespace MyFootballCareer
             currentParent = Section(content, "순위표 · " + v.division, true);
             ClubModeScreen.Table(Parent, font, v);
             PixelButton("팀 선수단 보기", () => { if (OnOpenSquads != null) OnOpenSquads(); }, Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
+            if (v.leaders != null)   // 우리 팀 선수들끼리의 개인 순위 (선수 키우기 개인 순위와 같은 모양)
+            {
+                currentParent = Section(content, "개인 순위", true);
+                var leaders = new MatchPageView(font) { LeaderKey = "club", OnBestEleven = ShowBestEleven };
+                leaders.BuildLeaders(Parent);
+                leaders.SetLeaders(v.leadersHeader, v.leaders, v.best);
+            }
             currentParent = Section(content, "무료 영입 · 내가 키운 선수", true);
             Label("선수단 " + v.squadCount + " / " + ClubSystem.SquadSize + "명 (1군 11 + 교체 8)" + (v.squadCount >= ClubSystem.SquadSize ? " · 영입하려면 한 명을 방출해야 합니다" : ""), 17, 32).color = PixelTheme.TextDim;
             if (v.free.Count == 0)

@@ -61,10 +61,10 @@ namespace MyFootballCareer
                 trait = list[(System.Array.IndexOf(list, trait) + 1) % list.Length];
                 refreshTrait();
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
-            // 등번호 (1~99): 누르면 번호판이 뜸. 직접 고르기 전에는 포지션의 대표 번호
+            // 등번호 (1~99): 누르면 등번호 설정 창이 뜸. 직접 고르기 전에는 포지션의 대표 번호
             NewNumber = SquadSystem.DefaultNumber(position); numberPicked = false;
             Button numberButton = null;
-            numberButton = PixelButton("등번호: " + NewNumber, () => ShowNumberPicker(n => {
+            numberButton = PixelButton("등번호: " + NewNumber, () => ShowNumberPicker(NewNumber, null, 0, "이 번호로 선택", n => {
                 NewNumber = n; numberPicked = true;
                 numberButton.GetComponentInChildren<Text>().text = "등번호: " + n;
             }), content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
@@ -73,7 +73,7 @@ namespace MyFootballCareer
             traitHelp = Label("", 20, 76); traitHelp.color = PixelTheme.TextDim;
             refreshTrait();
             PixelButton("선수 만들기", () => onCreate(nameInput.text, position, trait, newHair, newSkin, newKit, newBoots), content, 88f);
-            if (retireMode) PixelButton("◀ 모드 선택으로", () => { if (OnCancelCreation != null) OnCancelCreation(); }, content, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            if (retireMode) PixelButton("◀ 뒤로", () => { if (OnCancelCreation != null) OnCancelCreation(); }, content, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             status = Label("버튼을 눌러 포지션과 특성을 고르세요.", 22, 100);
             status.color = PixelTheme.TextDim;
         }
@@ -81,23 +81,79 @@ namespace MyFootballCareer
         public int NewNumber = 9;          // 선수 만들기에서 고른 등번호
         bool numberPicked; System.Action onPositionNumber;
 
-        // 등번호 번호판: 1~99 (한 줄에 7개)
-        void ShowNumberPicker(System.Action<int> picked)
+        // 커리어 탭: 등번호 변경
+        public System.Action<int> OnChangeNumber;   // 커리어 탭: 등번호 바꾸기
+        int shownNumber; Button numberChangeButton;
+
+        // 등번호를 바꾼 뒤: 설정 창이 처음 보여 줄 지금 번호
+        public void SetNumber(int n)
         {
-            var inner = BuildDialog("등번호", "1~99 중에서 고르세요", 40f, 20);
-            for (int start = 1; start <= 99; start += 7)
+            shownNumber = n;
+        }
+
+        // 커리어 탭의 등번호 변경에 쓰는 소속팀 정보: 동료들이 쓰는 번호(번호 → 성)와 홈 유니폼
+        public System.Func<System.Collections.Generic.Dictionary<int, string>> TeammateNumbers;
+        public System.Func<int> TeamKitIndex;
+
+        // 등번호 설정: 10의 자리(0~9)와 1의 자리(0~9)를 따로 골라 1~99. 위에 고른 번호를 크게 미리 보여 주고, 확정 버튼을 눌러야 바뀜.
+        // taken: 동료가 쓰는 번호 (번호 → 성). 그 번호를 고르면 설정 칸 아래에 '~의 번호를 가져옵니다' 안내
+        // takenText: 고른 번호를 쓰는 선수가 있을 때 그 이름 뒤에 붙는 안내 (기본: '~의 번호를 가져옵니다')
+        void ShowNumberPicker(int current, System.Collections.Generic.Dictionary<int, string> taken, int kit, string confirmLabel, System.Action<int> picked,
+                              string takenText = "의 번호를 가져옵니다")
+        {
+            int start = current >= 1 && current <= 99 ? current : 1;
+            int tens = start / 10, ones = start % 10;
+            var inner = BuildDialog("등번호", "", 0f);
+
+            // 미리 보기: 유니폼(소속팀이 있으면)과 고른 번호
+            var prev = NewRect("Preview", inner); Height(prev.gameObject, 150);
+            prev.gameObject.AddComponent<Image>().color = PixelTheme.BarBack;
+            bool hasKit = kit > 0 && TeamKits.PreviewImage(prev, kit, .04f, .06f, .30f, .94f) != null;
+            var big = TextNode("", prev, 84); big.alignment = TextAnchor.MiddleCenter; big.color = PixelTheme.Accent;
+            big.rectTransform.anchorMin = new Vector2(hasKit ? .32f : .02f, 0f); big.rectTransform.anchorMax = new Vector2(.98f, 1f); big.rectTransform.offsetMin = big.rectTransform.offsetMax = Vector2.zero;
+
+            var tensFills = new Image[10]; var onesFills = new Image[10];
+            Text info = null;
+            System.Action refresh = null;
+            refresh = () =>
             {
-                var row = NewRect("Numbers", inner); Height(row.gameObject, 58);
-                var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-                h.spacing = 6; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
-                for (int n = start; n < start + 7; n++)
+                int n = tens * 10 + ones;
+                big.text = n >= 1 ? n.ToString() : "-";
+                for (int d = 0; d < 10; d++)
                 {
-                    if (n > 99) { NewRect("Empty", row); continue; }
-                    int pick = n; bool on = n == NewNumber;
-                    PixelButton(n.ToString(), () => { CloseDialog(); picked(pick); }, row, 58f, on ? PixelTheme.AccentFill : PixelTheme.QuietFill, on ? PixelTheme.Accent : PixelTheme.QuietEdge)
-                        .GetComponentInChildren<Text>().fontSize = 22;
+                    tensFills[d].color = d == tens ? PixelTheme.AccentFill : PixelTheme.QuietFill;
+                    onesFills[d].color = d == ones ? PixelTheme.AccentFill : PixelTheme.QuietFill;
+                }
+                string who = n != current && taken != null && taken.TryGetValue(n, out var w) ? w : null;
+                info.text = n < 1 ? "0번은 쓸 수 없습니다 (1~99)" : who != null ? who + takenText : "";
+                info.color = n < 1 ? PixelTheme.TextDim : PixelTheme.Accent;
+            };
+
+            // 자리 하나: 이름 + 0~9 버튼 한 줄
+            void DigitRow(string title, Image[] fills, System.Action<int> set)
+            {
+                var cap = TextNode(title, inner, 18); cap.color = PixelTheme.TextDim; Height(cap.gameObject, 28);
+                var row = NewRect("Digits", inner); Height(row.gameObject, 60);
+                var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                h.spacing = 4; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+                for (int d = 0; d < 10; d++)
+                {
+                    var cell = NewRect("Digit", row);
+                    var img = cell.gameObject.AddComponent<Image>();
+                    var b = cell.gameObject.AddComponent<Button>(); b.targetGraphic = img;
+                    var c = b.colors; c.pressedColor = new Color(.7f, .7f, .7f, 1f); c.fadeDuration = .05f; b.colors = c;
+                    int digit = d;
+                    b.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); set(digit); refresh(); });
+                    var t = TextNode(d.ToString(), cell, 24); t.alignment = TextAnchor.MiddleCenter; t.color = Color.white;
+                    t.rectTransform.anchorMin = Vector2.zero; t.rectTransform.anchorMax = Vector2.one; t.rectTransform.offsetMin = t.rectTransform.offsetMax = Vector2.zero;
+                    fills[d] = img;
                 }
             }
+            DigitRow("10의 자리", tensFills, d => tens = d);
+            DigitRow("1의 자리", onesFills, d => ones = d);
+            info = TextNode("", inner, 18); info.alignment = TextAnchor.MiddleCenter; Height(info.gameObject, 34);   // 설정 칸 아래 안내 (동료 번호를 가져올 때만)
+            refresh();
+            PixelButton(confirmLabel, () => { int n = tens * 10 + ones; if (n < 1) return; CloseDialog(); if (n != current) picked(n); }, inner, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
             PixelButton("닫기", () => CloseDialog(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
@@ -146,15 +202,21 @@ namespace MyFootballCareer
 
             // MATCH: 시즌, 경기, 순위표
             matchPage = new MatchPageView(font);
+            matchPage.OnBestEleven = ShowBestEleven;
             currentParent = Section(pages[1], "시즌", true);
             matchPage.BuildNext(Parent);
             var play = PixelButton("다음 경기", () => onPlayMatch(), Parent, 80f);
             playLabel = play.GetComponentInChildren<Text>();
+            // 시즌이 끝나고 이적 제안이 들어왔으면: 알림과 '이적 제안 확인하기' (커리어 탭의 이적 제안으로)
+            offerNotice = Label("", 21, 40); offerNotice.color = PixelTheme.Accent; offerNotice.alignment = TextAnchor.MiddleCenter;
+            offerButton = PixelButton("이적 제안 확인하기", () => OpenTransferOffers(), Parent, 68f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).gameObject;
+            offerNotice.gameObject.SetActive(false); offerButton.SetActive(false);
             matchPage.BuildResult(Parent);
             currentParent = Section(pages[1], "친선 경기", true);
             friendlyText = Label("", 22, 64);
             friendlyButton = PixelButton("친선 경기 하기", () => { if (OnPlayFriendly != null) OnPlayFriendly(); }, Parent, 68f, PixelTheme.AccentFill, PixelTheme.Accent);
-            currentParent = Section(pages[1], "순위표", true);
+            currentParent = Section(pages[1], "", true);
+            tableTitle = Label("순위표", 26, 36); tableTitle.color = PixelTheme.Accent;   // "순위표 · 5부 리그" (SetTableTitle)
             matchPage.BuildTable(Parent);
             PixelButton("팀 선수단 보기", () => { if (OnOpenSquads != null) OnOpenSquads(); }, Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
                 .GetComponentInChildren<Text>().fontSize = 22;
@@ -166,8 +228,17 @@ namespace MyFootballCareer
             careerPage.OnLegend = n => { if (OnShowLegend != null) OnShowLegend(n); };
             currentParent = Section(pages[3], "", true);
             careerPage.BuildProfile(Parent);
-            PixelButton("외형 바꾸기", () => ShowLookDialog(), Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
+            // 외형 바꾸기 · 등번호 바꾸기 (한 줄에 나란히)
+            var lookRow = NewRect("LookRow", Parent); Height(lookRow.gameObject, 56);
+            var lh = lookRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            lh.spacing = 8; lh.childControlWidth = true; lh.childControlHeight = true; lh.childForceExpandWidth = true; lh.childForceExpandHeight = true;
+            PixelButton("외형 바꾸기", () => ShowLookDialog(), lookRow, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge)
                 .GetComponentInChildren<Text>().fontSize = 22;
+            shownNumber = p.number;
+            numberChangeButton = PixelButton("등번호 변경", () => ShowNumberPicker(shownNumber, TeammateNumbers != null ? TeammateNumbers() : null, TeamKitIndex != null ? TeamKitIndex() : 0, "이 번호로 변경",
+                                                                                                n => { if (OnChangeNumber != null) OnChangeNumber(n); }),
+                                             lookRow, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            numberChangeButton.GetComponentInChildren<Text>().fontSize = 22;
             transferRoot = NewRect("TransferRoot", pages[3]);
             ConfigureStack(transferRoot.gameObject, 0, 0, 0, 0, 18);
             currentParent = Section(pages[3], "트로피 룸", true);

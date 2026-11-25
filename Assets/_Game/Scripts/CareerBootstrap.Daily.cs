@@ -52,6 +52,21 @@ namespace MyFootballCareer
                          SquadSystem.View(save, ms, settings, teamId, division, stats), back > 0 ? (System.Action)(() => OpenLeague(back)) : null);
         }
 
+        // 베스트 11에서 누른 선수의 세부 능력치: 그 팀 선수단 창과 같은 정보 (능력치·등번호·이번 시즌 기록). 닫으면 베스트 11로
+        void BestElevenPlayer(BestElevenPick pick, System.Action back)
+        {
+            if (blocked || current == null || pick == null) return;
+            var save = LeagueSave; var ms = LeagueSettings;
+            if (ms.FindTeam(pick.teamId) == null) return;
+            int division = SeasonSystem.DivisionOf(save, ms, pick.teamId);
+            var stats = save.teamMode && pick.teamId == ClubSystem.ClubId ? ClubSystem.SeasonLines(save, ms, settings)
+                      : AwardSystem.TeamSeasonStats(save, ms, settings, pick.teamId, out division);
+            var view = SquadSystem.View(save, ms, settings, pick.teamId, division, stats);
+            var row = view.starters.Find(r => r.name == pick.name) ?? view.subs.Find(r => r.name == pick.name);
+            if (row == null) return;
+            ui.ShowCards(row.name, (body, font) => PopupCards.PlayerDetail(body, font, row, view.division), back, "◀ 뒤로");
+        }
+
         // ---------- 일일 미션·출석 ----------
         void CountMatchMissions(MatchRecord record, bool league)
         {

@@ -83,7 +83,14 @@ namespace MyFootballCareer
             v.free = ClubSystem.FreeAgents(current, club);
             ClubSystem.EnsureClubSquad(club);
             v.squadCount = ClubSystem.Squad(club).players.Count;
+            v.leaders = ClubLeaders(out v.leadersHeader, out v.best);
             ui.ShowClubMode(v);
+        }
+
+        // 나만의 팀 개인 순위: 리그 전체에서 비교 (우리 팀 선수는 금색 줄, 5위 밖이어도 순위와 함께)
+        List<LeaderBlockView> ClubLeaders(out string header, out BestElevenSquadView best)
+        {
+            return AwardSystem.ClubLeadersView(club, clubMs, settings, ClubSystem.SeasonLines(club, clubMs, settings), ClubSystem.Squad(club).players, out header, out best);
         }
 
         void ClubPlay()
@@ -234,6 +241,22 @@ namespace MyFootballCareer
             var stats = ClubSystem.SeasonLines(club, clubMs, settings);   // 경기마다 쌓은 기록 (교체로 빠져도 남음)
             if (stats.TryGetValue(p.name, out var line)) row.line = line;
             return row;
+        }
+
+        // 나만의 팀 등번호 변경: 같은 번호를 쓰던 선수와는 서로 맞바꿈
+        void ClubNumber(int id, int number)
+        {
+            if (club == null) return;
+            number = Mathf.Clamp(number, 1, 99);
+            var players = ClubSystem.Squad(club).players;
+            var p = players.Find(x => x.id == id);
+            if (p == null || p.number == number) return;
+            var other = players.Find(x => x.id != id && x.number == number);
+            if (other != null) other.number = p.number;
+            p.number = number;
+            clubSaves.TrySave(club, out _);
+            ShowClubTeam();
+            ui.SetStatus(p.name + "의 등번호를 " + number + "번으로 바꿨습니다." + (other != null ? " (" + other.name + "는 " + other.number + "번)" : ""));
         }
 
         // 두 명을 고른 뒤 '비교': 두 선수 비교 창

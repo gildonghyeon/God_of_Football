@@ -299,7 +299,7 @@ namespace MyFootballCareer
             youLabel = NewRect("YouLabel", pitchRect);
             var youText = TextNode("나", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
             Anchored(youText.rectTransform, 0, 0, 1, 1);
-            youLabel.gameObject.SetActive(youSlot >= 0);
+            youLabel.gameObject.SetActive(false);   // 내 선수 위 "나" 표시는 쓰지 않음 (금색 테두리 점과 아래 이름표로 구분)
             callBox = NewRect("Call", pitchRect);
             callBox.gameObject.AddComponent<Image>().color = new Color(0.03f, 0.05f, 0.09f, 0.86f);
             callBox.GetComponent<Image>().raycastTarget = false;
@@ -471,19 +471,19 @@ namespace MyFootballCareer
             for (int i = 0; i < 22; i++)
             {
                 var d = engine.dots[i];
-                PlaceMeters(dotRects[i], d.x, d.y, 0f, i == youSlot ? 42f : 30f);
+                PlaceMeters(dotRects[i], d.x, d.y, 0f, 30f);   // 내 선수도 같은 크기 (금색 테두리와 "나" 표시로 구분)
             }
             for (int i = 0; i < 11; i++)   // 이름표는 선수 점 바로 아래
             {
                 if (ownLabelRects[i] == null) continue;
                 var d = engine.dots[i];
-                PlacePx(ownLabelRects[i], MeterX(d.x), MeterY(d.y) + (i == youSlot ? 28f : 22f), 110f, 18f);   // 내 선수 점은 더 커서 조금 더 아래
+                PlacePx(ownLabelRects[i], MeterX(d.x), MeterY(d.y) + 22f, 110f, 18f);
             }
             PlaceMeters(ballRect, engine.ballX, engine.ballY, engine.ballZ, 20f);
             if (youSlot >= 0)
             {
                 var d = engine.dots[youSlot];
-                PlacePx(youLabel, MeterX(d.x), MeterY(d.y) - 29f, 52f, 20f);
+                PlacePx(youLabel, MeterX(d.x), MeterY(d.y) - 24f, 52f, 20f);
             }
             if (offLineRect != null)
             {

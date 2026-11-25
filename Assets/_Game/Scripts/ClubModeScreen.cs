@@ -20,6 +20,9 @@ namespace MyFootballCareer
         public List<string> recent = new List<string>();          // 최근 경기 (예: "승 2-1 상대")
         public List<RetiredPlayer> free = new List<RetiredPlayer>();   // 무료 영입 후보
         public List<SeasonSummary> history = new List<SeasonSummary>();
+        public string leadersHeader;                                // 개인 순위 (우리 팀 선수끼리)
+        public List<LeaderBlockView> leaders;
+        public BestElevenSquadView best;                            // 시즌이 끝나면 베스트 11 스쿼드
     }
 
     // 게임을 켰을 때의 모드 선택 화면에 보여 줄 내용

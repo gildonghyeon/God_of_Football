@@ -71,7 +71,7 @@ namespace MyFootballCareer
         // mark: 0 없음, 1 처음 고른 선수(금색), 2 두 번째 고른 선수(하늘색). home: 선수 본래 포지션 (자리와 다르면 빨간 테두리 + 이름 왼쪽에 본래 포지션)
         static readonly Color PickGold = new Color(.98f, .80f, .28f, 1f), PickBlue = new Color(.56f, .82f, 1f, 1f), OffRed = new Color(.95f, .38f, .38f, 1f);
         public static void Pitch(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap,
-                                 System.Func<SquadRowView, int> mark = null, System.Func<SquadRowView, SquadRole> home = null)
+                                 System.Func<SquadRowView, int> mark = null, System.Func<SquadRowView, SquadRole> home = null, bool decimals = false)
         {
             var block = Block(parent, PitchH + 8f);
             var box = NewRect("Pitch", block);
@@ -107,9 +107,10 @@ namespace MyFootballCareer
                 var name = Point(box, m > 0 ? pick : new Color(0f, 0f, 0f, .45f), x, y - 36f / PitchH, 136f, 22f);   // 본래 포지션 + 이름 + 능력 (고르면 이름표도 같은 색)
                 // 이름 왼쪽: 선수 본래 포지션 (포지션 색 글자). 고른 이름표(밝은 바탕) 위에서는 어두운 글자
                 string homeText = "<color=#" + (m > 0 ? "10141E" : ColorUtility.ToHtmlStringRGB(RoleColor(own))) + ">" + own + "</color> ";
-                string ability = m > 0 ? "<color=#10141E>" + Mathf.RoundToInt(r.rating) + "</color>"
-                               : wrong ? "<color=#F26060>" + Mathf.RoundToInt(r.rating) + "</color>"
-                               : "<color=#FBCC47>" + Mathf.RoundToInt(r.rating) + "</color>";
+                string rv = decimals ? r.rating.ToString("0.0") : Mathf.RoundToInt(r.rating).ToString();   // 베스트 11은 평균 평점 (소수 한 자리)
+                string ability = m > 0 ? "<color=#10141E>" + rv + "</color>"
+                               : wrong ? "<color=#F26060>" + rv + "</color>"
+                               : "<color=#FBCC47>" + rv + "</color>";
                 var nameColor = m > 0 ? new Color(.06f, .08f, .12f, 1f) : Color.white;
                 Fit(Label(name.rectTransform, font, homeText + surname + " " + ability, 15, nameColor, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
                 if (m > 0)   // 고른 순서 (1, 2) 표시

@@ -19,13 +19,14 @@ namespace MyFootballCareer
 
 
         // 경쟁자 한 경기의 기록 (시즌 도중 순위표용)
-        struct MatchLine { public bool played; public int goals, assists, defense, saves; public float rating; }
+        struct MatchLine { public bool played; public int goals, assists, defense, saves, conceded; public float rating; }   // conceded: 그 경기 팀 실점
 
         class Rival
         {
             public string name, teamId;
             public Position position;
             public int division, played, apps, goals, assists, defense, saves;   // saves: 골키퍼 선방
+            public int conceded, cleanSheets;                                   // 뛴 경기의 팀 실점, 무실점 경기 (골키퍼 순위)
             public float ratingSum;
             public float Avg => apps > 0 ? ratingSum / apps : 0f;
             public readonly List<MatchLine> log = new List<MatchLine>();
@@ -39,6 +40,7 @@ namespace MyFootballCareer
                     var l = log[i]; r.played++;
                     if (!l.played) continue;
                     r.apps++; r.ratingSum += l.rating; r.goals += l.goals; r.assists += l.assists; r.defense += l.defense; r.saves += l.saves;
+                    r.conceded += l.conceded; if (l.conceded == 0) r.cleanSheets++;
                 }
                 return r;
             }
@@ -96,10 +98,11 @@ namespace MyFootballCareer
                             var m = new MatchRecord { home = leg == 0, seed = mr.Next() };
                             MatchSimulation.Play(m, p, simTeam, opp, ms, career.attributeCap, kind);
                             r.played++;
-                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = pos == Position.Goalkeeper ? 0 : m.defensiveActions, saves = pos == Position.Goalkeeper ? m.defensiveActions : 0, rating = m.rating });   // 골키퍼의 선방은 수비 순위에서 뺌
+                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = pos == Position.Goalkeeper ? 0 : m.defensiveActions, saves = pos == Position.Goalkeeper ? m.defensiveActions : 0, conceded = m.goalsAgainst, rating = m.rating });   // 골키퍼의 선방은 수비 순위에서 뺌
                             if (!m.playerPlayed) continue;
                             r.apps++; r.ratingSum += m.rating;
                             r.goals += m.playerGoals; r.assists += m.playerAssists; if (pos != Position.Goalkeeper) r.defense += m.defensiveActions; else r.saves += m.defensiveActions;
+                            r.conceded += m.goalsAgainst; if (m.goalsAgainst == 0) r.cleanSheets++;
                         }
                     }
                     list.Add(r);
@@ -212,10 +215,11 @@ namespace MyFootballCareer
             return sb.ToString();
         }
 
-        // 경기 탭 표용: 득점·도움·수비 순위 (상위 3명 + 3위 밖이면 내 줄), header는 진행 라운드, footer는 베스트 11 기준
-        public static List<LeaderBlockView> LeadersView(SaveData save, MatchSettings ms, CareerSettings career, out string header, out string footer)
+        // 경기 탭의 개인 순위: 항목별 순위(상위 5명 + 내 순위)와 베스트 11 카드
+        //  득점 · 도움 · 공격포인트 · 평점 · 수비 · 선방, 포지션과 상관없이 리그 전체 선수와 비교
+        public static List<LeaderBlockView> LeadersView(SaveData save, MatchSettings ms, CareerSettings career, out string header, out BestElevenSquadView best)
         {
-            footer = null;
+            best = null;
             var season = save.season;
             if (season == null || season.teamIds == null || season.teamIds.Count < 2) { header = "리그 정보가 없습니다."; return null; }
             int games = Mathf.Min(season.nextMatchIndex, season.matches.Count);
@@ -223,31 +227,136 @@ namespace MyFootballCareer
             var teams = new List<TeamDefinition>();
             foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
             var pos = save.player.position;
+            bool keeper = pos == Position.Goalkeeper;
             var now = Snapshot(SimulateRivals(save, ms, career, teams, season.division, save.teamId, SquadSystem.MySlot(save, ms)), games, save);
             var me = new Rival { name = save.player.playerName, teamId = save.teamId, position = pos };
             for (int i = 0; i < games; i++)
             {
                 var m = season.matches[i]; me.played++;
                 if (!m.played || !m.playerPlayed) continue;
-                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists; if (pos != Position.Goalkeeper) me.defense += m.defensiveActions;
+                me.apps++; me.ratingSum += m.rating; me.goals += m.playerGoals; me.assists += m.playerAssists;
+                if (keeper) me.saves += m.defensiveActions; else me.defense += m.defensiveActions;
+                me.conceded += m.goalsAgainst; if (m.goalsAgainst == 0) me.cleanSheets++;
             }
             header = season.matches.Count + "라운드 중 " + games + "라운드 진행";
-            var blocks = new List<LeaderBlockView> {
-                Block(ms, "득점", now, me, r => r.goals), Block(ms, "도움", now, me, r => r.assists), Block(ms, "수비 (수비 횟수)", now, me, r => r.defense) };
-            int slots = BestElevenSlots(pos);
-            var same = new List<Rival>();
-            foreach (var r in now) if (r.position == pos && r.played > 0 && r.apps >= BestElevenMinApps * r.played) same.Add(r);
-            same.Sort((a, b) => b.Avg.CompareTo(a.Avg));
-            float cut = same.Count >= slots ? same[slots - 1].Avg : 0f;
-            bool enough = me.apps >= BestElevenMinApps * me.played;
-            footer = "베스트 11 (" + Ko.Pos(pos) + ")  기준 평점 " + cut.ToString("0.0") + "  ·  내 평점 " + (me.apps > 0 ? me.Avg.ToString("0.0") : "-")
-                   + (!enough ? "  (출전 부족)" : me.Avg >= cut ? "  → 선정권" : "  → 탈락권");
+            System.Func<Rival, bool> enoughApps = r => r.played > 0 && r.apps >= BestElevenMinApps * r.played;
+            System.Func<Rival, string> perGame(System.Func<Rival, int> v) => r => "출전 " + r.apps + (r.apps > 0 ? " · 경기당 " + (v(r) / (float)r.apps).ToString("0.0#") : "");
+            var blocks = new List<LeaderBlockView>();
+            // 포지션과 상관없이 같은 항목, 모두 리그 전체 선수와 비교 (골키퍼도 수비수로 뛰면 수비를, 필드 선수도 골문을 지키면 선방을 쌓음)
+            blocks.Add(Ranking(ms, "득점", now, me, r => r.goals, r => r.goals.ToString(), perGame(r => r.goals), null));
+            blocks.Add(Ranking(ms, "도움", now, me, r => r.assists, r => r.assists.ToString(), perGame(r => r.assists), null));
+            blocks.Add(Ranking(ms, "공격포인트", now, me, r => r.goals + r.assists, r => (r.goals + r.assists).ToString(), r => r.goals + "골 " + r.assists + "도움", null));
+            blocks.Add(Ranking(ms, "평점", now, me, r => r.Avg, r => r.apps > 0 ? r.Avg.ToString("0.00") : "-", r => "출전 " + r.apps, enoughApps));
+            blocks.Add(Ranking(ms, "수비", now, me, r => r.defense, r => r.defense.ToString(), perGame(r => r.defense), null));
+            blocks.Add(Ranking(ms, "선방", now, me, r => r.saves, r => r.saves.ToString(), perGame(r => r.saves), null));
+
+            // 시즌이 끝나면 베스트 11 스쿼드 (나도 후보)
+            if (SeasonSystem.IsComplete(save))
+            {
+                var pool = new List<Rival>(now) { me };
+                best = PickBestEleven(ms, pool, new HashSet<Rival> { me }, ms.DivisionName(season.division) + " · 시즌 " + season.seasonNumber);
+            }
             return blocks;
         }
 
-        static LeaderBlockView Block(MatchSettings ms, string title, List<Rival> rivals, Rival me, System.Func<Rival, int> value)
+        // 나만의 팀 개인 순위: 리그 전체 선수와 비교. 우리 팀 선수(경기마다 쌓은 실제 기록)는 금색 줄로 보이고, 5위 밖이어도 순위와 함께 붙음
+        public static List<LeaderBlockView> ClubLeadersView(SaveData club, MatchSettings ms, CareerSettings career, Dictionary<string, SeasonLine> lines,
+                                                            List<SquadPlayer> squad, out string header, out BestElevenSquadView best)
         {
-            var all = new List<Rival>(rivals) { me };
+            best = null;
+            var season = club.season;
+            if (season == null || season.teamIds == null || season.teamIds.Count < 2) { header = "리그 정보가 없습니다."; return null; }
+            int games = Mathf.Min(season.nextMatchIndex, season.matches.Count);
+            if (games <= 0) { header = "첫 경기를 치르면 순위가 나옵니다."; return null; }
+            var teams = new List<TeamDefinition>();
+            foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
+            // 다른 팀 선수들: 시상과 같은 계산 (우리 팀은 실제 기록을 쓰므로 계산에서 뺌)
+            var now = Snapshot(SimulateRivals(club, ms, career, teams, season.division, null, -1), games, club).FindAll(r => r.teamId != ClubSystem.ClubId);
+            var ours = new List<Rival>();
+            foreach (var p in squad)
+            {
+                if (!lines.TryGetValue(p.name, out var l) || l.apps <= 0) continue;
+                ours.Add(new Rival { name = p.name, teamId = ClubSystem.ClubId, position = SquadSystem.ToPosition(p.role), played = games, apps = l.apps,
+                                     ratingSum = l.avg * l.apps, goals = l.goals, assists = l.assists, defense = l.defense, saves = l.saves });
+            }
+            header = season.matches.Count + "라운드 중 " + games + "라운드 진행 · 금색 줄이 우리 팀 선수";
+            System.Func<Rival, bool> enoughApps = r => r.played > 0 && r.apps >= BestElevenMinApps * r.played;
+            System.Func<Rival, string> perGame(System.Func<Rival, int> v) => r => "출전 " + r.apps + (r.apps > 0 ? " · 경기당 " + (v(r) / (float)r.apps).ToString("0.0#") : "");
+            if (SeasonSystem.IsComplete(club))   // 시즌이 끝나면 베스트 11 스쿼드 (우리 팀 선수도 후보)
+            {
+                var pool = new List<Rival>(now); pool.AddRange(ours);
+                best = PickBestEleven(ms, pool, new HashSet<Rival>(ours), ms.DivisionName(season.division) + " · 시즌 " + season.seasonNumber);
+            }
+            return new List<LeaderBlockView>
+            {
+                RankingOurs(ms, "득점", now, ours, r => r.goals, r => r.goals.ToString(), perGame(r => r.goals), null),
+                RankingOurs(ms, "도움", now, ours, r => r.assists, r => r.assists.ToString(), perGame(r => r.assists), null),
+                RankingOurs(ms, "공격포인트", now, ours, r => r.goals + r.assists, r => (r.goals + r.assists).ToString(), r => r.goals + "골 " + r.assists + "도움", null),
+                RankingOurs(ms, "평점", now, ours, r => r.Avg, r => r.apps > 0 ? r.Avg.ToString("0.00") : "-", r => "출전 " + r.apps, enoughApps),
+                RankingOurs(ms, "수비", now, ours, r => r.defense, r => r.defense.ToString(), perGame(r => r.defense), null),
+                RankingOurs(ms, "선방", now, ours, r => r.saves, r => r.saves.ToString(), perGame(r => r.saves), null),
+            };
+        }
+
+        // 리그 전체 순위에서 상위 5명 + 5위 밖의 우리 팀 선수(최대 2명, 기록이 있는 선수만). 같은 기록이면 우리 팀 선수가 앞
+        static LeaderBlockView RankingOurs(MatchSettings ms, string title, List<Rival> rivals, List<Rival> ours, System.Func<Rival, float> value,
+                                           System.Func<Rival, string> text, System.Func<Rival, string> sub, System.Func<Rival, bool> qualified)
+        {
+            var all = new List<Rival>();
+            foreach (var r in rivals) if (qualified == null || qualified(r)) all.Add(r);
+            var mine = new HashSet<Rival>();
+            foreach (var r in ours) if (qualified == null || qualified(r)) { all.Add(r); mine.Add(r); }
+            all.Sort((a, b) =>
+            {
+                int c = value(b).CompareTo(value(a));
+                if (c != 0) return c;
+                if (mine.Contains(a) != mine.Contains(b)) return mine.Contains(a) ? -1 : 1;
+                return string.CompareOrdinal(a.name, b.name);
+            });
+            var block = new LeaderBlockView { title = title };
+            void Add(int rank, Rival r, bool gap)
+            {
+                var t = ms.FindTeam(r.teamId);
+                block.rows.Add(new LeaderRowView { rank = rank, name = r.name, team = t != null ? t.displayName : r.teamId, value = Mathf.RoundToInt(value(r)), role = ClubSystem.RoleOf(r.position),
+                                                   valueText = text(r), sub = sub != null ? sub(r) : "", me = mine.Contains(r), gap = gap });
+            }
+            for (int i = 0; i < all.Count && i < 5; i++) Add(i + 1, all[i], false);
+            int extra = 0; bool first = true;
+            for (int i = 5; i < all.Count && extra < 2; i++)
+            {
+                if (!mine.Contains(all[i]) || value(all[i]) <= 0f) continue;
+                Add(i + 1, all[i], first); first = false; extra++;
+            }
+            return block;
+        }
+
+        // 베스트 11: 포지션마다 평균 평점이 높은 순 (출전이 경기 수의 절반 이상). 공격수 3 · 미드필더 3 · 수비수 4 · 골키퍼 1 (4-3-3)
+        static BestElevenSquadView PickBestEleven(MatchSettings ms, List<Rival> pool, HashSet<Rival> mine, string title)
+        {
+            var v = new BestElevenSquadView { title = title };
+            foreach (var (role, count) in new[] { (SquadRole.FW, 3), (SquadRole.MF, 3), (SquadRole.DF, 4), (SquadRole.GK, 1) })
+            {
+                var list = pool.FindAll(r => ClubSystem.RoleOf(r.position) == role && r.played > 0 && r.apps >= BestElevenMinApps * r.played);
+                list.Sort((a, b) => { int c = b.Avg.CompareTo(a.Avg); if (c != 0) return c; if (mine.Contains(a) != mine.Contains(b)) return mine.Contains(a) ? -1 : 1; return string.CompareOrdinal(a.name, b.name); });
+                for (int i = 0; i < list.Count && i < count; i++)
+                {
+                    var r = list[i]; var t = ms.FindTeam(r.teamId);
+                    v.picks.Add(new BestElevenPick { role = role, name = r.name, teamId = r.teamId, team = t != null ? t.displayName : r.teamId, avg = r.Avg, apps = r.apps, mine = mine.Contains(r) });
+                }
+            }
+            return v;
+        }
+
+        static float SaveRate(Rival r) { return r.saves + r.conceded > 0 ? r.saves / (float)(r.saves + r.conceded) : 0f; }
+
+        // 한 항목의 순위: 상위 5명 + 5위 밖이면 내 줄. qualified가 있으면 조건(출전 수)을 채운 선수만 순위에 들고, 나는 못 채우면 '-'로 맨 아래
+        static LeaderBlockView Ranking(MatchSettings ms, string title, List<Rival> rivals, Rival me, System.Func<Rival, float> value,
+                                       System.Func<Rival, string> text, System.Func<Rival, string> sub, System.Func<Rival, bool> qualified, bool showMe = true)
+        {
+            var all = new List<Rival>();
+            foreach (var r in rivals) if (qualified == null || qualified(r)) all.Add(r);
+            bool meIn = showMe && (qualified == null || qualified(me));
+            if (meIn) all.Add(me);
             all.Sort((a, b) =>
             {
                 int c = value(b).CompareTo(value(a));
@@ -260,11 +369,14 @@ namespace MyFootballCareer
             void Add(int rank, Rival r, bool gap)
             {
                 var t = ms.FindTeam(r.teamId);
-                block.rows.Add(new LeaderRowView { rank = rank, name = r.name, team = t != null ? t.displayName : r.teamId, value = value(r), me = r == me, gap = gap });
+                block.rows.Add(new LeaderRowView { rank = rank, name = r.name, team = t != null ? t.displayName : r.teamId, value = Mathf.RoundToInt(value(r)), role = ClubSystem.RoleOf(r.position),
+                                                   valueText = text(r), sub = sub != null ? sub(r) : "", me = r == me, gap = gap });
             }
-            for (int i = 0; i < all.Count && i < 3; i++) Add(i + 1, all[i], false);
+            for (int i = 0; i < all.Count && i < 5; i++) Add(i + 1, all[i], false);
             int myRank = all.IndexOf(me) + 1;
-            if (myRank > 3) Add(myRank, me, true);
+            if (!showMe) return block;   // 내 포지션이 아닌 항목 (필드 선수의 선방, 골키퍼의 수비)
+            if (!meIn) { Add(0, me, true); block.rows[block.rows.Count - 1].sub = "출전 부족 (" + me.apps + "경기)"; }
+            else if (myRank > 5) Add(myRank, me, true);
             return block;
         }
 

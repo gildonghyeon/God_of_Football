@@ -163,7 +163,7 @@ namespace MyFootballCareer
             Array.Clear(upgradeButtons, 0, upgradeButtons.Length);
             rateButton = null; matchPage = null; careerPage = null;
             trainingText = seasonText = resultText = playLabel = standingsText = historyText = rebirthText = friendlyText = trophyText = leadersText = null;
-            friendlyButton = null;
+            friendlyButton = null; offerNotice = null; offerButton = null; tableTitle = null;
             Array.Clear(facilityButtons, 0, facilityButtons.Length);
             Array.Clear(missionTexts, 0, missionTexts.Length); Array.Clear(missionButtons, 0, missionButtons.Length);
             attendText = attendDetail = attendNote = resetText = bonusText = null; attendButton = bonusButton = null; attendCards = null;

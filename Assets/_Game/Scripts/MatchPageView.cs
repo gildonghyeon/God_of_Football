@@ -43,9 +43,27 @@ namespace MyFootballCareer
 
     public class LeaderRowView
     {
-        public int rank, value;
+        public int rank, value;           // rank 0: 순위 밖(출전 부족)
         public string name, team;
+        public SquadRole role;            // 선수 포지션 (이름 옆에 포지션 색 글자)
+        public string valueText, sub;     // 보여 줄 값(평점·선방률 등 소수·퍼센트), 아래 작은 글(출전 수·경기당)
         public bool me, gap;              // gap: 이 줄 앞에 "…" 표시 (내 순위가 3위 밖)
+    }
+
+    // 시즌이 끝난 뒤 개인 순위 아래 '베스트 11 스쿼드': 공격수 3 · 미드필더 3 · 수비수 4 · 골키퍼 1 (평균 평점 순)
+    public class BestElevenSquadView
+    {
+        public string title;              // 예: "5부 리그 · 시즌 2"
+        public List<BestElevenPick> picks = new List<BestElevenPick>();
+    }
+
+    public class BestElevenPick
+    {
+        public SquadRole role;
+        public string name, team, teamId;
+        public float avg;
+        public int apps;
+        public bool mine;                 // 내 선수(선수 키우기) 또는 우리 팀 선수(나만의 팀)
     }
 
     public class LeaderBlockView
@@ -189,40 +207,80 @@ namespace MyFootballCareer
         }
 
         // ---------- 개인 순위 ----------
-        public void SetLeaders(string header, List<LeaderBlockView> blocks, string footer)
+        // 항목 버튼(득점·도움·공격포인트·평점·수비 / 골키퍼는 선방·클린시트·선방률·평점)으로 한 항목씩, 아래에 베스트 11 카드
+        string lHeader; List<LeaderBlockView> lBlocks; BestElevenSquadView lBest;
+        public System.Action<BestElevenSquadView> OnBestEleven;   // '베스트 11 스쿼드' 버튼
+        static readonly Dictionary<string, int> leaderTabs = new Dictionary<string, int>();   // 고른 항목 (화면을 다시 그려도 유지, 모드마다 따로)
+        public string LeaderKey = "career";
+        int leaderTab { get { return leaderTabs.TryGetValue(LeaderKey, out var t) ? t : 0; } set { leaderTabs[LeaderKey] = value; } }
+        static readonly Color TabOn = new Color(.55f, .42f, .10f, 1f), TabOff = new Color(.14f, .18f, .27f, 1f);
+
+        public void SetLeaders(string header, List<LeaderBlockView> blocks, BestElevenSquadView best)
+        {
+            lHeader = header; lBlocks = blocks; lBest = best;
+            RenderLeaders();
+        }
+
+        void RenderLeaders()
         {
             if (leadersRoot == null) return;
             Clear(leadersRoot);
-            var head = Text(NewRect("Head", leadersRoot), header, 18, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
+            var head = Text(NewRect("Head", leadersRoot), lHeader, 18, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
             Height(head.rectTransform.parent as RectTransform, 28);
-            if (blocks == null) return;
-            foreach (var b in blocks)
+            if (lBlocks == null || lBlocks.Count == 0) return;
+            leaderTab = Mathf.Clamp(leaderTab, 0, lBlocks.Count - 1);
+
+            // 항목 버튼
+            var tabs = NewRect("Tabs", leadersRoot); Height(tabs, 44);
+            var h = tabs.gameObject.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 4; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+            for (int i = 0; i < lBlocks.Count; i++)
             {
-                var title = Text(NewRect("Title", leadersRoot), b.title, 20, PixelTheme.Accent, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
-                Height(title.rectTransform.parent as RectTransform, 30);
-                for (int i = 0; i < b.rows.Count; i++)
+                int index = i; bool on = i == leaderTab;
+                var tab = NewRect("Tab", tabs);
+                var img = tab.gameObject.AddComponent<Image>(); img.color = on ? TabOn : TabOff;
+                var button = tab.gameObject.AddComponent<Button>(); button.targetGraphic = img;
+                button.onClick.AddListener(() => { if (leaderTab == index) return; SoundFx.Play(Sfx.Click); leaderTab = index; RenderLeaders(); });
+                Fit(Text(tab, lBlocks[i].title, 17, on ? Color.white : PixelTheme.TextDim, .02f, 0f, .98f, 1f, TextAnchor.MiddleCenter), 11);
+            }
+
+            // 고른 항목의 순위 (상위 5명 + 내 순위)
+            var b = lBlocks[leaderTab];
+            if (b.rows.Count == 0)
+            {
+                var none = Text(NewRect("None", leadersRoot), "아직 기록이 없습니다.", 17, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                Height(none.rectTransform.parent as RectTransform, 40);
+            }
+            for (int i = 0; i < b.rows.Count; i++)
+            {
+                var r = b.rows[i];
+                if (r.gap)
                 {
-                    var r = b.rows[i];
-                    if (r.gap)
-                    {
-                        var dots = Text(NewRect("Gap", leadersRoot), "...", 16, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
-                        Height(dots.rectTransform.parent as RectTransform, 16);
-                    }
-                    var row = NewRect("Leader", leadersRoot);
-                    row.gameObject.AddComponent<Image>().color = r.me ? MeRow : (i % 2 == 0 ? RowA : RowB);
-                    Height(row, 34);
-                    Text(row, r.rank + "", 19, r.rank == 1 ? PixelTheme.Accent : PixelTheme.Text, .01f, 0f, .09f, 1f, TextAnchor.MiddleCenter);
-                    Text(row, r.name + (r.me ? "  ★" : ""), 19, r.me ? Color.white : PixelTheme.Text, .1f, 0f, .52f, 1f, TextAnchor.MiddleLeft);
-                    Text(row, r.team, 16, PixelTheme.TextDim, .52f, 0f, .86f, 1f, TextAnchor.MiddleLeft);
-                    Text(row, r.value.ToString(), 21, r.me ? PixelTheme.Accent : PixelTheme.Text, .86f, 0f, .98f, 1f, TextAnchor.MiddleRight);
+                    var dots = Text(NewRect("Gap", leadersRoot), "...", 16, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                    Height(dots.rectTransform.parent as RectTransform, 16);
                 }
+                var row = NewRect("Leader", leadersRoot);
+                row.gameObject.AddComponent<Image>().color = r.me ? MeRow : (i % 2 == 0 ? RowA : RowB);
+                Height(row, 50);
+                Text(row, r.rank > 0 ? r.rank.ToString() : "-", 20, r.rank == 1 ? PixelTheme.Accent : PixelTheme.Text, .01f, 0f, .09f, 1f, TextAnchor.MiddleCenter);
+                Fit(Text(row, "<color=#" + ColorUtility.ToHtmlStringRGB(SquadDialog.RoleColor(r.role)) + ">" + r.role + "</color>  " + r.name + (r.me ? "  ★" : ""), 19, r.me ? Color.white : PixelTheme.Text, .1f, .46f, .62f, 1f, TextAnchor.MiddleLeft), 12);   // 이름 앞 포지션 (포지션 색)
+                Fit(Text(row, r.team, 14, PixelTheme.TextDim, .1f, 0f, .62f, .5f, TextAnchor.MiddleLeft), 10);
+                Text(row, string.IsNullOrEmpty(r.valueText) ? r.value.ToString() : r.valueText, 22, r.me ? PixelTheme.Accent : PixelTheme.Text, .6f, .42f, .98f, 1f, TextAnchor.MiddleRight);
+                Fit(Text(row, r.sub, 13, PixelTheme.TextDim, .5f, 0f, .98f, .46f, TextAnchor.MiddleRight), 10);
             }
-            if (!string.IsNullOrEmpty(footer))
-            {
-                var f = Text(NewRect("Footer", leadersRoot), footer, 18, PixelTheme.Text, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
-                f.horizontalOverflow = HorizontalWrapMode.Wrap;
-                Height(f.rectTransform.parent as RectTransform, 52);
-            }
+
+            // 시즌이 끝나면: 베스트 11 스쿼드 버튼 (포메이션 그림 창)
+            if (lBest == null) return;
+            Height(NewRect("Space", leadersRoot), 8);
+            var edge = NewRect("BestElevenButton", leadersRoot);
+            edge.gameObject.AddComponent<Image>().color = PixelTheme.RebirthEdge;
+            Height(edge, 64);
+            var fill = NewRect("Fill", edge); fill.anchorMin = Vector2.zero; fill.anchorMax = Vector2.one; fill.offsetMin = new Vector2(3, 3); fill.offsetMax = new Vector2(-3, -3);
+            var fi = fill.gameObject.AddComponent<Image>(); fi.color = PixelTheme.RebirthFill;
+            var bb = edge.gameObject.AddComponent<Button>(); bb.targetGraphic = fi;
+            var best = lBest;
+            bb.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); if (OnBestEleven != null) OnBestEleven(best); });
+            Text(fill, "베스트 11 스쿼드", 24, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
         }
 
         // ---------- 공통 ----------

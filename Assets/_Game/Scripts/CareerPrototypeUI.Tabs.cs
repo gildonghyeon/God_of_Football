@@ -69,6 +69,32 @@ namespace MyFootballCareer
             if (playLabel == null) return;
             if (historyText != null) SetLines(historyText, history, 2);
             playLabel.text = seasonComplete ? "다음 시즌 시작" : "다음 경기";
+            tSeasonComplete = seasonComplete;
+            UpdateOfferNotice();
+        }
+
+        // ---------- 이적 제안 알림 (경기 탭, 다음 시즌 시작 버튼 아래) ----------
+        Text offerNotice; GameObject offerButton; bool tSeasonComplete;
+
+        void UpdateOfferNotice()
+        {
+            if (offerNotice == null || offerButton == null) return;
+            int n = tOffers != null ? tOffers.Count : 0;
+            bool show = tSeasonComplete && n > 0 && !tDecided;   // 아직 고르지 않은 제안이 있을 때만
+            offerNotice.gameObject.SetActive(show); offerButton.SetActive(show);
+            if (show) offerNotice.text = "이적 제안이 " + n + "건 들어왔습니다!";
+        }
+
+        // 커리어 탭으로 가서 이적 제안이 보이는 곳까지 내림
+        void OpenTransferOffers()
+        {
+            SoundFx.Play(Sfx.Click);
+            SetPage(3);
+            if (transferRoot == null) return;
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+            float top = content.InverseTransformPoint(transferRoot.position).y + transferRoot.rect.height * (1f - transferRoot.pivot.y);
+            content.anchoredPosition = new Vector2(0f, Mathf.Max(0f, -top - 12f));
         }
 
         // 경기 탭: 다음 경기 카드, 지난 경기 카드, 순위표
@@ -78,9 +104,12 @@ namespace MyFootballCareer
             matchPage.SetNext(next); matchPage.SetResult(last); matchPage.SetTable(table);
         }
 
-        public void SetLeaderBoard(string header, List<LeaderBlockView> blocks, string footer)
+        Text tableTitle;
+        public void SetTableTitle(string division) { if (tableTitle != null) tableTitle.text = string.IsNullOrEmpty(division) ? "순위표" : "순위표 · " + division; }
+
+        public void SetLeaderBoard(string header, List<LeaderBlockView> blocks, BestElevenSquadView best)
         {
-            if (matchPage != null) matchPage.SetLeaders(header, blocks, footer);
+            if (matchPage != null) matchPage.SetLeaders(header, blocks, best);
         }
 
         // 커리어 탭의 '소속 팀' 카드와 '이적 제안' 카드들. 제안 카드의 숫자 아래에는 지금 팀과의 차이(▲▼)를 보여 줍니다.
@@ -95,6 +124,7 @@ namespace MyFootballCareer
         {
             tOffers = offers; tPending = pendingTeamId; tTeamName = currentTeamName; tSummary = summary; tDecided = decided;
             RenderTransfer();
+            UpdateOfferNotice();
         }
 
         // 지금 팀 정보 (능력치가 오르면 선발 확률이 바뀌므로 자주 불림). 바뀌었을 때만 다시 그립니다.

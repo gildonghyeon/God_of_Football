@@ -62,7 +62,23 @@ namespace MyFootballCareer
             ui.OnRestoreBackup = RestoreBackup;
             ui.OnStartNew = StartNewGame;
             ui.OnResetSave = ResetSave; ui.OnResetClub = ResetClub;
-            ui.OnApplyLook = ChangeLook;
+            ui.OnApplyLook = ChangeLook; ui.OnChangeNumber = ChangeNumber; ui.OnBestElevenPlayer = BestElevenPlayer;
+            ui.TeammateNumbers = () =>   // 소속팀 동료들이 쓰는 번호 (번호 → 성)
+            {
+                var map = new Dictionary<int, string>();
+                if (current == null) return map;
+                SquadSystem.Ensure(current, matchSettings);
+                var squad = SquadSystem.Find(current, current.teamId);
+                if (squad != null)
+                    foreach (var p in squad.players)
+                    {
+                        if (p.number < 1 || map.ContainsKey(p.number)) continue;
+                        string nm = p.name; int dot = nm.IndexOf(". "); if (dot >= 0) nm = nm.Substring(dot + 2);
+                        map[p.number] = nm;
+                    }
+                return map;
+            };
+            ui.TeamKitIndex = () => current != null ? TeamKits.Home(current.teamId) : 0;
             TeamIdentity.ApplyTo(matchSettings);                         // 팀 이름은 팀 표의 이름으로
             ui.CreationKit = TeamKits.Home(matchSettings.startTeamId);   // 새 선수 미리보기는 시작 팀 유니폼
             ui.OnBuyEffortRate = BuyEffortRate;
@@ -73,7 +89,7 @@ namespace MyFootballCareer
             ui.OnShowLegend = ShowLegend;
             ui.OnRetire = Retire; ui.OnCancelCreation = CancelRetire; ui.OnFoundClub = FoundClub;
             ui.OnPickCareer = PickCareer; ui.OnPickClub = PickClub; ui.OnExitToMenu = ExitToMenu;
-            ui.OnClubTeam = OpenClubTeam; ui.OnClubTeamBack = ShowClubScreen; ui.OnClubTap = ClubTap; ui.OnClubPlayerInfo = ClubPlayerInfo; ui.OnClubCompare = ClubCompare; ui.OnClubSwap = ClubSwap; ui.OnClubClearSelection = ClubClearSelection; ui.OnClubFormation = ClubFormation; ui.OnClubStyle = ClubStyle;
+            ui.OnClubTeam = OpenClubTeam; ui.OnClubTeamBack = ShowClubScreen; ui.OnClubTap = ClubTap; ui.OnClubPlayerInfo = ClubPlayerInfo; ui.OnClubCompare = ClubCompare; ui.OnClubSwap = ClubSwap; ui.OnClubClearSelection = ClubClearSelection; ui.OnClubFormation = ClubFormation; ui.OnClubStyle = ClubStyle; ui.OnClubNumber = ClubNumber;
             ui.OnOpenClub = OpenClubMode; ui.OnClubPlay = ClubPlay; ui.OnClubSquad = ClubSquad; ui.OnClubSign = ClubSign; ui.OnClubBack = ClubBack;
             baseTeams = matchSettings.teams != null ? (TeamDefinition[])matchSettings.teams.Clone() : new TeamDefinition[0];
             clubMs = Instantiate(matchSettings);
@@ -207,8 +223,9 @@ namespace MyFootballCareer
             bool awarded = AwardSystem.EnsureAwards(current, matchSettings, settings);   // 시상을 이적 제안보다 먼저
             if (SeasonSystem.EnsureOffers(current, matchSettings, settings) || awarded) saves.TrySave(current, out _);
             ui.SetTrophies(AwardSystem.DescribeTrophyRoom(current));
-            var leaders = AwardSystem.LeadersView(current, matchSettings, settings, out string leadersHeader, out string leadersFooter);
-            ui.SetLeaderBoard(leadersHeader, leaders, leadersFooter);
+            var leaders = AwardSystem.LeadersView(current, matchSettings, settings, out string leadersHeader, out BestElevenSquadView leadersBest);
+            ui.SetLeaderBoard(leadersHeader, leaders, leadersBest);
+            ui.SetTableTitle(current.season != null ? matchSettings.DivisionName(current.season.division) : null);
             ui.SetMatchPage(SeasonSystem.NextView(current, matchSettings, settings), SeasonSystem.LastView(current, matchSettings),
                             SeasonSystem.TableView(current, matchSettings));
             ui.SetSeason(SeasonSystem.IsComplete(current), SeasonSystem.DescribeHistory(current));
@@ -218,6 +235,19 @@ namespace MyFootballCareer
             RefreshMoneyUI();
             RefreshRebirthUI();
             RefreshFriendlyUI();
+        }
+
+        // 등번호 바꾸기: 소속팀 동료가 그 번호를 쓰고 있으면 동료가 다른 번호로 바뀜
+        void ChangeNumber(int number)
+        {
+            if (blocked || current == null) return;
+            number = Mathf.Clamp(number, 1, 99);
+            if (number == current.player.number) return;
+            current.player.number = number;
+            SquadSystem.Ensure(current, matchSettings);   // 겹치는 동료 번호 정리
+            saves.TrySave(current, out string message);
+            ui.SetNumber(number);
+            ui.SetStatus("등번호를 " + number + "번으로 바꿨습니다. " + message);
         }
 
         void ChangeLook(int hair, int skin, int kit, int boots)

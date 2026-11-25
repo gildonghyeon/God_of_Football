@@ -40,6 +40,7 @@ namespace MyFootballCareer
         public Action OnClubCompare, OnClubSwap, OnClubClearSelection;   // 선택 막대: 두 명 골랐을 때 비교·교체, 취소
         public Action<Formation> OnClubFormation;
         public Action<TacticStyle> OnClubStyle;
+        public Action<int, int> OnClubNumber;                // 등번호 변경 (선수 id, 새 번호). 다른 선수가 쓰던 번호면 서로 맞바꿈
 
         static readonly Color PitchGreen = new Color(.14f, .42f, .22f, 1f), PitchLine = new Color(1f, 1f, 1f, .35f);
         static readonly Color SelectFill = new Color(.55f, .42f, .10f, 1f), OffFill = new Color(.45f, .16f, .16f, 1f);
@@ -110,8 +111,11 @@ namespace MyFootballCareer
             var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 10; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
             int id = sel.id;
-            if (sel2 == null)   // 한 명: 세부 능력치
+            if (sel2 == null)   // 한 명: 세부 능력치 · 등번호 변경
+            {
                 PixelButton("세부 능력치", () => { if (OnClubPlayerInfo != null) OnClubPlayerInfo(id); }, row, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
+                PixelButton("등번호 변경", () => ShowClubNumberPicker(v, sel), row, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
+            }
             else                // 두 명: 비교·교체
             {
                 PixelButton("비교", () => { if (OnClubCompare != null) OnClubCompare(); }, row, 0f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
@@ -190,6 +194,17 @@ namespace MyFootballCareer
             foreach (var p in v.starters) if (p.id == id) return p;
             foreach (var p in v.bench) if (p.id == id) return p;
             return null;
+        }
+
+        // 고른 선수의 등번호 변경: 같은 번호를 쓰는 팀 동료가 있으면 서로 번호를 맞바꿈
+        void ShowClubNumberPicker(ClubTeamView v, ClubPlayerView p)
+        {
+            var taken = new Dictionary<int, string>();
+            foreach (var list in new[] { v.starters, v.bench })
+                foreach (var o in list)
+                    if (o.id != p.id && o.number >= 1 && !taken.ContainsKey(o.number)) taken[o.number] = o.name;
+            int id = p.id;
+            ShowNumberPicker(p.number, taken, TeamKits.Home(ClubSystem.ClubId), "이 번호로 변경", n => { if (OnClubNumber != null) OnClubNumber(id, n); }, " 선수와 번호를 맞바꿉니다");
         }
 
         // ---------- 포메이션 · 전술 고르기 창 ----------
