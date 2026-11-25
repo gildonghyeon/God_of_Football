@@ -1,0 +1,260 @@
+using System.Collections.Generic;
+using UnityEngine;
+namespace MyFootballCareer
+{
+    // 게임 흐름: 나만의 팀 창단과 나만의 팀 모드
+    public partial class CareerBootstrap
+    {
+        // ---------- 나만의 팀 ----------
+        void FoundClub(string name, int kit, Formation formation, TacticStyle style)
+        {
+            if (blocked || current == null) return;
+            if (club != null || !ClubSystem.CanFound(current)) { ui.SetStatus("은퇴 선수 " + ClubSystem.FoundLegends + "명이 있어야 창단할 수 있습니다."); return; }
+            if (name.Length > 24) name = name.Substring(0, 24);
+            club = ClubSystem.Found(current, clubMs, baseTeams, name, kit, formation, style);
+            if (!clubSaves.TrySave(club, out string message)) { club = null; current.hasClub = false; ui.SetStatus(message); return; }
+            saves.TrySave(current, out _);
+            var team = clubMs.FindTeam(ClubSystem.ClubId);
+            int kitIndex = TeamKits.Home(ClubSystem.ClubId), legends = club.legends.Count;
+            string tactic = TacticSystem.FormationName(formation) + " · " + TacticSystem.StyleName(style);
+            string division = clubMs.DivisionName(club.season.division);
+            SoundFx.Play(Sfx.Buy);
+            OpenClubMode();
+            ui.ShowCards("창단 완료", (body, font) => PopupCards.ClubFounded(body, font, name, kitIndex, tactic, legends, team != null ? team.strength : 0f, division, false));
+        }
+
+        void LoadClub()
+        {
+            club = null;
+            if (!clubSaves.TryLoad(out var loaded, out _) || loaded == null || !loaded.teamMode) return;
+            club = loaded;
+            ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+            SeasonSystem.Prepare(club, clubMs);
+        }
+
+        // 저장 초기화: 나만의 팀 저장도 옆으로 옮겨 둠
+        void ArchiveClub()
+        {
+            if (club != null) clubSaves.TrySave(club, out _);
+            clubSaves.ArchiveSave(out _);
+            club = null; inClub = false;
+        }
+
+        // ---------- 나만의 팀 모드 ----------
+        void OpenClubMode()
+        {
+            if (blocked || current == null || club == null) return;
+            inClub = true; inMenu = false;
+            ui.ResetClubTab();
+            ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+            SeasonSystem.Prepare(club, clubMs);
+            ShowClubScreen();
+        }
+
+        void ShowClubScreen()
+        {
+            var team = clubMs.FindTeam(ClubSystem.ClubId);
+            var s = club.season;
+            var v = new ClubModeView
+            {
+                name = club.myClub.name, kit = TeamKits.Home(ClubSystem.ClubId), season = s.seasonNumber, legends = club.legends.Count,
+                tactic = TacticSystem.FormationName(club.myClub.formation) + " · " + TacticSystem.StyleName(club.myClub.style),
+                division = clubMs.DivisionName(s.division), strength = team != null ? team.strength : 0f,
+                complete = SeasonSystem.IsComplete(club), round = s.nextMatchIndex, rounds = s.matches.Count,
+                table = SeasonSystem.TableView(club, clubMs)
+            };
+            foreach (var m in s.matches)
+            {
+                if (!m.played) continue;
+                v.gf += m.goalsFor; v.ga += m.goalsAgainst;
+                if (m.goalsFor > m.goalsAgainst) v.w++; else if (m.goalsFor == m.goalsAgainst) v.d++; else v.l++;
+            }
+            for (int i = s.nextMatchIndex - 1; i >= 0 && v.recent.Count < 3; i--)
+            {
+                var m = s.matches[i];
+                v.recent.Add((m.goalsFor > m.goalsAgainst ? "승 " : m.goalsFor == m.goalsAgainst ? "무 " : "패 ") + m.goalsFor + "-" + m.goalsAgainst + " " + m.opponentName);
+            }
+            if (!v.complete)
+            {
+                var next = s.matches[s.nextMatchIndex];
+                v.nextText = next.round + "라운드 · " + (next.home ? "홈" : "원정") + " · " + next.opponentName;
+                v.nextOpponentId = next.opponentId;
+            }
+            v.free = ClubSystem.FreeAgents(current, club);
+            ClubSystem.EnsureClubSquad(club);
+            v.squadCount = ClubSystem.Squad(club).players.Count;
+            ui.ShowClubMode(v);
+        }
+
+        void ClubPlay()
+        {
+            if (club == null || ui.IsMatchPlaying) return;
+            if (SeasonSystem.IsComplete(club))
+            {
+                SeasonSystem.StartNextSeason(club, clubMs, settings, out var info);
+                clubSaves.TrySave(club, out _);
+                ShowClubScreen();
+                ui.ShowCards("새 시즌", (body, font) => PopupCards.NewSeason(body, font, info));
+                return;
+            }
+            var record = SeasonSystem.PlayNext(club, clubMs, settings);
+            if (record == null) { ui.SetStatus("경기를 할 수 없습니다."); return; }
+            clubSaves.TrySave(club, out _);
+            var own = clubMs.FindTeam(ClubSystem.ClubId);
+            ui.ReplayOwnTactic = TacticSystem.Of(own); ui.ReplayOppTactic = TacticSystem.Of(clubMs.FindTeam(record.opponentId));
+            ui.ReplayOwnKit = TeamKits.Home(ClubSystem.ClubId); ui.ReplayOppKit = TeamKits.Opponent(ClubSystem.ClubId, record.opponentId);
+            ui.ReplayYouKit = 0; ui.ReplayTeamMode = true;
+            ui.ShowMatchReplay(record, club.player, club.myClub.name, () =>
+            {
+                ShowClubScreen();
+                System.Action after = null;
+                if (SeasonSystem.IsComplete(club)) after = ShowClubSeasonEnd;
+                ui.ShowMatchResult("경기 결과", SeasonSystem.ResultData(record, club, clubMs, null), after);
+            });
+        }
+
+        void ShowClubSeasonEnd()
+        {
+            SeasonSystem.EnsureSeasonEnd(club, clubMs);
+            clubSaves.TrySave(club, out _);
+            var sum = SeasonSystem.Summarize(club, clubMs);
+            int teams = club.season.teamIds.Count, div = club.season.division, next = club.season.nextDivision;
+            int move = next > 0 && div > 0 ? (next < div ? 1 : next > div ? -1 : 0) : 0;
+            string name = club.myClub.name, division = clubMs.DivisionName(div);
+            ShowClubScreen();
+            ui.ShowCards("시즌 종료", (body, font) => ClubModeScreen.SeasonEnd(body, font, name, sum.finalPosition, teams, division, move, sum.wins, sum.draws, sum.losses, sum.goalsFor, sum.goalsAgainst));
+        }
+
+        void ClubSquad()
+        {
+            if (club == null) return;
+            int div = SeasonSystem.DivisionOf(club, clubMs, ClubSystem.ClubId);
+            ui.ShowSquad(club.myClub.name, SquadSystem.View(club, clubMs, settings, ClubSystem.ClubId, div, null));
+        }
+
+        // 영입: 선수단(19명)이 꽉 찼으면 먼저 내보낼 선수를 고르는 창 → 확인 → 영입
+        void ClubSign(int careerNumber)
+        {
+            if (club == null || current == null) return;
+            var lg = current.legends.Find(x => x.careerNumber == careerNumber);
+            if (lg == null) return;
+            ClubSystem.EnsureClubSquad(club);
+            var squad = ClubSystem.Squad(club);
+            if (squad.players.Count < ClubSystem.SquadSize) { DoClubSign(careerNumber, int.MinValue); return; }
+            var starters = new HashSet<int>(club.myClub.lineup);
+            var rows = new List<ClubPlayerView>();
+            foreach (var p in squad.players) rows.Add(PlayerView(p, null, 0));
+            rows.Sort((a, b) => starters.Contains(a.id) != starters.Contains(b.id) ? (starters.Contains(a.id) ? -1 : 1)
+                             : a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
+            ui.ShowReleasePicker(lg.name, rows, starters, releaseId =>
+            {
+                var gone = squad.players.Find(p => p.id == releaseId);
+                if (gone == null) return;
+                string body = gone.name + "을(를) 방출하고 " + lg.name + "을(를) 영입합니다.\n"
+                    + (ClubSystem.IsLegend(gone) ? "방출한 은퇴 선수는 다시 무료 영입 목록으로 돌아갑니다." : "방출한 선수는 팀을 떠나 돌아오지 않습니다.");
+                ui.ShowConfirm("방출하고 영입할까요?", body, 130f, "영입하기", () => DoClubSign(careerNumber, releaseId));
+            });
+        }
+
+        void DoClubSign(int careerNumber, int releaseId)
+        {
+            var lg = current.legends.Find(x => x.careerNumber == careerNumber);
+            if (lg == null) return;
+            float before = clubMs.FindTeam(ClubSystem.ClubId).strength;
+            if (!ClubSystem.Sign(current, club, clubMs, baseTeams, careerNumber, releaseId)) return;
+            clubSaves.TrySave(club, out _);
+            float after = clubMs.FindTeam(ClubSystem.ClubId).strength;
+            string name = club.myClub.name;
+            SoundFx.Play(Sfx.Buy);
+            ShowClubScreen();
+            ui.ShowCards("무료 영입", (body, font) => ClubModeScreen.Signed(body, font, lg, name, before, after));
+        }
+
+        // ---------- 팀 관리 (포메이션·전술·주전/교체) ----------
+        int clubSelected = int.MinValue;
+
+        void OpenClubTeam()
+        {
+            if (club == null) return;
+            clubSelected = int.MinValue;
+            ShowClubTeam();
+        }
+
+        static ClubPlayerView PlayerView(SquadPlayer p, SlotDef[] layout, int slot)
+        {
+            var v = new ClubPlayerView { id = p.id, name = p.name, role = p.role, slotRole = p.role, rating = p.rating, effective = p.rating, legend = ClubSystem.IsLegend(p) };
+            if (layout != null)
+            {
+                var s = layout[slot];
+                v.slotRole = s.role; v.kind = s.kind; v.x = s.x; v.depth = s.depth;
+                v.effective = ClubSystem.Effective(p, s.role);
+            }
+            return v;
+        }
+
+        void ShowClubTeam()
+        {
+            ClubSystem.EnsureClubSquad(club);
+            var layout = TacticSystem.Layout(club.myClub.formation);
+            var xi = ClubSystem.Lineup(club);
+            var team = clubMs.FindTeam(ClubSystem.ClubId);
+            var v = new ClubTeamView
+            {
+                name = club.myClub.name, formation = club.myClub.formation, style = club.myClub.style, selected = clubSelected,
+                strength = team != null ? team.strength : 0f, level = ClubSystem.TeamLevel(club)
+            };
+            for (int i = 0; i < xi.Length; i++) if (xi[i] != null) v.starters.Add(PlayerView(xi[i], layout, i));
+            var starters = new HashSet<int>(club.myClub.lineup);
+            foreach (var p in ClubSystem.Squad(club).players) if (!starters.Contains(p.id)) v.bench.Add(PlayerView(p, null, 0));
+            v.bench.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
+            ui.ShowClubTeam(v);
+        }
+
+        // 선수 누르기: 처음 누르면 고르고, 다른 선수를 누르면 둘의 자리를 바꿈 (주전↔주전, 주전↔교체)
+        void ClubTap(int id)
+        {
+            if (club == null) return;
+            if (clubSelected == int.MinValue) clubSelected = id;
+            else if (clubSelected == id) clubSelected = int.MinValue;
+            else
+            {
+                if (!ClubSystem.Swap(club, clubSelected, id)) { clubSelected = id; ShowClubTeam(); return; }   // 교체끼리는 바꿀 게 없음: 새로 고름
+                clubSelected = int.MinValue;
+                ApplyClubChange();
+            }
+            ShowClubTeam();
+        }
+
+        void ClubFormation(Formation f)
+        {
+            if (club == null) return;
+            ClubSystem.SetFormation(club, f);
+            clubSelected = int.MinValue;
+            ApplyClubChange();
+            ShowClubTeam();
+        }
+
+        void ClubStyle(TacticStyle s)
+        {
+            if (club == null) return;
+            club.myClub.style = s;
+            ApplyClubChange();
+            ShowClubTeam();
+        }
+
+        // 바뀐 라인업·전술을 팀 전력과 경기 전술에 반영하고 저장
+        void ApplyClubChange()
+        {
+            ClubSystem.ApplyRoster(club, clubMs, baseTeams);
+            current.myClub = club.myClub;
+            clubSaves.TrySave(club, out _);
+        }
+
+        void ClubBack()
+        {
+            inClub = false;
+            ui.ReplayTeamMode = false;
+            ShowModeSelect();
+        }
+    }
+}

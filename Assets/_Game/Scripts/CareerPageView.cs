@@ -139,7 +139,8 @@ namespace MyFootballCareer
             Label(head, "순위", 14, PixelTheme.TextDim, .11f, 0f, .27f, 1f, TextAnchor.MiddleCenter);
             Label(head, "팀", 14, PixelTheme.TextDim, .28f, 0f, .52f, 1f, TextAnchor.MiddleLeft);
             Label(head, "승 · 무 · 패", 14, PixelTheme.TextDim, .52f, 0f, .73f, 1f, TextAnchor.MiddleCenter);
-            Label(head, "골 · 도움", 14, PixelTheme.TextDim, .73f, 0f, .88f, 1f, TextAnchor.MiddleCenter);
+            bool keeper = d.history.Count > 0 && d.history[0].keeper;
+            Label(head, keeper ? "선방률·CS" : "골 · 도움", 14, PixelTheme.TextDim, .73f, 0f, .88f, 1f, TextAnchor.MiddleCenter);
             Label(head, "평점", 14, PixelTheme.TextDim, .88f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
             for (int i = 0; i < d.history.Count; i++)
             {
@@ -151,7 +152,7 @@ namespace MyFootballCareer
                 Fit(Label(r, pos, 17, champ ? PixelTheme.Accent : PixelTheme.Text, .11f, 0f, .27f, 1f, TextAnchor.MiddleCenter), 11);
                 Fit(Label(r, h.teamName, 16, PixelTheme.TextDim, .28f, 0f, .52f, 1f, TextAnchor.MiddleLeft), 10);
                 Fit(Label(r, h.wins + " · " + h.draws + " · " + h.losses, 17, PixelTheme.Text, .52f, 0f, .73f, 1f, TextAnchor.MiddleCenter), 11);
-                Label(r, h.playerGoals + " · " + h.playerAssists, 17, h.playerGoals + h.playerAssists > 0 ? PixelTheme.Accent : PixelTheme.Text, .73f, 0f, .88f, 1f, TextAnchor.MiddleCenter);
+                Label(r, h.keeper ? PopupCards.KeeperLine(h) : h.playerGoals + " · " + h.playerAssists, 17, (h.keeper ? h.cleanSheets : h.playerGoals + h.playerAssists) > 0 ? PixelTheme.Accent : PixelTheme.Text, .73f, 0f, .88f, 1f, TextAnchor.MiddleCenter);
                 Label(r, h.appearances > 0 ? h.averageRating.ToString("0.0") : "-", 17, h.averageRating >= 7f ? GoodText : PixelTheme.Text, .88f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
             }
         }
@@ -219,8 +220,8 @@ namespace MyFootballCareer
                 Label(cap, Mathf.Min(n, d.legendNeed) + " / " + d.legendNeed, 16, n >= d.legendNeed ? GoodText : PixelTheme.Accent, .5f, 0f, 1f, 1f, TextAnchor.MiddleRight);
                 var bar = Box(legendRoot, BarBack, 12);
                 Img(bar, n >= d.legendNeed ? PixelTheme.Bar : PixelTheme.Accent, 0f, 0f, Mathf.Clamp01(d.legendNeed > 0 ? (float)n / d.legendNeed : 1f), 1f);
-                Note(legendRoot, n >= d.legendNeed ? "창단할 수 있습니다! 은퇴 선수로 팀을 만들어 리그에 참가하세요."
-                                                    : "은퇴 선수 " + d.legendNeed + "명을 모으면 나만의 팀을 창단할 수 있습니다.",
+                Note(legendRoot, n >= d.legendNeed ? "창단할 수 있습니다! 맨 처음 화면에서 나만의 팀을 만드세요."
+                                                    : "은퇴 선수 " + d.legendNeed + "명을 모으면 맨 처음 화면에서 나만의 팀을 만들 수 있습니다.",
                      n >= d.legendNeed ? PixelTheme.Accent : PixelTheme.TextDim, 15);
             }
             if (d.legends.Count == 0) { Note(legendRoot, "아직 은퇴한 선수가 없습니다.", PixelTheme.TextDim); return; }
@@ -236,7 +237,7 @@ namespace MyFootballCareer
                 Label(r, Mathf.RoundToInt(lg.rating).ToString(), 24, PixelTheme.Accent, .01f, 0f, .12f, 1f, TextAnchor.MiddleCenter);
                 Fit(Label(r, lg.name, 19, PixelTheme.Text, .13f, .48f, .58f, 1f, TextAnchor.MiddleLeft), 11);
                 Fit(Label(r, Ko.Pos(lg.position) + " · " + Ko.TraitName(lg.trait) + " · 커리어" + lg.careerNumber, 14, PixelTheme.TextDim, .13f, 0f, .58f, .50f, TextAnchor.MiddleLeft), 10);
-                Fit(Label(r, lg.seasons + "시즌 · 골 " + lg.goals + " · 도움 " + lg.assists, 15, PixelTheme.Text, .58f, .48f, .99f, 1f, TextAnchor.MiddleRight), 10);
+                Fit(Label(r, ClubSystem.LegendLine(lg), 15, PixelTheme.Text, .58f, .48f, .99f, 1f, TextAnchor.MiddleRight), 10);
                 Fit(Label(r, (lg.trophies > 0 ? "★ " + lg.trophies + " · " : "") + lg.lastTeam + "  ›", 14, lg.trophies > 0 ? PixelTheme.Accent : PixelTheme.TextDim, .58f, 0f, .99f, .50f, TextAnchor.MiddleRight), 10);
             }
         }

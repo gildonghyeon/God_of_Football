@@ -70,6 +70,7 @@ namespace MyFootballCareer
                 case "pass": return Pass(react);
                 case "dribble": return Dribble(react);
                 case "defend": return Defend(react);
+                case "keeper": return KeeperDive(react);
                 default: return Stamina(react);
             }
         }
@@ -713,6 +714,19 @@ namespace MyFootballCareer
                 K(2.4f, HomeAttackerX, HomeAttackerY, "auto", '*'), K(end, HomeAttackerX, HomeAttackerY, "stand", 'r'),
             };
             return new StageDrill { duration = end, loop = false, player = player.ToArray(), attacker = attacker };
+        }
+
+        // GK 능력: 왼쪽으로 몸을 날려 막고, 일어나 오른쪽으로 한 번 더 날린 뒤 제자리로
+        static StageDrill KeeperDive(string react)
+        {
+            var player = WithReaction(new List<StageKey> {
+                K(0f, SpotX, SpotY, "stand", 'd'), K(0.25f, SpotX, SpotY, "stand", 'd'),
+                K(0.3f, SpotX, SpotY, "dive", 'l'), K(0.75f, SpotX - 34f, SpotY + 2f, "dive", 'l'), K(1.05f, SpotX - 34f, SpotY + 2f, "dive", 'l'),
+                K(1.2f, SpotX - 20f, SpotY, "auto", '*'), K(1.35f, SpotX, SpotY, "stand", 'd'),
+                K(1.4f, SpotX, SpotY, "dive", 'r'), K(1.85f, SpotX + 34f, SpotY + 2f, "dive", 'r'), K(2.15f, SpotX + 34f, SpotY + 2f, "dive", 'r'),
+                K(2.3f, SpotX + 20f, SpotY, "auto", '*'), K(2.45f, SpotX, SpotY, "stand", 'd'),
+            }, 2.5f, react);
+            return new StageDrill { duration = 2.5f + ReactTime + 0.1f, loop = false, player = player.ToArray() };
         }
 
         static StageDrill Stamina(string react)

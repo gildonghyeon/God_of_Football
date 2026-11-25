@@ -17,7 +17,8 @@ namespace MyFootballCareer
 
         static Color RoleColor(SquadRole r) { return r == SquadRole.GK ? GkColor : r == SquadRole.DF ? DfColor : r == SquadRole.MF ? MfColor : FwColor; }
 
-        public static void Build(Transform parent, Font font, SquadView v)
+        // onTap: 선수 줄을 누르면 (세부 능력치 보기)
+        public static void Build(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap = null)
         {
             // 팀 요약 카드: 리그 + 숫자 4개
             var card = Block(parent, 74);
@@ -28,7 +29,7 @@ namespace MyFootballCareer
             Stat(card, font, string.IsNullOrEmpty(v.division) ? "-" : v.division, "리그", true);
             Stat(card, font, v.strength.ToString("0"), "팀 전력", false);
             Stat(card, font, v.required.ToString("0"), "요구 평점", false);
-            Stat(card, font, v.starterAvg.ToString("0"), "주전 평균", false);
+            Stat(card, font, v.starterAvg.ToString("0"), "1군 평균", false);
             Stat(card, font, v.avgAge.ToString("0.0"), "평균 나이", false);
 
             // 유니폼: 홈·원정 두 벌
@@ -49,19 +50,20 @@ namespace MyFootballCareer
             {
                 var t = Block(parent, 30);
                 Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .99f, 1f, TextAnchor.MiddleLeft);
-                if (v.layout != null) Pitch(parent, font, v);
+                if (v.layout != null) Pitch(parent, font, v, onTap);
             }
-            Header(parent, font, "주전  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);
-            for (int i = 0; i < v.starters.Count; i++) Row(parent, font, v.starters[i], i, true);
+            Header(parent, font, "1군  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);
+            Grid(parent, font, v.starters, true, onTap);
             Header(parent, font, "교체", false);
-            for (int i = 0; i < v.subs.Count; i++) Row(parent, font, v.subs[i], i, false);
+            Grid(parent, font, v.subs, false, onTap);
+            if (onTap != null) { var hint = Block(parent, 28); Label(hint, font, "포메이션 그림이나 목록에서 선수를 누르면 세부 능력치를 볼 수 있습니다", 15, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter); }
         }
 
         // 포메이션 그림: 잔디 위에 11자리 점과 이름 (아래가 우리 골대, 위로 공격)
         // 실제 경기장 비율에 가깝게, 가운데에 세로로 긴 판으로 그립니다. (우리 골대부터 상대 진영 일부까지)
         const float PitchW = 420f, PitchH = 440f;
         static float PitchY(float depth) { return .035f + depth * 1.25f; }   // 깊이(0=우리 골라인) -> 판 높이 비율
-        static void Pitch(Transform parent, Font font, SquadView v)
+        static void Pitch(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap)
         {
             var block = Block(parent, PitchH + 8f);
             var box = NewRect("Pitch", block);
@@ -81,10 +83,24 @@ namespace MyFootballCareer
                 var s = v.layout[i]; var r = v.starters[i];
                 float x = s.x / 68f, y = Mathf.Clamp(PitchY(s.depth), .08f, .93f);
                 var dot = Point(box, r.me ? PixelTheme.Accent : RoleColor(s.role), x, y, 34f, 34f);
-                Label(dot.rectTransform, font, s.kind.ToString(), 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
+                Label(dot.rectTransform, font, s.role.ToString(), 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
                 string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
                 var name = Point(box, new Color(0f, 0f, 0f, .35f), x, y - 34f / PitchH, 92f, 22f);
                 Fit(Label(name.rectTransform, font, r.me ? "나" : surname, 15, r.me ? PixelTheme.Accent : Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
+                if (onTap != null)   // 점과 이름을 누르면 그 선수의 세부 능력치
+                {
+                    // 평소에는 보이지 않다가, 손을 대면 밝은 칸이 떠서 눌리는 느낌을 줌 (ColorTint: 흰색 × 상태 색)
+                    var hit = Point(box, Color.white, x, y - 14f / PitchH, 100f, 66f);
+                    hit.raycastTarget = true;
+                    var button = hit.gameObject.AddComponent<Button>();
+                    button.targetGraphic = hit;
+                    var colors = button.colors;
+                    colors.normalColor = new Color(1f, 1f, 1f, 0f); colors.selectedColor = new Color(1f, 1f, 1f, 0f);
+                    colors.highlightedColor = new Color(1f, 1f, 1f, .12f); colors.pressedColor = new Color(1f, 1f, 1f, .35f);
+                    colors.fadeDuration = .06f;
+                    button.colors = colors;
+                    var row = r; button.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); onTap(row); });
+                }
             }
         }
 
@@ -124,34 +140,48 @@ namespace MyFootballCareer
         static void Header(Transform parent, Font font, string title, bool withColumns)
         {
             var row = Block(parent, 30);
-            Label(row, font, title, 20, PixelTheme.Accent, .01f, 0f, .5f, 1f, TextAnchor.MiddleLeft);
-            Label(row, font, "나이", 14, PixelTheme.TextDim, .52f, 0f, .62f, 1f, TextAnchor.MiddleCenter);
-            Label(row, font, "능력", 14, PixelTheme.TextDim, .62f, 0f, .78f, 1f, TextAnchor.MiddleCenter);
-            if (withColumns) Label(row, font, "골 · 도움 · 평점", 14, PixelTheme.TextDim, .78f, 0f, .99f, 1f, TextAnchor.MiddleRight);
+            Label(row, font, title, 20, PixelTheme.Accent, .01f, 0f, .7f, 1f, TextAnchor.MiddleLeft);
+            Label(row, font, "이름 · 능력", 14, PixelTheme.TextDim, .7f, 0f, .99f, 1f, TextAnchor.MiddleRight);   // 나이·시즌 기록은 선수를 누르면
         }
 
-        static void Row(Transform parent, Font font, SquadRowView r, int index, bool starter)
+        // 선수 목록을 두 줄(두 칸씩)로: 한 줄에 선수 둘
+        // 위에서부터 공격수 → 미드필더 → 수비수 → 골키퍼 (같은 포지션 안에서는 원래 순서)
+        static void Grid(Transform parent, Font font, System.Collections.Generic.List<SquadRowView> source, bool starter, System.Action<SquadRowView> onTap)
         {
-            var row = Block(parent, 32);
-            row.gameObject.AddComponent<Image>().color = r.me ? MeRow : (index % 2 == 0 ? RowA : RowB);
-            // 포지션 배지
-            var badge = Img(row, RoleColor(r.role), .01f, .14f, .09f, .86f);
-            Label(badge.rectTransform, font, starter ? r.kind.ToString() : r.role.ToString(), 15, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);   // 주전은 자리 역할 (ST, AM ...)
-            // 이름 (+ 표시)
-            string name = r.name + (string.IsNullOrEmpty(r.tag) ? "" : r.tag == "나" ? "  ★" : "  · " + r.tag);
-            Fit(Label(row, font, name, 19, r.me ? Color.white : (starter ? PixelTheme.Text : PixelTheme.TextDim), .11f, 0f, .52f, 1f, TextAnchor.MiddleLeft), 13);
-            // 나이
-            Label(row, font, r.age > 0 ? r.age + "세" : "-", 17, PixelTheme.TextDim, .52f, 0f, .62f, 1f, TextAnchor.MiddleCenter);
-            // 능력: 숫자 + 막대
-            Label(row, font, r.rating.ToString("0"), 19, r.me ? PixelTheme.Accent : PixelTheme.Text, .62f, 0f, .69f, 1f, TextAnchor.MiddleRight);
-            Img(row, new Color(.04f, .06f, .10f, 1f), .70f, .38f, .77f, .62f);
-            Img(row, RoleColor(r.role), .70f, .38f, .70f + .07f * Mathf.Clamp01(r.rating / 100f), .62f);
-            // 이번 시즌 기록 (주전만)
-            if (starter)
+            var list = new System.Collections.Generic.List<SquadRowView>();
+            for (int role = (int)SquadRole.FW; role >= (int)SquadRole.GK; role--)
+                foreach (var r in source) if ((int)r.role == role) list.Add(r);
+            for (int i = 0; i < list.Count; i += 2)
             {
-                string line = r.line == null ? "-" : r.line.goals + " · " + r.line.assists + " · " + (r.line.apps > 0 ? r.line.avg.ToString("0.0") : "-");
-                Label(row, font, line, 17, r.me ? PixelTheme.Accent : PixelTheme.Text, .78f, 0f, .99f, 1f, TextAnchor.MiddleRight);
+                var line = Block(parent, 40);
+                for (int k = 0; k < 2 && i + k < list.Count; k++)
+                {
+                    var cell = NewRect("Cell", line);
+                    cell.anchorMin = new Vector2(k == 0 ? 0f : .505f, 0f); cell.anchorMax = new Vector2(k == 0 ? .495f : 1f, 1f);
+                    cell.offsetMin = cell.offsetMax = Vector2.zero;
+                    Row(cell, font, list[i + k], (i / 2 + k) % 2, starter, onTap);
+                }
             }
+        }
+
+        // 선수 한 칸: 포지션 배지 · 이름 · 능력(숫자+막대). 나이·시즌 기록은 누르면 나오는 세부 창에서
+        static void Row(RectTransform row, Font font, SquadRowView r, int index, bool starter, System.Action<SquadRowView> onTap)
+        {
+            var bg = row.gameObject.AddComponent<Image>(); bg.color = r.me ? MeRow : (index % 2 == 0 ? RowA : RowB);
+            if (onTap != null)
+            {
+                var b = row.gameObject.AddComponent<Button>(); b.targetGraphic = bg;
+                var c = b.colors; c.pressedColor = new Color(.65f, .65f, .65f, 1f); c.fadeDuration = .06f; b.colors = c;   // 누르면 어두워짐
+                b.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); onTap(r); });
+            }
+            // 포지션 배지
+            var badge = Img(row, RoleColor(r.role), .02f, .16f, .2f, .84f);
+            Label(badge.rectTransform, font, r.role.ToString(), 14, Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);   // 포지션은 FW·MF·DF·GK로 통일
+            // 이름 (+ 표시)
+            string name = r.name + (r.legend ? " ★" : "") + (string.IsNullOrEmpty(r.tag) ? "" : r.tag == "나" ? " ★" : " · " + r.tag);
+            Fit(Label(row, font, name, 17, r.me ? Color.white : (starter ? PixelTheme.Text : PixelTheme.TextDim), .23f, 0f, .74f, 1f, TextAnchor.MiddleLeft), 11);
+            // 능력: 숫자 + 막대
+            Label(row, font, r.rating.ToString("0"), 19, r.me ? PixelTheme.Accent : PixelTheme.Text, .74f, 0f, .97f, 1f, TextAnchor.MiddleRight);
         }
 
         // ---------- 공통 ----------

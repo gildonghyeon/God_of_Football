@@ -13,7 +13,7 @@ namespace MyFootballCareer
             float initial = Mathf.Clamp(initialAttribute, 0, attributeCap);
             var p = new PlayerData { playerName = name, position = position, trait = trait,
                 shooting = initial, passing = initial, dribbling = initial,
-                defending = initial, stamina = initial };
+                defending = initial, stamina = initial, goalkeeping = initial };
             var kind = Ko.TraitAttribute(trait);   // 특성에 맞는 능력치에 보너스
             p.Set(kind, Mathf.Min(attributeCap, initial + traitBonus));
             return p;

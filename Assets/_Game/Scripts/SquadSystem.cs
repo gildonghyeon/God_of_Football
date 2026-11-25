@@ -29,6 +29,9 @@ namespace MyFootballCareer
         public float rating;
         public SeasonLine line;      // 이번 시즌 기록 (없으면 null)
         public bool me;
+        public int id;               // 선수 번호 (내 선수는 0)
+        public float[] attrs;        // 세부 능력치 6개 (AttributeKind 순서). 내 선수·은퇴 선수는 실제 값, 나머지는 능력과 포지션으로 정한 값
+        public bool legend;          // 내가 키운 선수
     }
 
     public class SquadView
@@ -93,7 +96,7 @@ namespace MyFootballCareer
             foreach (var team in ms.teams)
             {
                 if (team == null || string.IsNullOrEmpty(team.id) || Find(save, team.id) != null) continue;
-                if (team.id == ClubSystem.ClubId) { ClubSystem.SyncSquad(save); made = true; continue; }   // 나만의 팀은 은퇴 선수로
+                if (team.id == ClubSystem.ClubId) { ClubSystem.EnsureClubSquad(save); made = true; continue; }   // 나만의 팀은 은퇴 선수 + 새 선수 19명
                 if (used == null) used = UsedNames(save);
                 var rng = new System.Random(StableHash(team.id) ^ 0x51ed27);
                 var squad = new TeamSquad { teamId = team.id };
@@ -152,6 +155,7 @@ namespace MyFootballCareer
         public static SquadPlayer[] Starters(SaveData save, MatchSettings ms, string teamId)
         {
             Ensure(save, ms);
+            if (teamId == ClubSystem.ClubId && save.hasClub && save.teamMode) return ClubSystem.Lineup(save);   // 나만의 팀: 내가 정한 주전
             var squad = Find(save, teamId);
             var layout = TacticSystem.Layout(TacticSystem.Of(ms.FindTeam(teamId)).formation);
             var xi = new SquadPlayer[layout.Length];
@@ -277,7 +281,9 @@ namespace MyFootballCareer
                 if (slot == youSlot)
                 {
                     float myRating = SeasonSystem.PlayerRating(save, ms, career);
-                    v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = save.player.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true });
+                    var mp = save.player;
+                    v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = mp.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true,
+                        age = 18 + save.seasonHistory.Count, attrs = new[] { mp.shooting, mp.passing, mp.dribbling, mp.defending, mp.stamina, mp.goalkeeping } });
                     ratingSum += myRating; count++;
                     continue;
                 }
@@ -293,15 +299,44 @@ namespace MyFootballCareer
             subs.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
             if (mine && youSlot >= 0 && xi[youSlot] != null) v.subs.Add(Row(xi[youSlot], null, "경쟁")   /* 내 자리를 두고 경쟁하는 선수 */);
             foreach (var p in subs) v.subs.Add(Row(p, null, null));
+            // 내가 키운 선수(나만의 팀)는 실제 능력치
+            if (save.legends != null)
+                foreach (var list in new[] { v.starters, v.subs })
+                    foreach (var r in list)
+                    {
+                        var lg = save.legends.Find(l => -1000 - l.careerNumber == r.id && r.id != 0);
+                        if (lg != null) { r.legend = true; r.attrs = new[] { lg.shooting, lg.passing, lg.dribbling, lg.defending, lg.stamina, lg.goalkeeping }; }
+                    }
             return v;
         }
 
+
+        // 다른 선수의 세부 능력치: 능력(평점)을 기준으로 포지션마다 강한 것·약한 것을 두고, 선수마다 조금씩 다르게 (같은 선수는 늘 같은 값)
+        static readonly float[][] RoleBias =
+        {
+            new[] { -25f, 0f, -18f, -6f, -4f, 8f },    // GK: GK 능력이 가장 높음
+            new[] { -14f, -2f, -8f, 8f, 3f, -40f },    // DF
+            new[] { -3f, 8f, 2f, -4f, 4f, -40f },      // MF
+            new[] { 8f, -4f, 5f, -18f, 0f, -40f },     // FW
+        };
+
+        public static float[] DeriveAttrs(SquadPlayer p)
+        {
+            var a = new float[6];
+            for (int k = 0; k < 6; k++)
+            {
+                int h; unchecked { h = p.id * 73856093 ^ (k + 1) * 19349663; }
+                float jitter = (Mathf.Abs(h) % 9) - 4f;
+                a[k] = Mathf.Clamp(Mathf.Round(p.rating + RoleBias[(int)p.role][k] + jitter), 1f, 99f);
+            }
+            return a;
+        }
 
         static SquadRowView Row(SquadPlayer p, Dictionary<string, SeasonLine> lines, string tag)
         {
             SeasonLine line = null;
             if (lines != null) lines.TryGetValue(p.name, out line);
-            return new SquadRowView { role = p.role, kind = DefaultKind(p.role), name = p.name, age = p.age, rating = p.rating, line = line, tag = tag };
+            return new SquadRowView { role = p.role, kind = DefaultKind(p.role), name = p.name, age = p.age, rating = p.rating, line = line, tag = tag, id = p.id, attrs = DeriveAttrs(p) };
         }
 
         static SlotKind DefaultKind(SquadRole r) { return r == SquadRole.GK ? SlotKind.GK : r == SquadRole.DF ? SlotKind.CB : r == SquadRole.MF ? SlotKind.CM : SlotKind.ST; }
@@ -335,7 +370,7 @@ namespace MyFootballCareer
             var sb = new StringBuilder();
             sb.Append(division > 0 ? division + "부  " : "").Append("전력 ").Append(team.strength.ToString("0"))
               .Append("  요구 평점 ").Append(team.requiredRating.ToString("0")).Append('\n');
-            sb.Append("\n[주전]");
+            sb.Append("\n[1군]");
             for (int slot = 0; slot < xi.Length; slot++)
             {
                 if (slot == youSlot) { sb.Append('\n').Append(RoleOf(slot)).Append("  ").Append(save.player.playerName).Append(" (나)"); continue; }

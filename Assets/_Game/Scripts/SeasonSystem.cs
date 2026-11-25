@@ -546,6 +546,30 @@ namespace MyFootballCareer
             return list;
         }
 
+        // 그 부의 지금 순위. 내가 뛰는 부는 실제 경기 기록으로, 다른 부는 승강 계산(FinalOrder)과 같은 일정·결과를
+        // 내 시즌이 진행된 라운드까지만 세서 만듭니다 (시즌이 끝나면 최종 순위와 같음).
+        public static List<StandingRow> DivisionStandings(SaveData save, MatchSettings ms, int division)
+        {
+            if (division == save.season.division) return Standings(save, ms);
+            var teams = TeamsIn(save, ms, division);
+            var ids = new List<string>();
+            foreach (var t in teams) ids.Add(t.id);
+            var rng = new System.Random(save.season.seed ^ (division * 7919));
+            var rows = NewRows(teams, out var list);
+            int playedRounds = 0;
+            foreach (var m in save.season.matches) if (m.played) playedRounds = Mathf.Max(playedRounds, m.round);
+            foreach (var f in DoubleRoundRobin(ids, rng))
+            {
+                var game = new LeagueGame { homeId = f.homeId, awayId = f.awayId };
+                MatchSimulation.PlayOther(game, ms.FindTeam(f.homeId), ms.FindTeam(f.awayId), ms, rng);   // 결과가 같도록 모든 경기를 계산하고
+                if (f.round > playedRounds) continue;                                                       // 진행된 라운드까지만 셈
+                AddResult(rows, game.homeId, game.homeGoals, game.awayGoals);
+                AddResult(rows, game.awayId, game.awayGoals, game.homeGoals);
+            }
+            SortRows(list);
+            return list;
+        }
+
         static Dictionary<string, StandingRow> NewRows(List<TeamDefinition> teams, out List<StandingRow> list)
         {
             var rows = new Dictionary<string, StandingRow>();
@@ -592,12 +616,18 @@ namespace MyFootballCareer
                 r.played++;
                 r.goalsFor += m.goalsFor; r.goalsAgainst += m.goalsAgainst;
                 r.playerGoals += m.playerGoals; r.playerAssists += m.playerAssists;
-                if (m.playerPlayed) { r.appearances++; ratingSum += m.rating; }
+                if (m.playerPlayed)
+                {
+                    r.appearances++; ratingSum += m.rating;
+                    if (save.player != null && save.player.position == Position.Goalkeeper && !save.teamMode)   // 골키퍼: 선방·실점·무실점
+                    { r.saves += m.defensiveActions; r.conceded += m.goalsAgainst; if (m.goalsAgainst == 0) r.cleanSheets++; }
+                }
                 if (m.goalsFor > m.goalsAgainst) r.wins++;
                 else if (m.goalsFor < m.goalsAgainst) r.losses++;
                 else r.draws++;
             }
             r.averageRating = r.appearances > 0 ? ratingSum / r.appearances : 0f;
+            r.keeper = save.player != null && save.player.position == Position.Goalkeeper && !save.teamMode;
             r.teamName = TeamName(save, ms);
 
             var table = Standings(save, ms);
@@ -606,6 +636,9 @@ namespace MyFootballCareer
             if (table.Count > 0) r.champion = table[0].name;
             return r;
         }
+
+        // 선방률 글자 (막아야 할 슈팅이 없으면 -)
+        public static string SaveRateText(int saves, int conceded) { return saves + conceded > 0 ? Mathf.RoundToInt(100f * saves / (saves + conceded)) + "%" : "-"; }
 
         public static string Ordinal(int n)
         {
@@ -713,7 +746,9 @@ namespace MyFootballCareer
             v.ownGoals = string.Join("\n", own); v.oppGoals = string.Join("\n", opp);
             int passPercent = m.passesAttempted > 0 ? Mathf.RoundToInt(100f * m.passesCompleted / m.passesAttempted) : 0;
             v.myLine = !m.playerPlayed ? "벤치 대기 (출전하지 못함)" + (m.wage > 0 ? "   주급 +" + Money(m.wage) : "")
-                : "평점 " + m.rating.ToString("0.0") + "   골 " + m.playerGoals + "   도움 " + m.playerAssists
+                : save.player.position == Position.Goalkeeper && !save.teamMode
+                  ? "평점 " + m.rating.ToString("0.0") + "   선방 " + m.defensiveActions + "   선방률 " + SaveRateText(m.defensiveActions, m.goalsAgainst) + (m.goalsAgainst == 0 ? "   클린시트" : "") + "   패스 " + passPercent + "%"
+                  : "평점 " + m.rating.ToString("0.0") + "   골 " + m.playerGoals + "   도움 " + m.playerAssists
                   + "   슈팅 " + m.playerShots + "   패스 " + passPercent + "%";
             return v;
         }
@@ -839,7 +874,8 @@ namespace MyFootballCareer
                 season = t.seasonNumber, division = season.division > 0 ? ms.DivisionName(season.division) : "",
                 position = t.finalPosition, teams = Standings(save, ms).Count, points = t.points, champion = t.champion ?? "",
                 wins = t.wins, draws = t.draws, losses = t.losses, goalsFor = t.goalsFor, goalsAgainst = t.goalsAgainst,
-                goals = t.playerGoals, assists = t.playerAssists, apps = t.appearances, played = t.played, rating = t.averageRating
+                goals = t.playerGoals, assists = t.playerAssists, apps = t.appearances, played = t.played, rating = t.averageRating,
+                keeper = t.keeper, saves = t.saves, cleanSheets = t.cleanSheets, saveRate = t.SaveRate
             };
             if (season.division > 0 && season.nextDivision > 0)
             {

@@ -52,8 +52,9 @@ namespace MyFootballCareer
         public static float AverageLevel(PlayerData p)
         {
             if (p == null) return 0f;
-            return Mathf.Floor((Mathf.Floor(p.shooting) + Mathf.Floor(p.passing) + Mathf.Floor(p.dribbling)
-                              + Mathf.Floor(p.defending) + Mathf.Floor(p.stamina)) / 5f);
+            float sum = Mathf.Floor(p.shooting) + Mathf.Floor(p.passing) + Mathf.Floor(p.dribbling) + Mathf.Floor(p.defending) + Mathf.Floor(p.stamina);
+            if (p.position == Position.Goalkeeper) return Mathf.Floor((sum + Mathf.Floor(p.goalkeeping)) / 6f);   // 골키퍼는 GK 능력 포함
+            return Mathf.Floor(sum / 5f);
         }
 
         // 친선 경기 보상량: 평균 능력치 레벨에서 강화를 friendlyRewardUpgrades번 할 수 있는 노력 포인트

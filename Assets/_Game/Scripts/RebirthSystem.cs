@@ -19,7 +19,8 @@ namespace MyFootballCareer
 
         public static float BestAttribute(PlayerData p)
         {
-            return Mathf.Max(Mathf.Max(p.shooting, p.passing), Mathf.Max(p.dribbling, Mathf.Max(p.defending, p.stamina)));
+            float best = Mathf.Max(Mathf.Max(p.shooting, p.passing), Mathf.Max(p.dribbling, Mathf.Max(p.defending, p.stamina)));
+            return p.position == Position.Goalkeeper ? Mathf.Max(best, p.goalkeeping) : best;
         }
 
         // 선수를 처음 만들었을 때보다 오른 능력치 점수의 합
@@ -27,7 +28,7 @@ namespace MyFootballCareer
         {
             var start = career.CreatePlayer(p.playerName, p.position, p.trait);
             float points = 0f;
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)   // GK 능력 포함
             {
                 var kind = (AttributeKind)i;
                 points += Mathf.Max(0f, p.Get(kind) - start.Get(kind));
@@ -108,7 +109,7 @@ namespace MyFootballCareer
 
             // 3) 능력치 초기화 (설정에 따라 일부는 남깁니다)
             var start = career.CreatePlayer(save.player.playerName, save.player.position, save.player.trait);
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)   // GK 능력 포함
             {
                 var kind = (AttributeKind)i;
                 float baseValue = start.Get(kind);

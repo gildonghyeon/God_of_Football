@@ -29,6 +29,7 @@ namespace MyFootballCareer
         public Position position;
         [Header("포지션 평점 가중치")]
         public float shooting = 0.2f, passing = 0.2f, dribbling = 0.2f, defending = 0.2f, stamina = 0.2f;
+        public float goalkeeping;   // GK 능력 가중치 (골키퍼만)
         [Header("경기당 기준 활동량")]
         public float shotsPerMatch = 1f;
         public float passesPerMatch = 30f;
@@ -126,11 +127,13 @@ namespace MyFootballCareer
             MakeProfile(Position.Forward,    0.40f, 0.15f, 0.30f, 0.05f, 0.10f, 3.0f, 25f, 1.0f, 0.20f),
             MakeProfile(Position.Midfielder, 0.15f, 0.35f, 0.20f, 0.15f, 0.15f, 1.5f, 50f, 3.0f, 0.35f),
             MakeProfile(Position.Defender,   0.05f, 0.15f, 0.10f, 0.50f, 0.20f, 0.5f, 40f, 6.0f, 0.12f),
-            MakeProfile(Position.Goalkeeper, 0.02f, 0.18f, 0.05f, 0.60f, 0.15f, 0f, 28f, 3.0f, 0.05f),
+            Keeper(),
         };
 
         // 골키퍼 기본값 (예전 설정 파일에는 골키퍼가 없음). 수비 = 선방, 패스 = 킥·배급, 체력 = 집중력
-        static readonly PositionProfile KeeperProfile = MakeProfile(Position.Goalkeeper, 0.02f, 0.18f, 0.05f, 0.60f, 0.15f, 0f, 28f, 3.0f, 0.05f);
+        static readonly PositionProfile KeeperProfile = Keeper();
+        // 골키퍼 평점: GK 능력 60%, 킥·배급(패스) 15%, 수비(상황 판단) 10%, 체력(집중력) 10%
+        static PositionProfile Keeper() { var p = MakeProfile(Position.Goalkeeper, 0.02f, 0.15f, 0.03f, 0.10f, 0.10f, 0f, 28f, 3.0f, 0.05f); p.goalkeeping = 0.60f; return p; }
 
         static TeamDefinition MakeTeam(string id, string name, int division, float strength, float requiredRating, AttributeKind focus)
         {

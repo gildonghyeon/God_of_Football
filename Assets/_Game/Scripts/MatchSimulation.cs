@@ -8,10 +8,10 @@ namespace MyFootballCareer
         // 포지션 가중치로 계산한 선수 평점 (0~100)
         public static float PositionRating(PositionProfile profile, PlayerData p, float cap)
         {
-            float total = profile.shooting + profile.passing + profile.dribbling + profile.defending + profile.stamina;
+            float total = profile.shooting + profile.passing + profile.dribbling + profile.defending + profile.stamina + profile.goalkeeping;
             if (total <= 0f || cap <= 0f) return 0f;
             float sum = profile.shooting * p.shooting + profile.passing * p.passing + profile.dribbling * p.dribbling
-                      + profile.defending * p.defending + profile.stamina * p.stamina;
+                      + profile.defending * p.defending + profile.stamina * p.stamina + profile.goalkeeping * p.goalkeeping;
             return Mathf.Clamp(sum / total / cap * 100f, 0f, 100f);
         }
 
@@ -61,7 +61,7 @@ namespace MyFootballCareer
                 return;
             }
 
-            if (p.position == Position.Goalkeeper) { PlayKeeper(m, p, profile, rng, forL, againstL, passingN, defendingN, staminaN, activity); return; }
+            if (p.position == Position.Goalkeeper) { PlayKeeper(m, p, profile, rng, forL, againstL, passingN, defendingN, staminaN, Eff(p.goalkeeping, level, cap)); return; }
 
             // 2) 내 슈팅과 골: 슈팅이 좋을수록 많이 차고 잘 넣고, 드리블이 좋을수록 기회를 더 만듭니다.
             float shotBase = profile.shotsPerMatch * shotMul;
@@ -113,9 +113,9 @@ namespace MyFootballCareer
 
         // 골키퍼: 슈팅은 없고, 선방(defensiveActions에 기록)·실점·킥 배급·드문 도움으로 평가합니다.
         static void PlayKeeper(MatchRecord m, PlayerData p, PositionProfile profile, System.Random rng, float forL, float againstL,
-                               float passingN, float defendingN, float staminaN, float activity)
+                               float passingN, float defendingN, float staminaN, float keeperN)
         {
-            float keepN = 0.8f * defendingN + 0.2f * staminaN;   // 선방 능력 (수비 = 반사신경, 체력 = 집중력)
+            float keepN = 0.75f * keeperN + 0.15f * defendingN + 0.10f * staminaN;   // 선방 능력 (GK 능력 = 다이빙·위치 선정, 수비 = 판단, 체력 = 집중력)
             m.playerShots = 0; m.playerGoals = 0;
             m.goalsFor = Poisson(rng, Mathf.Clamp(forL * (1f + 0.08f * (passingN - 0.5f)), 0.2f, 4.5f));   // 킥이 좋으면 역습이 조금 더
             float faced = againstL;                                                                       // 막아야 할 위기의 양

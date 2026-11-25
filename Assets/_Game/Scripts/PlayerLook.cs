@@ -54,14 +54,15 @@ namespace MyFootballCareer
         public static int KitCount { get { return Kits.Count; } }
 
         // 그림 데이터(png 파일 내용)를 읽어서 색을 바꾼 질감을 만듭니다. 쓰고 나면 Destroy로 지워 주세요.
-        public static Texture2D LoadRecolored(byte[] pngBytes, int hair, int skin, int kit, int boots = 0)
+        // gloves: 골키퍼 장갑 (손을 장갑 색으로)
+        public static Texture2D LoadRecolored(byte[] pngBytes, int hair, int skin, int kit, int boots = 0, bool gloves = false)
         {
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             if (!tex.LoadImage(pngBytes)) { Object.Destroy(tex); return null; }
-            if (hair > 0 || skin > 0 || kit > 0 || boots > 0)
+            if (hair > 0 || skin > 0 || kit > 0 || boots > 0 || gloves)
             {
                 var pixels = tex.GetPixels32();
-                Recolor(pixels, tex.width, tex.height, hair, skin, kit, boots);
+                Recolor(pixels, tex.width, tex.height, hair, skin, kit, boots, gloves);
                 tex.SetPixels32(pixels);
                 tex.Apply(false, false);
             }
@@ -70,13 +71,13 @@ namespace MyFootballCareer
             return tex;
         }
 
-        public static void Recolor(Color32[] px, int w, int h, int hair, int skin, int kit, int boots = 0)
+        public static void Recolor(Color32[] px, int w, int h, int hair, int skin, int kit, int boots = 0, bool gloves = false)
         {
             hair = Mathf.Clamp(hair, 0, HairCount - 1);
             skin = Mathf.Clamp(skin, 0, SkinCount - 1);
             kit = Mathf.Clamp(kit, 0, KitCount - 1);
             boots = Mathf.Clamp(boots, 0, BootCount - 1);
-            if (hair == 0 && skin == 0 && kit == 0 && boots == 0) return;
+            if (hair == 0 && skin == 0 && kit == 0 && boots == 0 && !gloves) return;
             int n = w * h;
             var hue = new float[n]; var sat = new float[n]; var val = new float[n];
             var opaque = new bool[n]; var hairMask = new bool[n]; var skinMask = new bool[n];
@@ -96,6 +97,8 @@ namespace MyFootballCareer
                 hairMask[i] = hairTone && (s >= 0.12f || (s >= 0.08f && v >= 0.14f)) && s <= 0.65f && v >= 0.045f && v <= 0.48f;
                 skinMask[i] = (deg >= 335f || (deg >= 6f && deg <= 40f)) && s >= 0.10f && s <= 0.72f && v >= 0.55f;
             }
+
+            var gloveMask = gloves ? HandMask(px, w, h, opaque, skinMask, sat) : null;   // 손 (색을 바꾸기 전 피부로 찾음)
 
             // 머리카락은 머리 위의 큰 덩어리만 남깁니다. 목·팔·가랑이의 작은 조각은 피부 그림자입니다.
             var hairParts = Components(hairMask, w, h, out _);
@@ -275,6 +278,7 @@ namespace MyFootballCareer
                 else continue;
                 px[i] = new Color32((byte)(c.r * 255f + 0.5f), (byte)(c.g * 255f + 0.5f), (byte)(c.b * 255f + 0.5f), px[i].a);
             }
+            if (gloveMask != null) PaintGloves(px, gloveMask);   // 골키퍼 장갑은 마지막에 (손 색을 덮음)
         }
 
         // 원본의 파란 부분은 상의(큰 덩어리와 그 근처)와 양말 띠(멀리 떨어진 작은 덩어리)로,
@@ -694,6 +698,62 @@ namespace MyFootballCareer
                 if (val[j] >= 0.24f) return false;
             }
             return false;
+        }
+
+        // ---------- 골키퍼 장갑 ----------
+        static readonly Color32 GloveColor = new Color32(240, 196, 40, 255);
+
+        // 손 찾기: 가장 큰 피부 덩어리(얼굴)를 뺀 나머지 피부 덩어리 중 팔(얼굴 아래, 다리 위)에서
+        // 몸통 가운데에서 가장 먼 끝부분(약 4.5픽셀)이 손입니다. 금색 엠블럼처럼 채도가 높은 조각은 뺍니다.
+        // (그림 데이터는 아래 줄부터 저장되므로 위에서부터 잰 높이는 h-1-y)
+        static bool[] HandMask(Color32[] px, int w, int h, bool[] opaque, bool[] skinMask, float[] sat)
+        {
+            int n = w * h;
+            var hand = new bool[n];
+            int top = h, bot = -1; float sumX = 0f; int cnt = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (!opaque[i]) continue;
+                int yt = h - 1 - i / w;
+                top = Mathf.Min(top, yt); bot = Mathf.Max(bot, yt); sumX += i % w; cnt++;
+            }
+            if (cnt == 0) return hand;
+            float cx = sumX / cnt, ty = top + (bot - top) * 0.45f;
+            var parts = Components(skinMask, w, h, out _);
+            if (parts.Count < 2) return hand;
+            parts.Sort((a, b) => b.Count.CompareTo(a.Count));
+            int faceBottom = 0;
+            foreach (int j in parts[0]) faceBottom = Mathf.Max(faceBottom, h - 1 - j / w);
+            for (int k = 1; k < parts.Count; k++)
+            {
+                var c = parts[k];
+                if (c.Count < 3) continue;
+                float my = 0f, ms = 0f;
+                foreach (int j in c) { my += h - 1 - j / w; ms += sat[j]; }
+                my /= c.Count; ms /= c.Count;
+                if (my < faceBottom + 1) continue;                 // 귀·얼굴 쪽 조각
+                if (my > top + (bot - top) * 0.70f) continue;      // 다리(무릎)
+                if (ms > 0.55f) continue;                          // 금색 엠블럼
+                float far = 0f;
+                var d = new float[c.Count];
+                for (int q = 0; q < c.Count; q++)
+                {
+                    int j = c[q]; float dx = j % w - cx, dy = (h - 1 - j / w) - ty;
+                    d[q] = Mathf.Sqrt(dx * dx + dy * dy); far = Mathf.Max(far, d[q]);
+                }
+                for (int q = 0; q < c.Count; q++) if (d[q] >= far - 4.5f) hand[c[q]] = true;
+            }
+            return hand;
+        }
+
+        static void PaintGloves(Color32[] px, bool[] hand)
+        {
+            for (int i = 0; i < px.Length; i++)
+            {
+                if (!hand[i]) continue;
+                float shade = 0.75f + 0.25f * (px[i].r + px[i].g + px[i].b) / 765f;   // 원래 명암을 살림
+                px[i] = new Color32((byte)(GloveColor.r * shade), (byte)(GloveColor.g * shade), (byte)(GloveColor.b * shade), px[i].a);
+            }
         }
 
         static List<List<int>> Components(bool[] mask, int w, int h, out int[] label)

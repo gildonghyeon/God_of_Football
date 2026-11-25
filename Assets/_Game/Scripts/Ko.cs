@@ -3,6 +3,16 @@ namespace MyFootballCareer
     // 화면에 보이는 이름을 한국어로 바꿉니다. (코드 안의 enum 이름은 영어 그대로 둡니다)
     public static class Ko
     {
+        // 강화 칸에 보이는 능력치 수: 골키퍼는 GK 능력까지 6개, 필드 선수는 5개
+        public static int AttributeCount(Position p) { return p == Position.Goalkeeper ? 6 : 5; }
+
+        // 포지션 색 (목록에서 포지션 옆 표시): GK 노랑, DF 파랑, MF 초록, FW 빨강
+        public static string RoleHex(SquadRole r)
+        {
+            switch (r) { case SquadRole.GK: return "F2C230"; case SquadRole.DF: return "5AA0FF"; case SquadRole.MF: return "5CD67A"; default: return "FF6B6B"; }
+        }
+        public static string RoleTag(SquadRole r) { return "<color=#" + RoleHex(r) + ">■ " + r + "</color>"; }
+
         public static string Attr(AttributeKind kind)
         {
             switch (kind)
@@ -11,6 +21,7 @@ namespace MyFootballCareer
                 case AttributeKind.Passing: return "패스";
                 case AttributeKind.Dribbling: return "드리블";
                 case AttributeKind.Defending: return "수비";
+                case AttributeKind.Goalkeeping: return "GK 능력";
                 default: return "체력";
             }
         }
@@ -65,7 +76,8 @@ namespace MyFootballCareer
                 case Trait.Dribbler: case Trait.Overlapping: return AttributeKind.Dribbling;
                 case Trait.Playmaker: case Trait.BallPlaying: case Trait.SweeperKeeper: return AttributeKind.Passing;
                 case Trait.Pressing: case Trait.BoxToBox: return AttributeKind.Stamina;
-                default: return AttributeKind.Defending;   // 볼 위너, 스토퍼, 샷 스토퍼(골키퍼는 수비 = 선방)
+                case Trait.ShotStopper: return AttributeKind.Goalkeeping;
+                default: return AttributeKind.Defending;   // 볼 위너, 스토퍼
             }
         }
     }

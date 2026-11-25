@@ -11,7 +11,28 @@ namespace MyFootballCareer
         const int CurrentVersion = 20;
         readonly string fileName;
         public CareerSaveSystem(string fileName = "football-career-v1.json") { this.fileName = fileName; }   // 나만의 팀 모드는 다른 파일
-        public string FilePath => Path.Combine(Application.persistentDataPath, fileName);
+        // 자동 점검(테스트)은 진짜 저장을 건드리지 않도록 다른 폴더를 씁니다. 평소에는 null
+        public static string RootOverride;
+        // 한 번이라도 테스트가 돌면 켜지고 꺼지지 않음: 테스트 뒤 남은 게임 오브젝트가 앱을 끌 때 저장하더라도 진짜 저장 폴더에는 절대 쓰지 않음
+        public static bool TestMode;
+        string Root => RootOverride ?? (TestMode ? Path.Combine(Application.temporaryCachePath, "test-saves") : Application.persistentDataPath);
+        public string FilePath => Path.Combine(Root, fileName);
+
+        // 새 게임을 시작할 때 한 번만 가져올 '내가 키운 선수' 목록 (저장 폴더의 football-legends-import.json).
+        // 가져온 뒤에는 이름을 바꿔 두어 다시 가져오지 않습니다. 파일이 없거나 읽을 수 없으면 null.
+        [Serializable] class LegendImport { public List<RetiredPlayer> legends = new List<RetiredPlayer>(); }
+        public List<RetiredPlayer> TakeLegendImport()
+        {
+            string path = Path.Combine(Root, "football-legends-import.json");
+            try
+            {
+                if (!File.Exists(path)) return null;
+                var data = JsonUtility.FromJson<LegendImport>(File.ReadAllText(path, Encoding.UTF8));
+                File.Move(path, path + ".imported-" + DateTime.Now.ToString("yyyyMMddHHmmss"));
+                return data != null && data.legends != null && data.legends.Count > 0 ? data.legends : null;
+            }
+            catch (Exception e) { Debug.LogWarning("내가 키운 선수 가져오기 실패: " + e.Message); return null; }
+        }
 
         static bool Valid(SaveData data)
         {
@@ -19,7 +40,7 @@ namespace MyFootballCareer
             var p = data.player;
             if (string.IsNullOrWhiteSpace(p.playerName) ||
                 !Enum.IsDefined(typeof(Position), p.position) || !Enum.IsDefined(typeof(Trait), p.trait)) return false;
-            foreach (float value in new[] {p.shooting,p.passing,p.dribbling,p.defending,p.stamina})
+            foreach (float value in new[] {p.shooting,p.passing,p.dribbling,p.defending,p.stamina,p.goalkeeping})
                 if (float.IsNaN(value) || float.IsInfinity(value) || value < 0) return false;
             if (data.trainingId == null) return false;
             if (float.IsNaN(data.trainingCarrySeconds) || float.IsInfinity(data.trainingCarrySeconds) || data.trainingCarrySeconds < 0) return false;

@@ -309,7 +309,9 @@ namespace MyFootballCareer
             var chipLayout = chipRow.gameObject.AddComponent<HorizontalLayoutGroup>();
             chipLayout.spacing = 6; chipLayout.childControlWidth = true; chipLayout.childControlHeight = true;
             chipLayout.childForceExpandWidth = true; chipLayout.childForceExpandHeight = true;
-            string[] chipNames = { "골", "도움", "슈팅", "패스", youPosition == Position.Goalkeeper ? "선방" : "태클" };
+            string[] chipNames = youPosition == Position.Goalkeeper
+                ? new[] { "선방", "실점", "선방률", "패스", "클린시트" }   // 골키퍼: 골·도움 대신
+                : new[] { "골", "도움", "슈팅", "패스", "태클" };
             for (int i = 0; i < chipNames.Length; i++)
             {
                 var chip = NewRect("Chip", chipRow);
@@ -487,7 +489,9 @@ namespace MyFootballCareer
             if (youSlot < 0 || chipValues[0] == null) return;
             int attempted = Mathf.RoundToInt(record.passesAttempted * progress);
             int completed = Mathf.Min(attempted, Mathf.RoundToInt(record.passesCompleted * progress));
-            string line = yourGoals + "|" + yourAssists + "|" + yourShots + "|" + completed + "/" + attempted + "|" + yourTackles;
+            string line = youPosition == Position.Goalkeeper
+                ? yourTackles + "|" + goalsAgainst + "|" + SeasonSystem.SaveRateText(yourTackles, goalsAgainst) + "|" + completed + "/" + attempted + "|" + (goalsAgainst == 0 ? "O" : "-")
+                : yourGoals + "|" + yourAssists + "|" + yourShots + "|" + completed + "/" + attempted + "|" + yourTackles;
             if (line == lastStatsLine) return;
             lastStatsLine = line;
             var parts = line.Split('|');

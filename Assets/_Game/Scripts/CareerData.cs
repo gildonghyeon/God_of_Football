@@ -5,7 +5,7 @@ namespace MyFootballCareer
     public enum Position { Forward, Midfielder, Defender, Goalkeeper }
     // 특성: 앞의 셋은 예전 저장과 같은 번호. 포지션마다 고를 수 있는 특성이 다릅니다 (Ko.TraitsFor)
     public enum Trait { Finisher, Playmaker, BallWinner, Dribbler, Pressing, BoxToBox, Stopper, BallPlaying, Overlapping, ShotStopper, SweeperKeeper }
-    public enum AttributeKind { Shooting, Passing, Dribbling, Defending, Stamina }
+    public enum AttributeKind { Shooting, Passing, Dribbling, Defending, Stamina, Goalkeeping }   // Goalkeeping: 골키퍼의 다이빙·위치 선정 등을 합친 'GK 능력'
     public enum TrophyKind { LeagueTitle, Promotion, TopScorer, TopAssists, TopDefender, BestEleven, PlayerOfTheYear }
 
     // 받은 트로피 하나. 환생해도 지우지 않습니다.
@@ -24,6 +24,7 @@ namespace MyFootballCareer
         public Position position;
         public Trait trait;
         public float shooting, passing, dribbling, defending, stamina;
+        public float goalkeeping;                   // GK 능력 (골키퍼만 강화할 수 있음)
         public int hairColor, skinTone, kitColor;   // 외형: PlayerLook의 머리색·피부색·유니폼 번호 (0이 원래 모습)
         public int bootColor;                       // 축구화 색 (PlayerLook.BootNames, 0이 원래 검정)
 
@@ -35,6 +36,7 @@ namespace MyFootballCareer
                 case AttributeKind.Passing: return passing;
                 case AttributeKind.Dribbling: return dribbling;
                 case AttributeKind.Defending: return defending;
+                case AttributeKind.Goalkeeping: return goalkeeping;
                 default: return stamina;
             }
         }
@@ -47,6 +49,7 @@ namespace MyFootballCareer
                 case AttributeKind.Passing: passing = value; break;
                 case AttributeKind.Dribbling: dribbling = value; break;
                 case AttributeKind.Defending: defending = value; break;
+                case AttributeKind.Goalkeeping: goalkeeping = value; break;
                 default: stamina = value; break;
             }
         }
@@ -97,6 +100,7 @@ namespace MyFootballCareer
         public int nextSquadPlayerId;                                      // 새 선수 번호
         public int multiTrainingLevel;                                     // v11의 동시 훈련 레벨 (변환할 때 돈으로 돌려줌)
         public List<string> extraTrainingIds = new List<string>();         // v11의 함께 하던 훈련 (지금은 쓰지 않음)
+        public bool noActivePlayer;                                        // 은퇴한 뒤 아직 새 선수를 만들지 않음 (player는 은퇴한 선수 그대로, 쓰지 않음)
         public bool teamMode;                                              // 나만의 팀 모드의 저장 (내 선수 없이 팀으로 경기)
         public int retireCount;                                            // 은퇴한 횟수 (환생처럼 커리어를 끝냄)
         public List<RetiredPlayer> legends = new List<RetiredPlayer>();    // 내가 키운 선수 (은퇴한 선수들)
@@ -169,6 +173,9 @@ namespace MyFootballCareer
         public string teamName;     // 그 시즌에 뛴 팀
         public int appearances;     // 출전 경기 수
         public int division;        // 그 시즌의 부 (0이면 부가 생기기 전)
+        public bool keeper;         // 골키퍼로 뛴 시즌 (기록을 선방률·클린시트로 보여 줌)
+        public int saves, cleanSheets, conceded;   // 골키퍼: 선방, 무실점 경기, 뛴 경기의 실점
+        public float SaveRate => saves + conceded > 0 ? saves / (float)(saves + conceded) : 0f;
     }
 
     // 다른 팀이 보낸 이적 제안. 계약·연봉 같은 조건은 이후 이 클래스에 추가합니다.

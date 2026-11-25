@@ -15,6 +15,7 @@ namespace MyFootballCareer
         public string moveText = "";
         public int wins, draws, losses, goalsFor, goalsAgainst;
         public int goals, assists, apps, played; public float rating;
+        public bool keeper; public int saves, cleanSheets; public float saveRate;   // 골키퍼 기록
         public List<AwardRow> awards = new List<AwardRow>();
         public bool noTrophy;
         public bool offersReady; public int score = -1; public string grade = ""; public int offers;
@@ -69,8 +70,12 @@ namespace MyFootballCareer
             Tiles(p, f, new[] { ("승", d.wins.ToString(), 0), ("무", d.draws.ToString(), 0), ("패", d.losses.ToString(), 0),
                                 ("득점 - 실점", d.goalsFor + " - " + d.goalsAgainst, d.goalsFor > d.goalsAgainst ? 2 : d.goalsFor < d.goalsAgainst ? 3 : 0) });
             Caption(p, f, "내 기록");
-            Tiles(p, f, new[] { ("골", d.goals.ToString(), d.goals > 0 ? 1 : 0), ("도움", d.assists.ToString(), d.assists > 0 ? 1 : 0),
-                                ("평균 평점", d.apps > 0 ? d.rating.ToString("0.0") : "-", d.rating >= 7f ? 1 : 0), ("출전", d.apps + "/" + d.played, 0) });
+            if (d.keeper)   // 골키퍼: 골·도움 대신 선방률·클린시트
+                Tiles(p, f, new[] { ("선방률", d.saves > 0 ? Mathf.RoundToInt(d.saveRate * 100f) + "%" : "-", d.saveRate >= 0.75f ? 1 : 0), ("클린시트", d.cleanSheets.ToString(), d.cleanSheets > 0 ? 1 : 0),
+                                    ("평균 평점", d.apps > 0 ? d.rating.ToString("0.0") : "-", d.rating >= 7f ? 1 : 0), ("출전", d.apps + "/" + d.played, 0) });
+            else
+                Tiles(p, f, new[] { ("골", d.goals.ToString(), d.goals > 0 ? 1 : 0), ("도움", d.assists.ToString(), d.assists > 0 ? 1 : 0),
+                                    ("평균 평점", d.apps > 0 ? d.rating.ToString("0.0") : "-", d.rating >= 7f ? 1 : 0), ("출전", d.apps + "/" + d.played, 0) });
 
             if (d.awards.Count > 0 || d.noTrophy)
             {
@@ -140,8 +145,12 @@ namespace MyFootballCareer
         {
             if (v.hasLook) Portrait(p, f, v, top);
             else Hero(p, f, top, v.name, PixelTheme.Accent, v.position + " · " + v.trait + " · 평점 " + Mathf.RoundToInt(v.rating) + " · 커리어 " + v.careerNumber);
-            Tiles(p, f, new[] { ("시즌", v.seasons.ToString(), 0), ("출전", v.apps.ToString(), 0),
-                                ("골", v.goals.ToString(), v.goals > 0 ? 1 : 0), ("도움", v.assists.ToString(), v.assists > 0 ? 1 : 0) });
+            if (v.keeper)
+                Tiles(p, f, new[] { ("시즌", v.seasons.ToString(), 0), ("출전", v.apps.ToString(), 0),
+                                    ("선방률", v.saves + v.conceded > 0 ? Mathf.RoundToInt(100f * v.saves / (v.saves + v.conceded)) + "%" : "-", 0), ("클린시트", v.cleanSheets.ToString(), v.cleanSheets > 0 ? 1 : 0) });
+            else
+                Tiles(p, f, new[] { ("시즌", v.seasons.ToString(), 0), ("출전", v.apps.ToString(), 0),
+                                    ("골", v.goals.ToString(), v.goals > 0 ? 1 : 0), ("도움", v.assists.ToString(), v.assists > 0 ? 1 : 0) });
             Tiles(p, f, new[] { ("평균 평점", v.avgRating > 0f ? v.avgRating.ToString("0.00") : "-", v.avgRating >= 7f ? 2 : 0),
                                 ("최고 성적", string.IsNullOrEmpty(v.best) ? "-" : v.best, v.best.EndsWith(" 1위") ? 1 : 0),
                                 ("트로피", v.trophyTotal.ToString(), v.trophyTotal > 0 ? 1 : 0) });
@@ -162,7 +171,7 @@ namespace MyFootballCareer
             MatchResultDialog.Label(head, f, "시즌", 14, PixelTheme.TextDim, .01f, 0f, .11f, 1f, TextAnchor.MiddleCenter);
             MatchResultDialog.Label(head, f, "순위", 14, PixelTheme.TextDim, .11f, 0f, .29f, 1f, TextAnchor.MiddleCenter);
             MatchResultDialog.Label(head, f, "팀", 14, PixelTheme.TextDim, .30f, 0f, .64f, 1f, TextAnchor.MiddleLeft);
-            MatchResultDialog.Label(head, f, "골 · 도움", 14, PixelTheme.TextDim, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
+            MatchResultDialog.Label(head, f, v.keeper ? "선방률 · CS" : "골 · 도움", 14, PixelTheme.TextDim, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
             MatchResultDialog.Label(head, f, "평점", 14, PixelTheme.TextDim, .84f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
             for (int i = 0; i < v.history.Count; i++)
             {
@@ -173,7 +182,7 @@ namespace MyFootballCareer
                 string pos = (h.division > 0 ? h.division + "부 " : "") + (h.finalPosition > 0 ? h.finalPosition + "위" : "-");
                 MatchResultDialog.Fit(MatchResultDialog.Label(r, f, pos, 16, champ ? PixelTheme.Accent : PixelTheme.Text, .11f, 0f, .29f, 1f, TextAnchor.MiddleCenter), 10);
                 MatchResultDialog.Fit(MatchResultDialog.Label(r, f, h.teamName, 15, PixelTheme.TextDim, .30f, 0f, .64f, 1f, TextAnchor.MiddleLeft), 10);
-                MatchResultDialog.Label(r, f, h.playerGoals + " · " + h.playerAssists, 16, h.playerGoals + h.playerAssists > 0 ? PixelTheme.Accent : PixelTheme.Text, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
+                MatchResultDialog.Label(r, f, h.keeper ? KeeperLine(h) : h.playerGoals + " · " + h.playerAssists, 16, (h.keeper ? h.cleanSheets : h.playerGoals + h.playerAssists) > 0 ? PixelTheme.Accent : PixelTheme.Text, .64f, 0f, .84f, 1f, TextAnchor.MiddleCenter);
                 MatchResultDialog.Label(r, f, h.appearances > 0 ? h.averageRating.ToString("0.0") : "-", 16, h.averageRating >= 7f ? UpText : PixelTheme.Text, .84f, 0f, .99f, 1f, TextAnchor.MiddleCenter);
             }
         }
@@ -189,6 +198,17 @@ namespace MyFootballCareer
             Note(p, f, "환생 보너스 · 트로피 · 리그 상황은 그대로", PixelTheme.TextDim, 15);
             if (need > 0)
                 Note(p, f, legends + 1 >= need ? "나만의 팀을 창단할 수 있게 됩니다!" : "나만의 팀 창단까지 " + (need - legends - 1) + "명 더", PixelTheme.Accent, 15);
+        }
+
+        // 은퇴 직후 한 번 보여 주는 커리어 카드
+        public static void RetiredCard(Transform p, Font f, CareerRecordView v, int legends, int need, bool canFound, bool hasClub)
+        {
+            CareerRecord(p, f, v, "은퇴 · 커리어 카드");
+            Caption(p, f, "내가 키운 선수");
+            Note(p, f, "내가 키운 선수 " + legends + "명", PixelTheme.Text);
+            if (hasClub) Note(p, f, "나만의 팀 모드에서 무료로 영입할 수 있습니다", PixelTheme.Accent, 15);
+            else if (canFound) Note(p, f, "맨 처음 화면에서 나만의 팀을 만들 수 있습니다!", PixelTheme.Accent, 15);
+            else Note(p, f, "나만의 팀 창단까지 " + Mathf.Max(0, need - legends) + "명 더", PixelTheme.TextDim, 15);
         }
 
         public static void RetireDone(Transform p, Font f, string oldName, string newName, int legends, int need, bool canFound)
@@ -244,7 +264,7 @@ namespace MyFootballCareer
         static void Portrait(Transform p, Font f, CareerRecordView v, string top)
         {
             var b = Box(p, Tile, 190);
-            var sprite = LookSprite(v.hair, v.skin, v.kit, v.boots, b.gameObject);
+            var sprite = LookSprite(v.hair, v.skin, v.kit, v.boots, b.gameObject, v.keeper);
             if (sprite != null)
             {
                 var img = MatchResultDialog.Img(b, Color.white, .02f, .03f, .36f, .97f);
@@ -258,17 +278,49 @@ namespace MyFootballCareer
         }
 
         // 정면 대기 그림에 외형을 입힌 그림. 그림은 owner가 사라질 때 같이 지웁니다.
-        public static Sprite LookSprite(int hair, int skin, int kit, int boots, GameObject owner)
+        public static Sprite LookSprite(int hair, int skin, int kit, int boots, GameObject owner, bool gloves = false)
         {
             var asset = Resources.Load<TextAsset>("Art/Chars/blue_idle_front_0");
             if (asset == null) return null;
-            var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots);
+            var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots, gloves);
             if (tex == null) return null;
             var sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
             var owned = owner.GetComponent<OwnedObjects>() ?? owner.AddComponent<OwnedObjects>();
             owned.items.Add(tex); owned.items.Add(sprite);
             return sprite;
         }
+
+        // 선수 세부 능력치: 포지션·나이·능력, 능력치 막대, 이번 시즌 기록
+        public static void PlayerDetail(Transform p, Font f, SquadRowView r, string division)
+        {
+            Hero(p, f, Ko.RoleTag(r.role) + (r.me ? " · 내 선수" : r.legend ? " · 내가 키운 선수 ★" : ""), r.name, r.me || r.legend ? PixelTheme.Accent : PixelTheme.Text,
+                 (r.age > 0 ? r.age + "세 · " : "") + "능력 " + Mathf.RoundToInt(r.rating));
+            if (r.attrs != null)
+            {
+                Caption(p, f, "능력치");
+                int count = r.role == SquadRole.GK ? 6 : 5;   // GK 능력은 골키퍼만
+                for (int k = 0; k < count; k++) Bar(p, f, Ko.Attr((AttributeKind)k), r.attrs[k]);
+                if (!r.me && !r.legend) Note(p, f, "능력과 포지션으로 추정한 값입니다", PixelTheme.TextDim, 14);
+            }
+            Caption(p, f, "이번 시즌" + (string.IsNullOrEmpty(division) ? "" : " · " + division));
+            if (r.line == null) Note(p, f, "1군으로 뛴 기록이 없습니다", PixelTheme.TextDim);
+            else Tiles(p, f, new[] { ("출전", r.line.apps.ToString(), 0), ("골", r.line.goals.ToString(), r.line.goals > 0 ? 1 : 0),
+                                     ("도움", r.line.assists.ToString(), r.line.assists > 0 ? 1 : 0), ("평점", r.line.apps > 0 ? r.line.avg.ToString("0.0") : "-", 0) });
+        }
+
+        // 능력치 한 줄: 이름, 막대, 숫자
+        static void Bar(Transform p, Font f, string label, float value)
+        {
+            var b = Box(p, RowColor, 34);
+            MatchResultDialog.Fit(MatchResultDialog.Label(b, f, label, 17, PixelTheme.Text, .03f, 0f, .26f, 1f, TextAnchor.MiddleLeft), 11);
+            MatchResultDialog.Img(b, new Color(.04f, .06f, .10f, 1f), .28f, .32f, .86f, .68f);
+            Color c = value >= 80f ? new Color(.95f, .78f, .25f, 1f) : value >= 60f ? new Color(.45f, .85f, .55f, 1f) : value >= 40f ? new Color(.45f, .65f, .95f, 1f) : new Color(.6f, .6f, .65f, 1f);
+            MatchResultDialog.Img(b, c, .28f, .32f, .28f + .58f * Mathf.Clamp01(value / 100f), .68f);
+            MatchResultDialog.Label(b, f, Mathf.RoundToInt(value).ToString(), 19, c, .87f, 0f, .98f, 1f, TextAnchor.MiddleRight);
+        }
+
+        // 골키퍼 시즌 한 줄: 선방률 · 클린시트
+        public static string KeeperLine(SeasonSummary h) { return (h.saves + h.conceded > 0 ? Mathf.RoundToInt(h.SaveRate * 100f) + "%" : "-") + " · " + h.cleanSheets; }
 
         // ---------- 부품 ----------
         // 큰 머리: 위 작은 글, 가운데 큰 글, 아래 작은 글

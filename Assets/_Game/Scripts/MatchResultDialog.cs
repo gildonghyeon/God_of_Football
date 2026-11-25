@@ -78,7 +78,9 @@ namespace MyFootballCareer
             }
             else
             {
-                Tiles(parent, font, new[] { ("평점", v.rating.ToString("0.0"), true), ("골", v.myGoals.ToString(), v.myGoals > 0), ("도움", v.myAssists.ToString(), v.myAssists > 0) });
+                if (v.keeper)   // 골키퍼: 골·도움 대신 선방률·클린시트
+                    Tiles(parent, font, new[] { ("평점", v.rating.ToString("0.0"), true), ("선방률", SeasonSystem.SaveRateText(v.defense, v.ga), false), ("클린시트", v.ga == 0 ? "O" : "-", v.ga == 0) });
+                else Tiles(parent, font, new[] { ("평점", v.rating.ToString("0.0"), true), ("골", v.myGoals.ToString(), v.myGoals > 0), ("도움", v.myAssists.ToString(), v.myAssists > 0) });
                 if (v.keeper) Tiles(parent, font, new[] { ("선방", v.defense.ToString(), v.defense > 0), ("패스", v.passText, false), ("실점", v.ga.ToString(), false) });
                 else Tiles(parent, font, new[] { ("슈팅", v.shots.ToString(), false), ("패스", v.passText, false), ("수비", v.defense.ToString(), false) });
             }

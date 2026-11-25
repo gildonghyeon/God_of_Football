@@ -9,9 +9,11 @@ namespace MyFootballCareer
     {
         public string name, tactic, division;
         public int kit, season, legends;
+        public int squadCount;              // 선수단 인원 (최대 19)
         public float strength;
         public bool complete;               // 이번 시즌 경기를 모두 마침
         public string nextText = "";        // 다음 경기 안내 (예: 5라운드 · 홈 · 상대)
+        public string nextOpponentId;       // 다음 경기 상대 (시즌이 끝났으면 null)
         public int round, rounds;
         public int w, d, l, gf, ga;
         public List<TableRowView> table = new List<TableRowView>();
@@ -25,6 +27,8 @@ namespace MyFootballCareer
     {
         public string playerName, playerLine;     // 선수 키우기: 이름, "공격수 · 팀 · 2부 · 시즌 3"
         public int hair, skin, kit, boots;
+        public bool gloves;                        // 키우는 선수가 골키퍼
+        public bool noPlayer;                      // 육성 중인 선수 없음 (은퇴 뒤): 그림은 그림자처럼
         public bool hasClub;                       // 나만의 팀이 있으면 선택 가능
         public string clubName = "", clubLine = "";
         public int clubKit, legends, legendNeed;
@@ -67,9 +71,19 @@ namespace MyFootballCareer
             }
         }
 
-        public static void Next(Transform p, Font f, ClubModeView v)
+        // 다음 경기 카드. 상대가 있으면 카드를 누를 수 있음 (onOpponent)
+        public static void Next(Transform p, Font f, ClubModeView v, System.Action onOpponent = null)
         {
-            var b = Box(p, Tile, 54);
+            var b = Box(p, Tile, 62);
+            if (onOpponent != null && !v.complete)
+            {
+                var img = b.GetComponent<Image>(); img.raycastTarget = true;
+                var button = b.gameObject.AddComponent<Button>(); button.targetGraphic = img;
+                var c = button.colors; c.pressedColor = new Color(.65f, .65f, .65f, 1f); c.fadeDuration = .06f; button.colors = c;
+                button.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); onOpponent(); });
+                TeamKits.PreviewImage(b, TeamKits.Opponent(ClubSystem.ClubId, v.nextOpponentId), .02f, .06f, .12f, .94f);
+                L(b, f, "누르면 상대 팀 선수단 ›", 14, PixelTheme.TextDim, .55f, .02f, .98f, .36f, TextAnchor.MiddleRight, 10);
+            }
             L(b, f, v.complete ? "시즌 종료! 다음 시즌을 시작하세요." : v.nextText, 20, v.complete ? PixelTheme.Accent : PixelTheme.Text, .03f, 0f, .97f, 1f, TextAnchor.MiddleCenter, 12);
             if (v.recent.Count > 0)
             {
@@ -103,23 +117,24 @@ namespace MyFootballCareer
         public static RectTransform FreeRow(Transform p, Font f, RetiredPlayer lg, int index)
         {
             var r = Box(p, index % 2 == 0 ? RowA : RowB, 76);
-            var sprite = PopupCards.LookSprite(lg.hairColor, lg.skinTone, lg.kitColor, lg.bootColor, r.gameObject);
+            var sprite = PopupCards.LookSprite(lg.hairColor, lg.skinTone, lg.kitColor, lg.bootColor, r.gameObject, lg.position == Position.Goalkeeper);
             if (sprite != null) { var img = MatchResultDialog.Img(r, Color.white, .01f, .04f, .12f, .96f); img.sprite = sprite; img.preserveAspect = true; }
             L(r, f, lg.name, 20, PixelTheme.Text, .14f, .50f, .70f, .96f, TextAnchor.MiddleLeft, 12);
-            L(r, f, Ko.Pos(lg.position) + " · 평점 " + Mathf.RoundToInt(lg.rating) + " · " + lg.seasons + "시즌 골 " + lg.goals + " 도움 " + lg.assists, 14, PixelTheme.TextDim, .14f, .06f, .70f, .50f, TextAnchor.MiddleLeft, 10);
+            L(r, f, Ko.Pos(lg.position) + " · 평점 " + Mathf.RoundToInt(lg.rating) + " · " + ClubSystem.LegendLine(lg), 14, PixelTheme.TextDim, .14f, .06f, .70f, .50f, TextAnchor.MiddleLeft, 10);
             return r;
         }
 
         // 모드 카드: 왼쪽 그림(선수 모습 또는 팀 유니폼), 오른쪽 모드 이름·설명. 비활성이면 흐리게
-        public static RectTransform ModeCard(Transform p, Font f, string mode, string title, string line, Sprite art, int kit, bool enabled)
+        // shadow: 선수 그림을 검은 그림자로 (빈 자리)
+        public static RectTransform ModeCard(Transform p, Font f, string mode, string title, string line, Sprite art, int kit, bool enabled, bool shadow = false)
         {
             var b = Box(p, enabled ? Tile : new Color(.09f, .11f, .16f, 1f), 200);
-            Color dim = enabled ? Color.white : new Color(1f, 1f, 1f, .35f);
+            Color dim = shadow ? new Color(0f, 0f, 0f, .55f) : enabled ? Color.white : new Color(1f, 1f, 1f, .35f);
             if (art != null) { var img = MatchResultDialog.Img(b, dim, .03f, .05f, .30f, .95f); img.sprite = art; img.preserveAspect = true; }
             else if (kit > 0) { var k = TeamKits.PreviewImage(b, kit, .05f, .15f, .28f, .85f); if (k != null) k.color = dim; }
             else L(b, f, "?", 64, PixelTheme.TextDim, .03f, .05f, .30f, .95f, TextAnchor.MiddleCenter, 30);
             L(b, f, mode, 18, enabled ? PixelTheme.TextDim : new Color(.5f, .5f, .55f, 1f), .34f, .74f, .97f, .94f, TextAnchor.MiddleLeft, 12);
-            L(b, f, title, 34, enabled ? PixelTheme.Accent : new Color(.45f, .45f, .5f, 1f), .34f, .40f, .97f, .74f, TextAnchor.MiddleLeft, 16);
+            L(b, f, title, shadow ? 26 : 34, shadow ? PixelTheme.TextDim : enabled ? PixelTheme.Accent : new Color(.45f, .45f, .5f, 1f), .34f, .40f, .97f, .74f, TextAnchor.MiddleLeft, 16);
             L(b, f, line, 17, enabled ? PixelTheme.Text : new Color(.45f, .45f, .5f, 1f), .34f, .08f, .97f, .40f, TextAnchor.MiddleLeft, 11);
             return b;
         }
@@ -143,7 +158,7 @@ namespace MyFootballCareer
         public static void Signed(Transform p, Font f, RetiredPlayer lg, string club, float before, float after)
         {
             var b = Box(p, Tile, 170);
-            var sprite = PopupCards.LookSprite(lg.hairColor, lg.skinTone, lg.kitColor, lg.bootColor, b.gameObject);
+            var sprite = PopupCards.LookSprite(lg.hairColor, lg.skinTone, lg.kitColor, lg.bootColor, b.gameObject, lg.position == Position.Goalkeeper);
             if (sprite != null) { var img = MatchResultDialog.Img(b, Color.white, .02f, .03f, .32f, .97f); img.sprite = sprite; img.preserveAspect = true; }
             L(b, f, club + " 무료 영입", 16, PixelTheme.TextDim, .35f, .72f, .97f, .94f, TextAnchor.MiddleLeft, 11);
             L(b, f, lg.name, 36, PixelTheme.Accent, .35f, .38f, .97f, .72f, TextAnchor.MiddleLeft, 18);

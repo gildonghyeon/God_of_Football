@@ -211,24 +211,26 @@ namespace MyFootballCareer
 
         // ---------- 내 선수 외형 ----------
         int lookHair = -1, lookSkin = -1, lookKit = -1, lookBoots = -1;
+        bool lookGloves;
         readonly List<UnityEngine.Object> lookObjects = new List<UnityEngine.Object>();
 
         // 내 선수(blue) 그림을 머리색·피부색·유니폼에 맞춰 다시 만듭니다. 같은 외형이면 아무것도 하지 않습니다.
-        public void SetLook(int hair, int skin, int kit, int boots = 0)
+        // gloves: 골키퍼 장갑
+        public void SetLook(int hair, int skin, int kit, int boots = 0, bool gloves = false)
         {
             hair = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             skin = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             kit = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
             boots = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
-            if (hair == lookHair && skin == lookSkin && kit == lookKit && boots == lookBoots) return;
-            lookBoots = boots;
+            if (hair == lookHair && skin == lookSkin && kit == lookKit && boots == lookBoots && gloves == lookGloves) return;
+            lookBoots = boots; lookGloves = gloves;
             foreach (var obj in lookObjects) if (obj != null) UnityEngine.Object.Destroy(obj);
             lookObjects.Clear();
             foreach (string anim in new[] { "idle", "run", "dribble", "shoot" })
                 foreach (string view in new[] { "front", "side", "back" })
-                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit, boots);
+                    LoadLookStrip("blue_" + anim + "_" + view, hair, skin, kit, boots, gloves);
             foreach (string anim in new[] { "jump", "cheer", "fall" })
-                LoadLookStrip("blue_" + anim + "_x", hair, skin, kit, boots);
+                LoadLookStrip("blue_" + anim + "_x", hair, skin, kit, boots, gloves);
             LoadStrideStrips();
             BuildJuggleStrip();
             lookHair = hair; lookSkin = skin; lookKit = kit;
@@ -357,13 +359,13 @@ namespace MyFootballCareer
         }
 
         // 색을 바꿀 수 있는 그림(.bytes)을 읽어 색을 바꿉니다. .bytes가 없으면 일반 이미지를 그대로 씁니다.
-        void LoadLookStrip(string prefix, int hair, int skin, int kit, int boots)
+        void LoadLookStrip(string prefix, int hair, int skin, int kit, int boots, bool gloves)
         {
-            LoadRecoloredStrip(prefix, prefix, hair, skin, kit, lookObjects, boots);
+            LoadRecoloredStrip(prefix, prefix, hair, skin, kit, lookObjects, boots, gloves);
         }
 
         // src 그림(.bytes)을 색 바꿔 읽어 dest 이름으로 둡니다. 만든 텍스처·스프라이트는 owned에 넣어 나중에 지웁니다.
-        void LoadRecoloredStrip(string src, string dest, int hair, int skin, int kit, List<UnityEngine.Object> owned, int boots = 0)
+        void LoadRecoloredStrip(string src, string dest, int hair, int skin, int kit, List<UnityEngine.Object> owned, int boots = 0, bool gloves = false)
         {
             var list = new List<Sprite>();
             for (int i = 0; i < 8; i++)
@@ -372,7 +374,7 @@ namespace MyFootballCareer
                 var asset = Resources.Load<TextAsset>(ArtPath + src + "_" + i);
                 if (asset != null)
                 {
-                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots);
+                    var tex = PlayerLook.LoadRecolored(asset.bytes, hair, skin, kit, boots, gloves);
                     if (tex != null)
                     {
                         sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(.5f, .5f), 100f);
@@ -415,6 +417,7 @@ namespace MyFootballCareer
                 case AttributeKind.Passing: return "pass";
                 case AttributeKind.Dribbling: return "dribble";
                 case AttributeKind.Defending: return "defend";
+                case AttributeKind.Goalkeeping: return "keeper";
                 default: return "stamina";
             }
         }

@@ -25,8 +25,17 @@ namespace MyFootballCareer
         public string myLine;             // 예: "평점 7.1   골 1   도움 0   슈팅 3   패스 76%"
     }
 
+    // 리그 팀 목록 창 (순위표의 '팀 선수단 보기')
+    public class LeagueTeamsView
+    {
+        public string title;
+        public int division, divisionCount, myDivision, played;
+        public List<TableRowView> rows = new List<TableRowView>();
+    }
+
     public class TableRowView
     {
+        public string id;
         public int pos, w, d, l, gd, pts, zone;   // zone: 1 승격권, -1 강등권, 0 그 외
         public string name;
         public bool me;

@@ -83,7 +83,7 @@ namespace MyFootballCareer
                     int seed = unchecked(save.season.seed ^ (division * 104729) ^ (sp.id * 7919) ^ 0x2545F491);
                     string name = sp.name;
                     var r = new Rival { name = name, teamId = team.id, position = pos, division = division };
-                    var p = new PlayerData { playerName = name, position = pos, shooting = rating, passing = rating, dribbling = rating, defending = rating, stamina = rating };
+                    var p = new PlayerData { playerName = name, position = pos, shooting = rating, passing = rating, dribbling = rating, defending = rating, stamina = rating, goalkeeping = rating };
                     var mr = new System.Random(seed);
                     foreach (var opp in teams)
                     {
