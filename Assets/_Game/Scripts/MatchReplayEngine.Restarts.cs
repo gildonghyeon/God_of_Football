@@ -69,12 +69,29 @@ namespace MyFootballCareer
             PlanRestartSpots(kind);
         }
 
+        // 세트피스 키커: 그 능력치가 가장 좋은 필드 선수 (같으면 가까운 선수). skip: 뺄 선수 (예: 득점자)
+        int BestKicker(float[] skill, int skip)
+        {
+            int best = -1; float bs = float.MinValue;
+            for (int s = 1; s <= 10; s++)
+            {
+                int i = Idx(rTeam, s);
+                if (i == YouIdx || i == skip) continue;   // 내 선수는 기록에 없는 슈팅·도움이 생기지 않게 빼고
+                float score = skill[i] * 100f - DistTo(dots[i], rX, rY) * 0.05f;
+                if (score > bs) { bs = score; best = i; }
+            }
+            return best;
+        }
+
         int PickTaker(Restart kind)
         {
-            if (rScripted && script != null)
+            if (rScripted && script != null)   // 득점 장면: 경기 계획에서 이미 능력치로 키커를 정함 (득점 기록의 이름과 같음)
                 return Idx(rTeam, kind == Restart.Corner && script.assisterSlot >= 0 ? script.assisterSlot : script.scorerSlot);
             if (kind == Restart.Kickoff) return Idx(rTeam, kickSlot[rTeam]);
             if (kind == Restart.GoalKick) return Idx(rTeam, 0);
+            if (kind == Restart.Corner) { int k = BestKicker(SkillPass, -1); if (k >= 0) return k; }   // 코너킥: 패스가 가장 좋은 선수
+            if (kind == Restart.Penalty || (kind == Restart.FreeKick && (rDanger || Dp(rTeam, rY) > 0.5f)))   // 페널티킥·상대 진영 프리킥: 슈팅이 가장 좋은 선수
+            { int k = BestKicker(SkillShoot, -1); if (k >= 0) return k; }
             bool setKick = kind == Restart.Corner || (kind == Restart.FreeKick && rDanger);
             int best = -1; float bestScore = float.MaxValue;
             for (int s = 1; s <= 10; s++)
@@ -322,7 +339,7 @@ namespace MyFootballCareer
 
         void ExecuteRestart()
         {
-            var kind = restart; restart = Restart.None;
+            var kind = restart; restart = Restart.None; execKind = kind;
             for (int i = 0; i < 22; i++) rUse[i] = false;
             int team = rTeam;
             carrier = rTaker; var c = dots[carrier];
@@ -385,7 +402,7 @@ namespace MyFootballCareer
                         var wall = Nearest(1 - team, rX, rY, 1);
                         if (r < 0.25 && wall.Count > 0)   // 수비벽에 맞음
                         { var w = dots[wall[0]]; StartFlight(w.x, w.y, 0.25f, KindPass, wall[0], 0.8f); }
-                        else StartShot(c, r < 0.6 ? KindSaved : KindWide, 2.4f);
+                        else StartShot(c, OnTarget(c) ? KindSaved : KindWide, 2.4f);
                         break;
                     }
                     if (rDanger) { var box = BoxMates(team); if (box.Count > 0) { StartPass(carrier, box[rng.Next(box.Count)], 3.2f); break; } }

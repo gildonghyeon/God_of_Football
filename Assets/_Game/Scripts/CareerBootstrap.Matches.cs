@@ -5,6 +5,42 @@ namespace MyFootballCareer
     // 게임 흐름: 환생, 이적, 리그·친선 경기
     public partial class CareerBootstrap
     {
+        // 경기 영상용: 한 팀 1군 11명의 세부 능력치 (포메이션 자리 순서). 나만의 팀은 1군 명단, 다른 팀은 선수단의 주전
+        static float[][] TeamSkills(SaveData save, MatchSettings ms, string teamId)
+        {
+            return SquadSystem.TeamAttrs(save, ms, teamId);
+        }
+
+        // 경기 영상용 우리 팀 이름표: 지금 뛰는 자리의 포지션(포지션 색) + 이름 (자리 순서). youSlot 자리는 내 선수
+        static string[] TeamLabels(SaveData save, MatchSettings ms, string teamId, int youSlot, string youName)
+        {
+            if (save == null || ms == null || string.IsNullOrEmpty(teamId)) return null;
+            var xi = SquadSystem.Starters(save, ms, teamId);
+            if (xi == null) return null;
+            var slots = TacticSystem.Layout(TacticSystem.Of(ms.FindTeam(teamId)).formation);
+            var labels = new string[xi.Length];
+            for (int i = 0; i < xi.Length; i++)
+            {
+                string nm = i == youSlot ? youName : xi[i] != null ? xi[i].name : null;
+                if (string.IsNullOrEmpty(nm)) continue;
+                int dot = nm.IndexOf(". "); if (dot >= 0) nm = nm.Substring(dot + 2);
+                var role = i < slots.Length ? slots[i].role : SquadRole.MF;
+                labels[i] = "<color=#" + ColorUtility.ToHtmlStringRGB(SquadDialog.RoleColor(role)) + ">" + role + "</color> " + nm;
+            }
+            return labels;
+        }
+
+        // 경기 영상용: 한 팀 주전 11명의 이름 (자리 순서)
+        static string[] TeamNames(SaveData save, MatchSettings ms, string teamId)
+        {
+            if (save == null || ms == null || string.IsNullOrEmpty(teamId)) return null;
+            var xi = SquadSystem.Starters(save, ms, teamId);
+            if (xi == null) return null;
+            var n = new string[xi.Length];
+            for (int i = 0; i < xi.Length; i++) n[i] = xi[i] != null ? xi[i].name : null;
+            return n;
+        }
+
         void Rebirth()
         {
             if (blocked || current == null) return;
@@ -88,6 +124,9 @@ namespace MyFootballCareer
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
             ui.ReplayYouKit = current.player.kitColor; ui.ReplayTeamMode = false;
+            ui.ReplayOwnSkills = TeamSkills(current, matchSettings, current.teamId); ui.ReplayOppSkills = TeamSkills(current, matchSettings, record.opponentId);
+            ui.ReplayOwnNames = TeamNames(current, matchSettings, current.teamId); ui.ReplayOppNames = TeamNames(current, matchSettings, record.opponentId);
+            ui.ReplayOwnLabels = TeamLabels(current, matchSettings, current.teamId, record.playerPlayed ? SquadSystem.MySlot(current, matchSettings) : -1, current.player.playerName);
             // 세리머니의 '시즌 N호 골': 이번 경기를 뺀 시즌 골 수
             int seasonGoals = 0, seasonAssists = 0;
             foreach (var sm in current.season.matches) if (sm.played && sm.playerPlayed) { seasonGoals += sm.playerGoals; seasonAssists += sm.playerAssists; }
@@ -126,6 +165,9 @@ namespace MyFootballCareer
             ui.ReplayOwnTactic = TacticSystem.Of(ownTeam); ui.ReplayOppTactic = TacticSystem.Of(matchSettings.FindTeam(record.opponentId));
             ui.ReplayOwnKit = TeamKits.Home(current.teamId); ui.ReplayOppKit = TeamKits.Opponent(current.teamId, record.opponentId);
             ui.ReplayYouKit = current.player.kitColor; ui.ReplayTeamMode = false;
+            ui.ReplayOwnSkills = TeamSkills(current, matchSettings, current.teamId); ui.ReplayOppSkills = TeamSkills(current, matchSettings, record.opponentId);
+            ui.ReplayOwnNames = TeamNames(current, matchSettings, current.teamId); ui.ReplayOppNames = TeamNames(current, matchSettings, record.opponentId);
+            ui.ReplayOwnLabels = TeamLabels(current, matchSettings, current.teamId, record.playerPlayed ? SquadSystem.MySlot(current, matchSettings) : -1, current.player.playerName);
             ui.ShowMatchReplay(record, current.player, ownName, () =>
             {
                 RefreshMoneyUI();

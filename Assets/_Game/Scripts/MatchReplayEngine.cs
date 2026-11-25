@@ -83,8 +83,43 @@ namespace MyFootballCareer
         public Action<int, bool> TeamPassed, TeamTackled;
         public Action<int, bool> TeamShot;   // (팀, 골문으로 간 슛인지)
         public Action<int> KeeperSaved;      // 이 팀 골키퍼가 막음
-        int pendingPassTeam = -1, passFlightTeam = -1;
+        int pendingPassTeam = -1, passFlightTeam = -1, pendingPasser = -1, passFlightFrom = -1;
+        // 선수 22명의 경기 기록 (자리 순서: 0~10 우리 팀, 11~21 상대). 경기 결과의 팀 기록·MVP에 씀
+        public readonly int[] PGoals = new int[22], PAssists = new int[22], PShotsOn = new int[22], PShotsOff = new int[22],
+                              PPassAtt = new int[22], PPassComp = new int[22], PTackleAtt = new int[22], PTackleWon = new int[22], PSaves = new int[22];
+        void Tackled(int idx, bool won)
+        {
+            PTackleAtt[idx]++; if (won) PTackleWon[idx]++;
+            if (TeamTackled != null) TeamTackled(dots[idx].team, won);
+        }
+        // 오프사이드 판정 때 화면에 보여 줄 선: 패스 순간의 오프사이드 라인(엔진 y)과 그때 받는 선수 자리
+        public float OffsideLineY, OffsideX, OffsideY; public int OffsideShown;
+        float offLine; int offTeam;
+        Restart execKind;   // 지금 차고 있는 재개 종류 (프리킥 패스는 오프사이드가 있음)
         public ReplayStats stats = new ReplayStats();
+        // 선수 22명의 능력치 (0~1, 자리 순서: 0~10 우리 팀, 11~21 상대). 슈팅은 유효 슈팅·슛 속도, 패스는 정확도, 드리블은 공 지키기, 수비는 태클
+        public readonly float[] SkillShoot = new float[22], SkillPass = new float[22], SkillDribble = new float[22], SkillDefend = new float[22];
+        // 한 팀의 능력치를 넣음: attrs[자리] = 세부 능력치 6개 (슈팅, 패스, 드리블, 수비, 체력, GK 능력), cap = 능력치 최대값
+        public void SetSkills(int team, float[][] attrs, float cap)
+        {
+            if (attrs == null || cap <= 0f) return;
+            for (int s = 0; s < 11 && s < attrs.Length; s++)
+            {
+                var a = attrs[s]; if (a == null || a.Length < 4) continue;
+                int i = Idx(team, s);
+                SkillShoot[i] = Mathf.Clamp01(a[0] / cap); SkillPass[i] = Mathf.Clamp01(a[1] / cap);
+                SkillDribble[i] = Mathf.Clamp01(a[2] / cap); SkillDefend[i] = Mathf.Clamp01(a[3] / cap);
+            }
+        }
+        float ShootN(int i) { return i == YouIdx ? stats.shootN : SkillShoot[i]; }
+        float PassN(int i) { return i == YouIdx ? stats.passAccuracy : SkillPass[i]; }
+        float DribbleN(int i) { return i == YouIdx ? stats.dribbleN : SkillDribble[i]; }
+        // 골문으로 가는 슛일 확률: 슈팅 능력이 높을수록 (헤더는 조금 낮음)
+        bool OnTarget(ReplayDot shooter, bool header = false)
+        {
+            float s = ShootN(Idx(shooter.team, shooter.slot));
+            return rng.NextDouble() < (header ? 0.15f + 0.55f * s : 0.2f + 0.65f * s);
+        }
 
         readonly System.Random rng;
         readonly List<ReplayEvent> pending;
@@ -108,6 +143,7 @@ namespace MyFootballCareer
         public MatchReplayEngine(List<ReplayEvent> events, int youSlot, System.Random rng, TeamTactic ours, TeamTactic theirs)
         {
             this.rng = rng; this.youSlot = youSlot;
+            for (int i = 0; i < 22; i++) { SkillShoot[i] = SkillPass[i] = SkillDribble[i] = SkillDefend[i] = 0.5f; }   // 능력치를 모르면 보통
             pending = new List<ReplayEvent>(events);
             int offsides = rng.NextDouble() < 0.5 ? 2 : 3;
             for (int k = 0; k < offsides; k++) offsideMoments.Add(Rand(5f, 80f));
@@ -203,6 +239,7 @@ namespace MyFootballCareer
             UpdateBall(dt);
             UpdateRuns(dt);
             ComputeTargets(dt);
+            if (script != null && phase != Phase.After) KeepSceneOnside();   // 득점 장면에서도 오프사이드 자리에 서지 않게
             for (int i = 0; i < dots.Length; i++) MoveDot(dots[i], dt);
             if (script != null) UpdateScript(dt);
         }

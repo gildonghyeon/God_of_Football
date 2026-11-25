@@ -15,10 +15,28 @@ namespace MyFootballCareer
         static readonly Color MeRow = new Color(.42f, .33f, .10f, 1f);
         static readonly Color Card = new Color(.13f, .18f, .28f, 1f);
 
-        static Color RoleColor(SquadRole r) { return r == SquadRole.GK ? GkColor : r == SquadRole.DF ? DfColor : r == SquadRole.MF ? MfColor : FwColor; }
+        public static Color RoleColor(SquadRole r) { return r == SquadRole.GK ? GkColor : r == SquadRole.DF ? DfColor : r == SquadRole.MF ? MfColor : FwColor; }
 
         // onTap: 선수 줄을 누르면 (세부 능력치 보기)
         public static void Build(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap = null)
+        {
+            Summary(parent, font, v);
+            // 전술: 포메이션 · 스타일 + 설명, 그리고 포메이션 그림
+            if (v.tactic != null)
+            {
+                var t = Block(parent, 30);
+                Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .99f, 1f, TextAnchor.MiddleLeft);
+                if (v.layout != null) Pitch(parent, font, v, onTap);
+            }
+            Header(parent, font, "1군  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);
+            Grid(parent, font, v.starters, true, onTap);
+            Header(parent, font, "교체", false);
+            Grid(parent, font, v.subs, false, onTap);
+            if (onTap != null) { var hint = Block(parent, 28); Label(hint, font, "포메이션 그림이나 목록에서 선수를 누르면 세부 능력치를 볼 수 있습니다", 15, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter); }
+        }
+
+        // 팀 요약 카드(리그·팀 전력·요구 평점·1군 평균·평균 나이)와 유니폼 (선수단 창, 나만의 팀 팀관리/전술)
+        public static void Summary(Transform parent, Font font, SquadView v)
         {
             // 팀 요약 카드: 리그 + 숫자 4개
             var card = Block(parent, 74);
@@ -44,19 +62,6 @@ namespace MyFootballCareer
                 Label(kit, font, "유니폼", 15, PixelTheme.TextDim, .44f, .56f, .98f, .86f, TextAnchor.MiddleLeft);
                 Fit(Label(kit, font, TeamKits.Name(v.teamId), 22, PixelTheme.Accent, .44f, .18f, .98f, .58f, TextAnchor.MiddleLeft), 13);
             }
-
-            // 전술: 포메이션 · 스타일 + 설명, 그리고 포메이션 그림
-            if (v.tactic != null)
-            {
-                var t = Block(parent, 30);
-                Label(t, font, TacticSystem.Describe(v.tactic), 20, PixelTheme.Accent, .01f, 0f, .99f, 1f, TextAnchor.MiddleLeft);
-                if (v.layout != null) Pitch(parent, font, v, onTap);
-            }
-            Header(parent, font, "1군  " + (v.tactic != null ? TacticSystem.FormationName(v.tactic.formation) : ""), true);
-            Grid(parent, font, v.starters, true, onTap);
-            Header(parent, font, "교체", false);
-            Grid(parent, font, v.subs, false, onTap);
-            if (onTap != null) { var hint = Block(parent, 28); Label(hint, font, "포메이션 그림이나 목록에서 선수를 누르면 세부 능력치를 볼 수 있습니다", 15, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter); }
         }
 
         // 포메이션 그림: 잔디 위에 11자리 점과 이름 (아래가 우리 골대, 위로 공격)
@@ -95,9 +100,9 @@ namespace MyFootballCareer
                 }
                 else if (wrong) Point(box, OffRed, x, y, 40f, 40f);   // 맞지 않는 자리: 빨간 테두리
                 float size = m > 0 ? 38f : 34f;
-                var dotColor = r.me ? PixelTheme.Accent : RoleColor(s.role);
+                var dotColor = RoleColor(s.role);   // 내 선수도 다른 선수처럼 포지션 색
                 var dot = Point(box, dotColor, x, y, size, size);
-                Label(dot.rectTransform, font, s.role.ToString(), 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
+                Label(dot.rectTransform, font, r.number > 0 ? r.number.ToString() : s.role.ToString(), r.number > 0 ? 16 : 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);   // 등번호 (모르면 포지션)
                 string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
                 var name = Point(box, m > 0 ? pick : new Color(0f, 0f, 0f, .45f), x, y - 36f / PitchH, 136f, 22f);   // 본래 포지션 + 이름 + 능력 (고르면 이름표도 같은 색)
                 // 이름 왼쪽: 선수 본래 포지션 (포지션 색 글자). 고른 이름표(밝은 바탕) 위에서는 어두운 글자
@@ -105,8 +110,8 @@ namespace MyFootballCareer
                 string ability = m > 0 ? "<color=#10141E>" + Mathf.RoundToInt(r.rating) + "</color>"
                                : wrong ? "<color=#F26060>" + Mathf.RoundToInt(r.rating) + "</color>"
                                : "<color=#FBCC47>" + Mathf.RoundToInt(r.rating) + "</color>";
-                var nameColor = m > 0 ? new Color(.06f, .08f, .12f, 1f) : r.me ? PixelTheme.Accent : Color.white;
-                Fit(Label(name.rectTransform, font, homeText + (r.me ? "나" : surname) + " " + ability, 15, nameColor, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
+                var nameColor = m > 0 ? new Color(.06f, .08f, .12f, 1f) : Color.white;
+                Fit(Label(name.rectTransform, font, homeText + surname + " " + ability, 15, nameColor, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
                 if (m > 0)   // 고른 순서 (1, 2) 표시
                 {
                     var tag = Point(box, new Color(.06f, .08f, .12f, 1f), x + 22f / PitchW, y + 20f / PitchH, 20f, 20f);

@@ -10,6 +10,7 @@ namespace MyFootballCareer
         public int id;
         public string name;
         public SquadRole role;          // 선수 포지션
+        public int number;              // 등번호
         public SquadRole slotRole;      // 주전이면 서 있는 자리의 포지션
         public SlotKind kind;           // 주전이면 자리 역할 (센터백, 윙어…)
         public float x, depth;          // 주전이면 경기장 위 위치 (가로 0~68m, 우리 골대에서 깊이 0~1)
@@ -24,6 +25,7 @@ namespace MyFootballCareer
         public Formation formation;
         public TacticStyle style;
         public float strength, level;
+        public SquadView summary;               // 팀 요약 카드와 유니폼 (선수단 창과 같은 내용)
         public List<ClubPlayerView> starters = new List<ClubPlayerView>(), bench = new List<ClubPlayerView>();
         public int selected = int.MinValue;    // 고른 선수 (없으면 MinValue)
         public int selected2 = int.MinValue;   // 두 번째로 고른 선수 (두 명이면 비교·교체)
@@ -48,21 +50,23 @@ namespace MyFootballCareer
             Vector2 keep = content != null ? content.anchoredPosition : Vector2.zero;
             CloseDialog();
             Clear();
-            Label("팀관리/전술", 30, 54).color = PixelTheme.Accent;
-            Label(v.name + " · 전력 " + v.strength.ToString("0") + " · 1군 평균 " + v.level.ToString("0"), 20, 34).color = PixelTheme.Text;
+            Label(v.name + " (팀관리/전술)", 30, 54).color = PixelTheme.Accent;
+            currentParent = Section(content, "", true);
+            if (v.summary != null) SquadDialog.Summary(Parent, font, v.summary);   // 리그·팀 전력·요구 평점·1군 평균·평균 나이, 유니폼
 
-            currentParent = Section(content, "포메이션", true);
-            ChoiceRow((Formation[])Enum.GetValues(typeof(Formation)), f => TacticSystem.FormationName(f), f => f == v.formation, f => { if (OnClubFormation != null) OnClubFormation(f); });
-            currentParent = Section(content, "전술 스타일", true);
-            ChoiceRow((TacticStyle[])Enum.GetValues(typeof(TacticStyle)), s => TacticSystem.StyleName(s), s => s == v.style, s => { if (OnClubStyle != null) OnClubStyle(s); });
-
-            currentParent = Section(content, "1군  " + TacticSystem.FormationName(v.formation), true);
+            // 포메이션 그림 위: 포메이션 · 전술 버튼 (누르면 고를 수 있는 목록)
+            var tacticRow = NewRect("TacticRow", Parent); Height(tacticRow.gameObject, 60);
+            var th = tacticRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+            th.spacing = 8; th.childControlWidth = true; th.childControlHeight = true; th.childForceExpandWidth = true; th.childForceExpandHeight = true;
+            PixelButton(TacticSystem.FormationName(v.formation) + "  ▾", () => ShowFormationPicker(v), tacticRow, 60f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).GetComponentInChildren<Text>().fontSize = 24;
+            PixelButton(TacticSystem.StyleName(v.style) + "  ▾", () => ShowStylePicker(v), tacticRow, 60f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).GetComponentInChildren<Text>().fontSize = 24;
             HintBar(v.selected == int.MinValue ? 0 : v.selected2 == int.MinValue ? 1 : 2);
             // 포메이션 그림 (선수단 창과 같은 그림, 점을 눌러도 고를 수 있음)
             var pv = new SquadView { layout = TacticSystem.Layout(v.formation) };
-            foreach (var p in v.starters) pv.starters.Add(new SquadRowView { id = p.id, name = p.name, role = p.slotRole, rating = p.effective });   // 그 자리에서 내는 실력
+            foreach (var p in v.starters) pv.starters.Add(new SquadRowView { id = p.id, name = p.name, role = p.slotRole, rating = p.effective, number = p.number });   // 그 자리에서 내는 실력
             SquadDialog.Pitch(Parent, font, pv, r => { if (OnClubTap != null) OnClubTap(r.id); }, r => Mark(v, r.id),
                               r => { var p = v.starters.Find(o => o.id == r.id); return p != null ? p.role : r.role; });   // 본래 포지션
+            currentParent = Section(content, "1군  " + TacticSystem.FormationName(v.formation), true);
             ListHeader();
             PlayerGrid(SortByRole(v.starters, true), v, true);
 
@@ -70,7 +74,7 @@ namespace MyFootballCareer
             ListHeader();
             PlayerGrid(SortByRole(v.bench), v, false);
             currentParent = null;
-            PixelButton("◀ 나만의 팀으로", () => { if (OnClubTeamBack != null) OnClubTeamBack(); }, content, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("닫기", () => { if (OnClubTeamBack != null) OnClubTeamBack(); }, content, 72f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             status = Label("", 18, 36); status.color = PixelTheme.TextDim;
 
             ShowSelectionBar(v);
@@ -186,6 +190,50 @@ namespace MyFootballCareer
             foreach (var p in v.starters) if (p.id == id) return p;
             foreach (var p in v.bench) if (p.id == id) return p;
             return null;
+        }
+
+        // ---------- 포메이션 · 전술 고르기 창 ----------
+        void ShowFormationPicker(ClubTeamView v)
+        {
+            var inner = BuildDialog("포메이션", "", 0f);
+            foreach (Formation f in Enum.GetValues(typeof(Formation)))
+            {
+                var pick = f; bool on = f == v.formation;
+                PixelButton(TacticSystem.FormationName(f), () => { CloseDialog(); if (!on && OnClubFormation != null) OnClubFormation(pick); },
+                            inner, 68f, on ? PixelTheme.AccentFill : PixelTheme.QuietFill, on ? PixelTheme.Accent : PixelTheme.QuietEdge);
+            }
+            Note(inner, "1군 11명은 새 포메이션의 자리에 맞게 다시 섭니다", 16, 30);
+            PixelButton("닫기", () => CloseDialog(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
+        void ShowStylePicker(ClubTeamView v)
+        {
+            var inner = BuildDialog("전술", "", 0f);
+            foreach (TacticStyle s in Enum.GetValues(typeof(TacticStyle)))
+            {
+                var pick = s; bool on = s == v.style;
+                PixelButton(TacticSystem.StyleName(s), () => { CloseDialog(); if (!on && OnClubStyle != null) OnClubStyle(pick); },
+                            inner, 64f, on ? PixelTheme.AccentFill : PixelTheme.QuietFill, on ? PixelTheme.Accent : PixelTheme.QuietEdge);
+                Note(inner, StyleNote(s), 15, 26);
+            }
+            PixelButton("닫기", () => CloseDialog(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+        }
+
+        void Note(Transform parent, string text, int size, float height)
+        {
+            var t = TextNode(text, parent, size); Height(t.gameObject, height); t.color = PixelTheme.TextDim; t.alignment = TextAnchor.MiddleCenter;
+        }
+
+        static string StyleNote(TacticStyle s)
+        {
+            switch (s)
+            {
+                case TacticStyle.Counter: return "내려섰다가 공을 빼앗으면 빠르게 앞으로 달려 나갑니다";
+                case TacticStyle.HighPress: return "높은 라인에서 압박해 공을 바로 되찾습니다";
+                case TacticStyle.LowBlock: return "깊이 내려서서 골문 앞 공간을 막습니다";
+                case TacticStyle.Wing: return "측면으로 벌린 뒤 크로스로 마무리합니다";
+                default: return "짧은 패스로 공을 오래 지키며 기회를 만듭니다";
+            }
         }
 
         // ---------- 선수 목록 (선수단 창과 같은 모양: 두 명씩 한 줄, 포지션 배지 · 이름 · 능력) ----------

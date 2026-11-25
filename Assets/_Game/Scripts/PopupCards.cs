@@ -294,7 +294,7 @@ namespace MyFootballCareer
         public static void PlayerDetail(Transform p, Font f, SquadRowView r, string division)
         {
             Hero(p, f, Ko.RoleTag(r.role) + (r.me ? " · 내 선수" : r.legend ? " · 내가 키운 선수 ★" : ""), r.name, r.me || r.legend ? PixelTheme.Accent : PixelTheme.Text,
-                 (r.age > 0 ? r.age + "세 · " : "") + "능력 " + Mathf.RoundToInt(r.rating));
+                 (r.number > 0 ? "등번호 " + r.number + " · " : "") + (r.age > 0 ? r.age + "세 · " : "") + "능력 " + Mathf.RoundToInt(r.rating));
             if (r.attrs != null)
             {
                 Caption(p, f, "능력치");

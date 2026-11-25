@@ -12,6 +12,7 @@ namespace MyFootballCareer
         public int hairColor, skinTone, bootColor, kitColor;
         public float shooting, passing, dribbling, defending, stamina;
         public float goalkeeping;       // GK 능력
+        public int number;              // 등번호 (선수 시절 번호, 0이면 없음)
         public float rating;            // 은퇴할 때 포지션 평점 (0~100)
         public int seasons, goals, assists, apps, trophies, age, careerNumber;
         public string lastTeam = "";    // 마지막 소속 팀
@@ -88,7 +89,7 @@ namespace MyFootballCareer
             {
                 name = p.playerName, position = p.position, trait = p.trait,
                 hairColor = p.hairColor, skinTone = p.skinTone, bootColor = p.bootColor, kitColor = p.kitColor,
-                shooting = p.shooting, passing = p.passing, dribbling = p.dribbling, defending = p.defending, stamina = p.stamina, goalkeeping = p.goalkeeping,
+                shooting = p.shooting, passing = p.passing, dribbling = p.dribbling, defending = p.defending, stamina = p.stamina, goalkeeping = p.goalkeeping, number = p.number,
                 rating = SeasonSystem.PlayerRating(save, ms, career), careerNumber = careerNo,
                 lastTeam = SeasonSystem.TeamName(save, ms), seasons = done.Count, age = 18 + done.Count,
                 history = done
@@ -270,7 +271,7 @@ namespace MyFootballCareer
             return new RetiredPlayer
             {
                 name = lg.name, position = lg.position, trait = lg.trait, hairColor = lg.hairColor, skinTone = lg.skinTone, bootColor = lg.bootColor, kitColor = lg.kitColor,
-                shooting = lg.shooting, passing = lg.passing, dribbling = lg.dribbling, defending = lg.defending, stamina = lg.stamina, goalkeeping = lg.goalkeeping, rating = lg.rating,
+                shooting = lg.shooting, passing = lg.passing, dribbling = lg.dribbling, defending = lg.defending, stamina = lg.stamina, goalkeeping = lg.goalkeeping, rating = lg.rating, number = lg.number,
                 seasons = lg.seasons, goals = lg.goals, assists = lg.assists, apps = lg.apps, trophies = lg.trophies, age = lg.age, careerNumber = lg.careerNumber,
                 lastTeam = lg.lastTeam, history = new List<SeasonSummary>(lg.history ?? new List<SeasonSummary>())
             };
@@ -299,7 +300,7 @@ namespace MyFootballCareer
 
         static SquadPlayer LegendPlayer(RetiredPlayer lg)
         {
-            return new SquadPlayer { id = -1000 - lg.careerNumber, name = lg.name, role = RoleOf(lg.position), age = lg.age, rating = LegendRating(lg) };
+            return new SquadPlayer { id = -1000 - lg.careerNumber, name = lg.name, role = RoleOf(lg.position), age = lg.age, rating = LegendRating(lg), number = lg.number };   // 선수 시절 등번호 (겹치면 SquadSystem이 다른 번호로)
         }
 
         // 내가 키운 선수의 능력: 실제 세부 능력치를 자기 포지션 비중으로 평균 (모두 100이면 100)

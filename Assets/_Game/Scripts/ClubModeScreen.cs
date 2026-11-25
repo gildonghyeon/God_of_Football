@@ -130,7 +130,7 @@ namespace MyFootballCareer
         {
             var b = Box(p, enabled ? Tile : new Color(.09f, .11f, .16f, 1f), 200);
             Color dim = shadow ? new Color(0f, 0f, 0f, .55f) : enabled ? Color.white : new Color(1f, 1f, 1f, .35f);
-            if (art != null) { var img = MatchResultDialog.Img(b, dim, .03f, .05f, .30f, .95f); img.sprite = art; img.preserveAspect = true; }
+            if (art != null) { var img = MatchResultDialog.Img(b, dim, .05f, .15f, .28f, .85f); img.sprite = art; img.preserveAspect = true; }   // 나만의 팀 카드의 선수 그림과 같은 크기
             else if (kit > 0) { var k = TeamKits.PreviewImage(b, kit, .05f, .15f, .28f, .85f); if (k != null) k.color = dim; }
             else L(b, f, "?", 64, PixelTheme.TextDim, .03f, .05f, .30f, .95f, TextAnchor.MiddleCenter, 30);
             L(b, f, mode, 18, enabled ? PixelTheme.TextDim : new Color(.5f, .5f, .55f, 1f), .34f, .74f, .97f, .94f, TextAnchor.MiddleLeft, 12);

@@ -10,7 +10,7 @@ namespace MyFootballCareer
         void StartFlight(float tx, float ty, float dur, int kind, int recv, float zPeak)
         {
             youPassFlight = pendingYouPass; pendingYouPass = false;
-            passFlightTeam = pendingPassTeam; pendingPassTeam = -1;
+            passFlightTeam = pendingPassTeam; pendingPassTeam = -1; passFlightFrom = pendingPasser; pendingPasser = -1;
             flying = true;
             fFx = ballX; fFy = ballY; fTx = tx; fTy = ty; fT = 0f; fDur = dur; fKind = kind; fRecv = recv; fZ = zPeak; fLong = false;
             if (carrier >= 0) lastPoss = dots[carrier].team;
@@ -21,7 +21,7 @@ namespace MyFootballCareer
         void StartPass(int from, int to, float z = -1f, float speed = -1f)
         {
             pendingYouPass = from == YouIdx && YouIdx >= 0;   // 내 선수의 패스 (경기 화면의 개인 패스 기록)
-            pendingPassTeam = dots[from].team;                // 팀 패스 기록
+            pendingPassTeam = dots[from].team; pendingPasser = from;   // 팀·선수 패스 기록
             var r = dots[to];
             float tx = Mathf.Clamp(r.x + r.vx * 0.5f, 1f, W - 1f);
             float ty = Mathf.Clamp(r.y + r.vy * 0.5f, 1f, L - 1f);
@@ -32,7 +32,7 @@ namespace MyFootballCareer
             if (script == null && restart == Restart.None && !executing && dots[from].slot != 0)
             {
                 // 빗나간 패스: 터치라인 밖이면 상대 스로인, 골라인 밖이면 상대 골킥
-                float outP = (dist > 28f ? 0.09f : 0.05f) + (Mathf.Abs(tx - 34f) > 22f ? 0.16f : 0f);
+                float outP = ((dist > 28f ? 0.09f : 0.05f) + (Mathf.Abs(tx - 34f) > 22f ? 0.16f : 0f)) * (1.6f - PassN(from));   // 패스가 좋을수록 덜 나감
                 if (rng.NextDouble() < outP)
                 {
                     int passer = dots[from].team;
@@ -51,7 +51,8 @@ namespace MyFootballCareer
         // 밖으로 나가는 공. 끝나면 next 재개를 team이 합니다.
         void StartOut(float tx, float ty, Restart next, int team, float dur, float z, int recv = -1, bool scripted = false)
         {
-            StartFlight(tx, ty, dur, KindOut, recv, z);
+            float od = Mathf.Sqrt((tx - ballX) * (tx - ballX) + (ty - ballY) * (ty - ballY));
+            StartFlight(tx, ty, Mathf.Max(dur, od / 16f), KindOut, recv, z);   // 밖으로 굴러가는 공도 보통 패스 정도의 속도 (짧은 시간에 휙 날아가지 않게)
             outKind = next; outTeam = team; outScripted = scripted;
         }
 
@@ -73,6 +74,7 @@ namespace MyFootballCareer
             var r = dots[best];
             float dist = DistTo(c, r.x, r.y);
             MarkOffside(best);
+            pendingPassTeam = c.team; pendingPasser = from;   // 긴 공도 패스 기록
             StartFlight(Mathf.Clamp(r.x + Rand(-3f, 3f), 2f, W - 2f), Mathf.Clamp(r.y + Rand(-3f, 3f), 2f, L - 2f), Mathf.Max(1f, dist / 20f), KindPass, best, 7f);
             fLong = true;
             return true;
@@ -84,6 +86,9 @@ namespace MyFootballCareer
         // outcome: KindGoal / KindSaved / KindWide
         void StartShot(ReplayDot shooter, int outcome, float z = 1.6f)
         {
+            int si = Idx(shooter.team, shooter.slot);
+            if (outcome == KindWide) PShotsOff[si]++; else PShotsOn[si]++;
+            if (outcome == KindSaved) PSaves[Idx(1 - shooter.team, 0)]++;
             if (TeamShot != null) TeamShot(shooter.team, outcome != KindWide);
             if (outcome == KindSaved && KeeperSaved != null) KeeperSaved(1 - shooter.team);
             float goalY = shooter.team == 0 ? 0f : L;
@@ -91,9 +96,10 @@ namespace MyFootballCareer
             if (outcome == KindGoal) shotGx = 34f + shotSide * 3f;
             else if (outcome == KindSaved) shotGx = 34f + shotSide * Rand(1.5f, 3.5f);
             else shotGx = 34f + shotSide * Rand(4.8f, 9f);
-            bool byYou = YouIdx >= 0 && shooter == dots[YouIdx];
             float ty = outcome == KindSaved ? (shooter.team == 0 ? 1.6f : L - 1.6f) : goalY;   // 막히는 슛: 골키퍼가 몸을 날린 자리에서 막힘
-            StartFlight(shotGx, ty, byYou ? 0.5f - 0.15f * stats.shootN : 0.5f, outcome, -1, z);   // 슈팅이 좋을수록 빠른 슛
+            // 슛 속도: 22~34 m/s (슈팅이 좋을수록 빠름). 패스(17)·크로스(14)보다 늘 빠름
+            float sd = Mathf.Sqrt((shotGx - ballX) * (shotGx - ballX) + (ty - ballY) * (ty - ballY));
+            StartFlight(shotGx, ty, Mathf.Clamp(sd / (22f + 12f * ShootN(Idx(shooter.team, shooter.slot))), 0.3f, 1.3f), outcome, -1, z);
         }
 
         // 패스 받을 동료 고르기. 스타일마다 다름:
@@ -189,17 +195,17 @@ namespace MyFootballCareer
                         var o = dots[Idx(1 - d.team, s)];
                         float dd = Mathf.Sqrt((o.x - d.x) * (o.x - d.x) + (o.y - d.y) * (o.y - d.y));
                         if (stagedRunner >= 0) break;   // 오프사이드 장면: 침투 패스를 기다리는 잠깐 동안은 태클하지 않음
-                        if (dd < 1.5f && rng.NextDouble() < 0.5 * dt * (carrier == YouIdx ? 1.4f - stats.dribbleN : 1f))
+                        if (dd < 1.5f && rng.NextDouble() < 0.5 * dt * (1.4f - DribbleN(carrier)) * (0.5f + SkillDefend[Idx(1 - d.team, s)]))   // 드리블이 좋으면 덜 뺏기고, 수비가 좋으면 더 뺏음
                         {
-                            if (rng.NextDouble() < FoulChance) { if (TeamTackled != null) TeamTackled(o.team, false); Foul(d); break; }   // 거친 태클은 파울 → 프리킥
+                            if (rng.NextDouble() < FoulChance) { Tackled(Idx(1 - d.team, s), false); Foul(d); break; }   // 거친 태클은 파울 → 프리킥
                             if (Mathf.Abs(d.x - 34f) > 22f && rng.NextDouble() < 0.5)   // 터치라인 근처: 태클한 공이 밖으로 → 스로인
                             {
-                                if (TeamTackled != null) TeamTackled(o.team, false);   // 공은 밖으로 → 상대 스로인 (성공 아님)
+                                Tackled(Idx(1 - d.team, s), false);   // 공은 밖으로 → 상대 스로인 (성공 아님)
                                 lastPoss = o.team; carrier = -1;
                                 StartOut(d.x < 34f ? -1.5f : W + 1.5f, d.y + Rand(-3f, 3f), Restart.ThrowIn, d.team, 0.4f, 0.5f);
                                 break;
                             }
-                            if (TeamTackled != null) TeamTackled(o.team, true);
+                            Tackled(Idx(1 - d.team, s), true);
                             carrier = Idx(1 - d.team, s); decideT = Rand(0.7f, 1.4f); break;
                         }
                     }
@@ -233,7 +239,7 @@ namespace MyFootballCareer
                 float shootP = Mathf.Min(0.92f, 0.5f + (depth - st.shotDepth) * 3f + 0.2f * finalPasses);
                 if (rng.NextDouble() < shootP)
                 {
-                    StartShot(c, rng.NextDouble() < 0.5 ? KindSaved : KindWide);
+                    StartShot(c, OnTarget(c) ? KindSaved : KindWide);   // 슈팅 능력이 높을수록 골문으로
                     return;
                 }
             }
@@ -271,7 +277,8 @@ namespace MyFootballCareer
                 int r = ChoosePass(c);
                 if (r >= 0)
                 {
-                    badPass = carrier == YouIdx && rng.NextDouble() >= stats.passAccuracy;   // 패스 능력만큼만 정확함
+                    badPass = carrier == YouIdx ? rng.NextDouble() >= stats.passAccuracy   // 패스 능력만큼만 정확함
+                                                : rng.NextDouble() < 0.22f * (1f - PassN(carrier));   // 다른 선수도 패스가 나쁠수록 자주 빗나감
                     if (depth > 0.66f) finalPasses++;
                     StartPass(carrier, r);
                     return;
@@ -285,10 +292,13 @@ namespace MyFootballCareer
         {
             bool mine = youPassFlight && (fKind == KindPass || fKind == KindOut);
             int passTeam = (fKind == KindPass || fKind == KindOut) ? passFlightTeam : -1;
-            youPassFlight = false; passFlightTeam = -1;
+            int passer = passTeam >= 0 ? passFlightFrom : -1;
+            youPassFlight = false; passFlightTeam = -1; passFlightFrom = -1;
             EndFlightCore();
             if (mine && YouPassed != null) YouPassed(!flying && carrier >= 0 && carrier != YouIdx && dots[carrier].team == 0);
-            if (passTeam >= 0 && TeamPassed != null) TeamPassed(passTeam, !flying && carrier >= 0 && dots[carrier].team == passTeam);
+            bool passOk = !flying && carrier >= 0 && dots[carrier].team == passTeam;
+            if (passer >= 0) { PPassAtt[passer]++; if (passOk) PPassComp[passer]++; }
+            if (passTeam >= 0 && TeamPassed != null) TeamPassed(passTeam, passOk);
         }
 
         void EndFlightCore()
@@ -324,6 +334,7 @@ namespace MyFootballCareer
                 if (script == null)   // 오프사이드: 받는 선수가 있던 자리에서 상대 프리킥
                 {
                     OffsideCount++; offsideCall = true;
+                    OffsideLineY = DepthY(offTeam, offLine); OffsideX = offX; OffsideY = offY; OffsideShown++;   // 화면: 패스 순간의 오프사이드 라인
                     StartRestart(Restart.FreeKick, 1 - dots[fRecv].team, offX, offY, false);
                     return;
                 }
@@ -343,7 +354,7 @@ namespace MyFootballCareer
                 if (script == null && fLong && nearDist < reach && rng.NextDouble() < 0.2)   // 공중볼 경합 중 파울
                 { carrier = -1; ballX = fTx; ballY = fTy; Foul(dots[fRecv]); return; }
                 bool lost = script == null && (badPass || (nearDist < reach && rng.NextDouble() < steal));   // 가로채기
-                if (script == null && nearDist < reach && TeamTackled != null) TeamTackled(1 - team, lost);   // 패스를 끊으러 붙음: 가로채면 성공
+                if (script == null && nearDist < reach) Tackled(near, lost);   // 패스를 끊으러 붙음: 가로채면 성공
                 if (lost && nearDist > 2.5f)
                 {
                     // 가로챌 상대가 떨어져 있으면: 빗나간 공이 그 선수 쪽으로 굴러가고, 그 선수가 달려와 잡음
@@ -364,6 +375,11 @@ namespace MyFootballCareer
             {
                 ballX = fTx; ballY = shooterTeam == 0 ? -1.2f : L + 1.2f; ballZ = 0f;   // 골망 안
                 phase = Phase.After; phaseT = 0f;
+                if (script != null && script.scorerSlot >= 0)
+                {
+                    PGoals[Idx(scriptTeam, script.scorerSlot)]++;
+                    if (script.assisterSlot >= 0) PAssists[Idx(scriptTeam, script.assisterSlot)]++;
+                }
                 StartCelebration();
                 if (GoalScored != null && script != null) GoalScored(script);
             }
@@ -423,7 +439,7 @@ namespace MyFootballCareer
             if (r < 0.75)   // 헤더
             {
                 carrier = recv;
-                StartShot(a, rng.NextDouble() < 0.45 ? KindSaved : KindWide, 0.7f);
+                StartShot(a, OnTarget(a, true) ? KindSaved : KindWide, 0.7f);
                 return true;
             }
             return false;

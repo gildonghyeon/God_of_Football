@@ -63,8 +63,7 @@ namespace MyFootballCareer
             currentParent = Section(content, "다음 경기", true);
             ClubModeScreen.Next(Parent, font, v, v.nextOpponentId != null ? (Action)(() => { if (OnShowSquad != null) OnShowSquad(v.nextOpponentId); }) : null);
             PixelButton(v.complete ? "다음 시즌 시작" : "경기 시작", () => { if (OnClubPlay != null) OnClubPlay(); }, Parent, 84f);
-            PixelButton("팀관리/전술", () => { if (OnClubTeam != null) OnClubTeam(); }, Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);
-            PixelButton("선수단 기록 보기", () => { if (OnClubSquad != null) OnClubSquad(); }, Parent, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            PixelButton("팀관리/전술", () => { if (OnClubTeam != null) OnClubTeam(); }, Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge);   // 선수단 기록과 1군·전술 관리를 한 화면에서
             currentParent = Section(content, "순위표 · " + v.division, true);
             ClubModeScreen.Table(Parent, font, v);
             PixelButton("팀 선수단 보기", () => { if (OnOpenSquads != null) OnOpenSquads(); }, Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
@@ -143,8 +142,16 @@ namespace MyFootballCareer
             Label("진행 상황은 자동으로 저장됩니다.\n(행동할 때마다, 30초마다, 앱을 닫거나 내릴 때)", 20, 64).color = PixelTheme.TextDim;
             Label("오프라인 보상은 최대 " + trainingSettings.offlineCapHours.ToString("0.#") + "시간까지 인정됩니다.", 20, 30).color = PixelTheme.TextDim;
             currentParent = Section(page, "초기화", true);
-            Label("지금 선수와 진행 상황을 지우고 처음부터 시작합니다.", 20, 30).color = PixelTheme.TextDim;
-            PixelButton("저장 초기화", () => { if (OnResetSave != null) OnResetSave(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            if (clubMode)   // 나만의 팀만 초기화 (선수 키우기는 그대로)
+            {
+                Label("나만의 팀(선수단·시즌·기록)을 지웁니다. 선수 키우기는 그대로입니다.", 20, 56).color = PixelTheme.TextDim;
+                PixelButton("나만의 팀 초기화", () => { if (OnResetClub != null) OnResetClub(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            }
+            else            // 선수 키우기만 초기화 (나만의 팀은 그대로)
+            {
+                Label("지금 선수와 진행 상황을 지우고 새 선수로 시작합니다. 나만의 팀은 그대로입니다.", 20, 56).color = PixelTheme.TextDim;
+                PixelButton("선수 키우기 초기화", () => { if (OnResetSave != null) OnResetSave(); }, Parent, 68f, PixelTheme.DangerFill, PixelTheme.DangerEdge);
+            }
         }
 
         // 나만의 팀 창단 창: 팀 이름, 유니폼, 포메이션, 스타일

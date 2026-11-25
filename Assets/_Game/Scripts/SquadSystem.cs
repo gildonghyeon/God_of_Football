@@ -11,6 +11,7 @@ namespace MyFootballCareer
     {
         public int id;
         public string name;
+        public int number;      // 등번호 1~99 (팀 안에서 겹치지 않음)
         public SquadRole role;
         public int age;
         public float rating;
@@ -32,6 +33,7 @@ namespace MyFootballCareer
         public int id;               // 선수 번호 (내 선수는 0)
         public float[] attrs;        // 세부 능력치 6개 (AttributeKind 순서). 내 선수·은퇴 선수는 실제 값, 나머지는 능력과 포지션으로 정한 값
         public bool legend;          // 내가 키운 선수
+        public int number;           // 등번호 (0이면 모름)
     }
 
     public class SquadView
@@ -115,7 +117,44 @@ namespace MyFootballCareer
                 save.squads.Add(squad);
                 made = true;
             }
+            foreach (var s in save.squads)   // 등번호: 없거나 겹치면 정함 (선수 키우기의 내 팀은 내 번호를 비워 둠)
+                AssignNumbers(s, s.teamId == save.teamId && !save.teamMode && save.player != null ? save.player.number : 0);
             return made;
+        }
+
+        // ---------- 등번호 ----------
+        // 포지션마다 흔히 쓰는 번호부터 (골키퍼 1, 수비 2~5, 미드필더 6·8·10, 공격 9·11 …)
+        static readonly int[][] NumberPrefs =
+        {
+            new[] { 1, 13, 12, 25, 31, 30, 99 },                                  // GK
+            new[] { 2, 3, 4, 5, 15, 12, 14, 22, 23, 24, 26, 28, 32, 33 },        // DF
+            new[] { 8, 6, 10, 7, 14, 16, 18, 20, 17, 21, 23, 34 },               // MF
+            new[] { 9, 11, 7, 10, 19, 20, 17, 27, 29, 18, 21 },                  // FW
+        };
+
+        // 그 포지션의 대표 번호 (새 선수를 만들 때 처음 보이는 번호)
+        public static int DefaultNumber(Position p) { return NumberPrefs[(int)ClubSystem.RoleOf(p)][0]; }
+
+        // 팀 안에서 등번호가 겹치지 않게: 내가 키운 선수와 능력이 높은 선수부터 지금 번호를 지키고, 없거나 겹치면 포지션에 맞는 빈 번호
+        static void AssignNumbers(TeamSquad squad, int reserved)
+        {
+            if (squad == null || squad.players == null) return;
+            var used = new HashSet<int>();
+            if (reserved >= 1 && reserved <= 99) used.Add(reserved);
+            var order = new List<SquadPlayer>(squad.players);
+            order.Sort((a, b) => ClubSystem.IsLegend(a) != ClubSystem.IsLegend(b) ? (ClubSystem.IsLegend(a) ? -1 : 1) : b.rating.CompareTo(a.rating));
+            var need = new List<SquadPlayer>();
+            foreach (var p in order)
+            {
+                if (p.number >= 1 && p.number <= 99 && used.Add(p.number)) continue;
+                need.Add(p);
+            }
+            foreach (var p in need)
+            {
+                p.number = 0;
+                foreach (int n in NumberPrefs[(int)p.role]) if (used.Add(n)) { p.number = n; break; }
+                for (int n = 1; p.number == 0 && n <= 99; n++) if (used.Add(n)) p.number = n;
+            }
         }
 
         internal static SquadPlayer MakePlayer(SaveData save, System.Random rng, HashSet<string> used, SquadRole role, int age, float rating) { return NewPlayer(save, rng, used, role, age, rating); }
@@ -176,6 +215,17 @@ namespace MyFootballCareer
             return xi;
         }
 
+        // 한 팀 주전 11명의 세부 능력치 (포메이션 자리 순서). 경기 영상과 득점 기록이 같은 값을 씀
+        public static float[][] TeamAttrs(SaveData save, MatchSettings ms, string teamId)
+        {
+            if (save == null || ms == null || string.IsNullOrEmpty(teamId)) return null;
+            var xi = Starters(save, ms, teamId);
+            if (xi == null) return null;
+            var a = new float[xi.Length][];
+            for (int i = 0; i < xi.Length; i++) if (xi[i] != null) a[i] = ClubSystem.Attrs(save, xi[i]);
+            return a;
+        }
+
         // 내 팀에서 내가 서는 자리 (팀 포메이션과 내 포지션으로 정함)
         public static int MySlot(SaveData save, MatchSettings ms)
         {
@@ -199,7 +249,8 @@ namespace MyFootballCareer
             int youSlot = m.playerPlayed ? mySlot : -1;
             var rng = new System.Random(m.seed ^ 0x2f6e2b1);   // MatchReplayView와 같은 시드
             var stats = ReplayStats.From(player, m, career.attributeCap);
-            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation);
+            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation,
+                                             TeamAttrs(save, ms, ownId), TeamAttrs(save, ms, oppId));   // 경기 영상과 같은 능력치로 세트피스 키커
             var ours = Starters(save, ms, ownId);
             var theirs = Starters(save, ms, oppId);
             foreach (var e in plan)
@@ -287,7 +338,7 @@ namespace MyFootballCareer
                 {
                     float myRating = SeasonSystem.PlayerRating(save, ms, career);
                     var mp = save.player;
-                    v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = mp.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true,
+                    v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = mp.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true, number = mp.number,
                         age = 18 + save.seasonHistory.Count, attrs = AtLeastMin(new[] { mp.shooting, mp.passing, mp.dribbling, mp.defending, mp.stamina, mp.goalkeeping }) });
                     ratingSum += myRating; count++;
                     continue;
@@ -342,7 +393,7 @@ namespace MyFootballCareer
         {
             SeasonLine line = null;
             if (lines != null) lines.TryGetValue(p.name, out line);
-            return new SquadRowView { role = p.role, kind = DefaultKind(p.role), name = p.name, age = p.age, rating = p.rating, line = line, tag = tag, id = p.id, attrs = DeriveAttrs(p) };
+            return new SquadRowView { role = p.role, kind = DefaultKind(p.role), name = p.name, age = p.age, rating = p.rating, line = line, tag = tag, id = p.id, attrs = DeriveAttrs(p), number = p.number };
         }
 
         static SlotKind DefaultKind(SquadRole r) { return r == SquadRole.GK ? SlotKind.GK : r == SquadRole.DF ? SlotKind.CB : r == SquadRole.MF ? SlotKind.CM : SlotKind.ST; }

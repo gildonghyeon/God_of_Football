@@ -61,7 +61,7 @@ namespace MyFootballCareer
             ui.OnRetry = RetryLoad;
             ui.OnRestoreBackup = RestoreBackup;
             ui.OnStartNew = StartNewGame;
-            ui.OnResetSave = ResetSave;
+            ui.OnResetSave = ResetSave; ui.OnResetClub = ResetClub;
             ui.OnApplyLook = ChangeLook;
             TeamIdentity.ApplyTo(matchSettings);                         // 팀 이름은 팀 표의 이름으로
             ui.CreationKit = TeamKits.Home(matchSettings.startTeamId);   // 새 선수 미리보기는 시작 팀 유니폼
@@ -122,7 +122,27 @@ namespace MyFootballCareer
         void ResetSave()
         {
             if (blocked || current == null) return;
-            ui.ShowConfirm("저장을 초기화할까요?", "지금 선수와 진행 상황은 지우지 않고 옆으로 옮겨 두고, 새 선수로 처음부터 시작합니다. 환생 보너스는 남지 않습니다.", 200f, "초기화", DoResetSave);
+            ui.ShowConfirm("선수 키우기를 초기화할까요?", "지금 선수와 진행 상황은 지우지 않고 옆으로 옮겨 두고, 새 선수로 처음부터 시작합니다. 환생 보너스는 남지 않습니다.\n나만의 팀과 은퇴한 선수들은 그대로 남습니다.", 230f, "초기화", DoResetSave);
+        }
+
+        List<RetiredPlayer> carryLegends; int carryRetireCount;   // 선수 키우기 초기화 뒤 새 선수에게 넘길 은퇴 선수
+
+        // 나만의 팀만 초기화: 나만의 팀 저장을 옆으로 옮겨 두고 맨 처음 화면으로 (선수 키우기는 그대로)
+        void ResetClub()
+        {
+            if (blocked || current == null || club == null) return;
+            ui.ShowConfirm("나만의 팀을 초기화할까요?", "나만의 팀(선수단·시즌·기록)을 지우지 않고 옆으로 옮겨 둡니다.\n선수 키우기는 그대로이고, 은퇴 선수가 " + ClubSystem.FoundLegends + "명 이상이면 맨 처음 화면에서 다시 창단할 수 있습니다.", 230f, "초기화", DoResetClub);
+        }
+
+        void DoResetClub()
+        {
+            if (blocked || current == null) return;
+            ArchiveClub();
+            current.hasClub = false; current.myClub = new MyClubData();
+            saves.TrySave(current, out _);
+            ui.ReplayTeamMode = false;
+            ShowModeSelect();
+            ui.SetStatus("나만의 팀을 초기화했습니다.");
         }
 
         void DoResetSave()
@@ -130,8 +150,8 @@ namespace MyFootballCareer
             if (blocked || current == null) return;
             saves.TrySave(current, out _);
             if (!saves.ArchiveSave(out string message)) { ui.SetStatus(message); return; }
+            carryLegends = current.legends; carryRetireCount = current.retireCount;   // 은퇴한 선수들(나만의 팀과 연결)은 새 선수에게 그대로
             current = null; training = null; retiring = false;
-            ArchiveClub();
             ui.ShowCreation();
             ui.SetStatus(message + " 새 선수를 만드세요.");
         }
@@ -139,6 +159,7 @@ namespace MyFootballCareer
         void StartPlayer(string message, bool applyOffline)
         {
             retiring = false; inClub = false; inMenu = false;
+            if (current.player.number < 1 || current.player.number > 99) current.player.number = SquadSystem.DefaultNumber(current.player.position);   // 등번호가 없던 예전 저장
             if (ClubSystem.CleanCareer(current)) saves.TrySave(current, out _);   // 예전 버전에서 선수 키우기 리그에 들어갔던 나만의 팀 정리
             current.hasClub = club != null;
             if (club != null) current.myClub = club.myClub;
@@ -219,12 +240,18 @@ namespace MyFootballCareer
             { ui.SetStatus("이름을 입력하세요 (1~" + settings.maxNameLength + "자)."); return; }
             foreach (char c in name) if (char.IsControl(c)) { ui.SetStatus("이름에 쓸 수 없는 문자가 있습니다."); return; }
             var newPlayer = settings.CreatePlayer(name, position, trait);
+            newPlayer.number = Mathf.Clamp(ui.NewNumber, 1, 99);   // 고른 등번호
             if (retiring) { StartNextCareer(newPlayer, hair, skin, boots); return; }   // 은퇴 뒤 새 선수
             var candidate = new SaveData { player = newPlayer };
             candidate.player.hairColor = Mathf.Clamp(hair, 0, PlayerLook.HairCount - 1);
             candidate.player.skinTone = Mathf.Clamp(skin, 0, PlayerLook.SkinCount - 1);
             candidate.player.kitColor = Mathf.Clamp(kit, 0, PlayerLook.KitCount - 1);
             candidate.player.bootColor = Mathf.Clamp(boots, 0, PlayerLook.BootCount - 1);
+            if (carryLegends != null)   // 선수 키우기 초기화: 은퇴한 선수들은 이어서
+            {
+                candidate.legends.AddRange(carryLegends); candidate.retireCount = carryRetireCount;
+                carryLegends = null;
+            }
             var imported = saves.TakeLegendImport();   // 새 게임에 가져올 '내가 키운 선수'가 준비되어 있으면 넣음
             if (imported != null)
             {

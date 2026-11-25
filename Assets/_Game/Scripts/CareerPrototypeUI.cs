@@ -41,6 +41,7 @@ namespace MyFootballCareer
         public Action OnExitToMenu;                 // 선수 키우기 설정 탭: 모드 선택으로 나가기
         public bool ReplayTeamMode;                 // 다음 경기 영상이 나만의 팀 모드 경기인지
         Image retireFill; GameObject foundButton, clubSquadButton;
+        public Action OnResetClub;                  // 나만의 팀만 초기화
         public Action OnRetry, OnRestoreBackup, OnStartNew, OnResetSave;   // 저장 복구·초기화 버튼이 부르는 동작
         public float TrainingMultiplier = 1f;   // 환생 보너스가 반영된 훈련 속도 배율
 
@@ -65,7 +66,7 @@ namespace MyFootballCareer
         Button attendButton, bonusButton;
         readonly Text[] missionTexts = new Text[3];
         readonly Button[] missionButtons = new Button[3];
-        Text[] statTexts = new Text[6];          // 능력치 6개 (GK 능력은 골키퍼만 칸이 생김)
+        Text[] statTexts = new Text[6];          // 능력치 6개 (GK 능력 포함)
         Button[] upgradeButtons = new Button[6];
         Button rateButton;
         RectTransform[] statBars = new RectTransform[6];

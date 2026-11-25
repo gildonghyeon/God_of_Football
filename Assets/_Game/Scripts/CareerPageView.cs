@@ -195,7 +195,7 @@ namespace MyFootballCareer
             Clear(retireRoot);
             Note(retireRoot, d.canRetire ? "시즌이 끝났습니다. 원하면 지금 은퇴할 수 있습니다." : "시즌이 끝나면 은퇴할 수 있습니다.",
                  d.canRetire ? PixelTheme.Accent : PixelTheme.TextDim);
-            Note(retireRoot, "은퇴한 선수는 '내가 키운 선수'에 남고, 새 선수로 다시 시작합니다.", PixelTheme.TextDim, 15);
+            Note(retireRoot, "은퇴하면 새 선수로 다시 시작하고, 은퇴한 선수는 나만의 팀에서 함께할 수 있습니다.", PixelTheme.TextDim, 15);
         }
 
         // ---------- 내가 키운 선수 · 나만의 팀 ----------

@@ -4,7 +4,7 @@ namespace MyFootballCareer
     public static class Ko
     {
         // 강화 칸에 보이는 능력치 수: 골키퍼는 GK 능력까지 6개, 필드 선수는 5개
-        public static int AttributeCount(Position p) { return p == Position.Goalkeeper ? 6 : 5; }
+        public static int AttributeCount(Position p) { return 6; }   // 모든 선수가 GK 능력까지 6개를 강화할 수 있음
 
         // 포지션 색 (목록에서 포지션 옆 표시): GK 노랑, DF 파랑, MF 초록, FW 빨강
         public static string RoleHex(SquadRole r)

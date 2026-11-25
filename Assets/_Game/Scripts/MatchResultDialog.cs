@@ -17,6 +17,16 @@ namespace MyFootballCareer
         public bool teamMode;                // 나만의 팀 모드: 개인 기록 없음
         public string passText;              // 예: "16/21"
         public List<string> extras = new List<string>();   // 예: "주급 +2,640", "친선 경기 보상: 노력 포인트 +816"
+        public MatchBox box;                 // 경기 영상에서 센 우리 팀 기록과 MVP (영상을 못 보면 없음)
+    }
+
+    // 경기 영상에서 센 기록: 우리 팀 기록과 경기 MVP
+    public class MatchBox
+    {
+        public string[] statNames, statValues;
+        public string mvpName, mvpTeam, mvpLine;
+        public float mvpRating;
+        public bool mvpOurs;
     }
 
     // 경기 결과 창의 내용: 결과 배지와 큰 점수, 골 타임라인(분 표시), 내 기록 타일, 보상 줄.
@@ -65,6 +75,30 @@ namespace MyFootballCareer
             {
                 var none = Block(parent, 28);
                 Label(none, font, "골 없음", 18, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+            }
+
+            // 2.5) 경기 MVP와 우리 팀 기록
+            if (v.box != null)
+            {
+                Block(parent, 6);
+                if (!string.IsNullOrEmpty(v.box.mvpName))
+                {
+                    var mvp = Block(parent, 62);
+                    mvp.gameObject.AddComponent<Image>().color = new Color(.22f, .19f, .10f, 1f);
+                    var tag = Img(mvp, PixelTheme.Accent, .02f, .18f, .17f, .82f);
+                    Label(tag.rectTransform, font, "MVP", 20, new Color(.1f, .1f, .12f), 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                    Fit(Label(mvp, font, v.box.mvpName, 22, v.box.mvpOurs ? PixelTheme.Accent : new Color(1f, .78f, .78f), .20f, .45f, .78f, .98f, TextAnchor.MiddleLeft), 13);
+                    Fit(Label(mvp, font, v.box.mvpTeam + (string.IsNullOrEmpty(v.box.mvpLine) ? "" : " · " + v.box.mvpLine), 15, PixelTheme.TextDim, .20f, .04f, .78f, .48f, TextAnchor.MiddleLeft), 11);
+                    Label(mvp, font, v.box.mvpRating.ToString("0.0"), 30, PixelTheme.Accent, .78f, 0f, .97f, 1f, TextAnchor.MiddleRight);
+                }
+                if (v.box.statNames != null)
+                {
+                    var cap = Block(parent, 26);
+                    Label(cap, font, v.own + " 경기 기록", 16, PixelTheme.TextDim, .02f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
+                    var items = new (string, string, bool)[v.box.statNames.Length];
+                    for (int i = 0; i < items.Length; i++) items[i] = (v.box.statNames[i], v.box.statValues[i], false);
+                    Tiles(parent, font, items);
+                }
             }
 
             // 3) 내 기록 타일

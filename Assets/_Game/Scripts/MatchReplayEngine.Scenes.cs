@@ -115,7 +115,9 @@ namespace MyFootballCareer
             {
                 var c = dots[carrier];
                 float dist = Mathf.Sqrt((buildX - c.x) * (buildX - c.x) + (buildY - c.y) * (buildY - c.y));
-                if ((dist < 2.5f && phaseT > 2.5f) || phaseT > 7f)
+                // 세트피스(코너킥·프리킥·페널티킥)는 그 자리까지 실제로 몰고 간 뒤에만 선언 (멀리서 갑자기 공이 나가지 않게)
+                bool arrived = ev.setPiece != SetPiece.None ? (dist < 4f && phaseT > 1.5f) || phaseT > 20f : (dist < 2.5f && phaseT > 2.5f) || phaseT > 7f;
+                if (arrived)
                 {
                     if (ev.setPiece != SetPiece.None) { CallSetPiece(); return; }
                     if (ev.assisterSlot >= 0)

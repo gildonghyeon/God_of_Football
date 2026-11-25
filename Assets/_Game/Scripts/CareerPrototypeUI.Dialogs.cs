@@ -67,6 +67,7 @@ namespace MyFootballCareer
         // 경기 결과 창: 결과 배지·큰 점수, 골 타임라인, 내 기록 타일, 보상 줄
         public void ShowMatchResult(string title, MatchResultData data, Action onClose)
         {
+            if (matchView != null && matchView.LastBox != null && data != null) { data.box = matchView.LastBox; matchView.LastBox = null; }   // 방금 본 경기 영상의 팀 기록·MVP
             var inner = BuildDialog(title, "", 0f);
             var body = NewRect("ResultBody", inner);
             ConfigureStack(body.gameObject, 0, 0, 0, 0, 4);

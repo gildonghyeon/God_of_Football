@@ -9,7 +9,7 @@ namespace MyFootballCareer
     //   그림: Resources/Art/Match/ (pitch, dot_blue, dot_red, dot_you, ball, goal_0 ~ goal_7)
     public class MatchReplayView
     {
-        // 아래 두 값은 2배속 기준입니다. 1배속은 2배속의 32% 속도 (90분이 약 47초).
+        // 아래 두 값에 속도 배율을 곱해 씁니다. 1배속 = 0.32배 (90분이 약 47초), 2배속 = 정확히 그 두 배 (약 24초).
         const float MinutesPerSecond = 6f;    // 90분 / 15초
         const float SimSpeed = 8f;            // 실제 1초 동안 진행하는 경기 속 시간(초)
         const string SpeedPref = "ReplaySpeed";
@@ -38,6 +38,13 @@ namespace MyFootballCareer
         public int OwnKit, OppKit;           // 두 팀 유니폼 (PlayerLook.Kits 번호, 0이면 기본 파랑·빨강 점)
         public int YouKit;                   // 내 선수 점의 유니폼 (골키퍼면 골키퍼 유니폼, 0이면 OwnKit)
         public bool TeamMode;                // 나만의 팀 모드: 내 선수 없이 팀 경기 (벤치 안내 없음)
+        public float[][] OwnSkills, OppSkills;   // 두 팀 선수 11명의 세부 능력치 (자리 순서). 없으면 보통 실력
+        float paceNow = 1f;                  // 지금 화면 속도 (부드럽게 바뀜)
+        public string[] OwnNames, OppNames;   // 두 팀 주전 11명의 이름 (자리 순서). 경기 MVP 이름에 씀
+        public MatchBox LastBox;              // 끝난 경기의 우리 팀 기록과 MVP (경기 결과 창에서 가져감)
+        RectTransform offLineRect, offMarkRect; int offShown; float offStart = -99f;   // 오프사이드 판정 때 잠깐 보여 주는 선
+        public string[] OwnLabels;           // 우리 팀 선수 11명의 이름표 (포메이션 자리 순서, 포지션 색 글자 포함). 없으면 표시 안 함
+        readonly RectTransform[] ownLabelRects = new RectTransform[11];
         readonly List<UnityEngine.Object> kitObjects = new List<UnityEngine.Object>();   // 유니폼 점 그림 (영상을 닫을 때 지움)
         public TrainingStageView SceneArt;   // 내 골 장면에 쓸 선수 그림 (훈련장과 같은 그림, 없으면 골망 장면)
         public int SeasonGoalsBefore = -1;
@@ -118,6 +125,7 @@ namespace MyFootballCareer
         public bool Show(RectTransform parent, MatchRecord m, PlayerData player, string ownTeamName, float attributeCap, Action finished, TeamTactic ownTactic, TeamTactic oppTactic)
         {
             if (Active) return true;
+            LastBox = null;
             if (!Available) return false;
             record = m; onFinished = finished; ownName = ownTeamName; oppName = m.opponentName; playerName = player.playerName;
             ownTactic = ownTactic ?? new TeamTactic(); oppTactic = oppTactic ?? new TeamTactic();
@@ -127,9 +135,11 @@ namespace MyFootballCareer
             var rng = new System.Random(m.seed ^ 0x2f6e2b1);
             // 내 선수의 능력치가 영상 속 움직임에 반영됩니다. (속도, 후반 피로, 패스 정확도, 슛 속도와 유효 슈팅, 공 지키기)
             var stats = ReplayStats.From(player, m, attributeCap);
-            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation);
+            var plan = MatchReplayPlan.Build(m, m.playerPlayed, mySlot, rng, stats.shootN, m.defensiveActions, ownTactic.formation, oppTactic.formation, OwnSkills, OppSkills);
             engine = new MatchReplayEngine(plan, youSlot, rng, ownTactic, oppTactic);
             engine.stats = stats;
+            engine.SetSkills(0, OwnSkills, attributeCap); engine.SetSkills(1, OppSkills, attributeCap);   // 선수마다 능력치가 경기 영상에 반영됨
+            paceNow = 1f;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
             engine.YouPassed = ok => { livePassAtt++; if (ok) livePassComp++; };   // 영상 속 내 패스를 그대로 셈
             teamShots = teamOnTarget = teamPassAtt = teamPassComp = teamTackleAtt = teamTackleWon = teamSaves = 0;
@@ -268,6 +278,24 @@ namespace MyFootballCareer
             ballRect = NewRect("Ball", pitchRect);
             var ballImage = ballRect.gameObject.AddComponent<Image>();
             ballImage.sprite = ballSprite; ballImage.raycastTarget = false;
+            for (int i = 0; i < 11; i++)   // 우리 팀 선수 이름표 (포지션 + 이름)
+            {
+                ownLabelRects[i] = null;
+                if (OwnLabels == null || i >= OwnLabels.Length || string.IsNullOrEmpty(OwnLabels[i])) continue;
+                var lr = NewRect("OwnName" + i, pitchRect);
+                var lt = TextNode(OwnLabels[i], lr, 14, TextAnchor.MiddleCenter, Color.white);
+                Anchored(lt.rectTransform, 0, 0, 1, 1);
+                lt.horizontalOverflow = HorizontalWrapMode.Overflow;
+                lt.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, .85f);
+                ownLabelRects[i] = lr;
+            }
+            // 오프사이드 선: 패스 순간 마지막 수비수 라인(노란 선)과 그때 받는 선수가 있던 자리(노란 점)
+            offLineRect = NewRect("OffsideLine", pitchRect);
+            var oli = offLineRect.gameObject.AddComponent<Image>(); oli.color = new Color(1f, .85f, .2f, .9f); oli.raycastTarget = false;
+            offMarkRect = NewRect("OffsideMark", pitchRect);
+            var omi = offMarkRect.gameObject.AddComponent<Image>(); omi.color = new Color(1f, .85f, .2f, .75f); omi.raycastTarget = false;
+            offLineRect.gameObject.SetActive(false); offMarkRect.gameObject.SetActive(false);
+            offShown = 0; offStart = -99f;
             youLabel = NewRect("YouLabel", pitchRect);
             var youText = TextNode("나", youLabel, 18, TextAnchor.MiddleCenter, PixelTheme.Accent);
             Anchored(youText.rectTransform, 0, 0, 1, 1);
@@ -318,7 +346,7 @@ namespace MyFootballCareer
             chipLayout.spacing = 6; chipLayout.childControlWidth = true; chipLayout.childControlHeight = true;
             chipLayout.childForceExpandWidth = true; chipLayout.childForceExpandHeight = true;
             System.Array.Clear(chipValues, 0, chipValues.Length);   // 지난 경기 칸 지우기 (골키퍼는 4칸)
-            string[] chipNames = TeamMode ? new[] { "슈팅", "유효슈팅", "패스", "태클", "선방" }   // 나만의 팀: 우리 팀 기록 (패스·태클·선방은 성공률)
+            string[] chipNames = TeamMode ? new[] { "슈팅", "유효슈팅", "패스", "태클", "선방" }   // 나만의 팀: 우리 팀 기록 (패스·태클은 성공/시도, 선방은 횟수)
                 : youPosition == Position.Goalkeeper
                 ? new[] { "선방", "실점", "선방률", "패스" }   // 골키퍼: 골·도움 대신 (4칸)
                 : new[] { "골", "도움", "슈팅", "패스", "태클" };
@@ -398,8 +426,10 @@ namespace MyFootballCareer
 
             // 시계: 아직 끝나지 않은 장면이 있으면 90분에서 기다립니다.
             // 코너킥·페널티킥·골문 앞 프리킥은 절반 속도 (시계도 같이 느려져 장면 순서는 그대로)
-            float pace = engine.SetPieceFocus ? 0.4f : engine.RestartFocus ? 0.45f : engine.Celebrating ? 0.5f : 1f;   // 골 세리머니도 천천히
-            pace *= speed == 2 ? 1f : 0.32f;   // 1배속은 2배속의 32%
+            // 세트피스·재개·세리머니는 조금 느리게. 갑자기 바뀌지 않고 부드럽게 느려지고 빨라짐
+            float paceTarget = engine.SetPieceFocus ? 0.55f : engine.RestartFocus ? 0.65f : engine.Celebrating ? 0.5f : 1f;
+            paceNow = Mathf.MoveTowards(paceNow, paceTarget, dt * 1.6f);
+            float pace = paceNow * (speed == 2 ? 0.64f : 0.32f);   // 2배속은 1배속의 정확히 두 배
             if (clock < 90f || !engine.Busy) clock = Mathf.Min(90f, clock + dt * MinutesPerSecond * pace);
             if (!engine.SecondHalf) clock = Mathf.Min(clock, 45f);   // 전반 추가 시간: 진영을 바꿀 때까지 45분에서 기다림
             if (clock >= 90f && engine.Busy)   // 혹시 장면이 끝나지 않아도 오래 기다리지 않음
@@ -443,11 +473,29 @@ namespace MyFootballCareer
                 var d = engine.dots[i];
                 PlaceMeters(dotRects[i], d.x, d.y, 0f, i == youSlot ? 42f : 30f);
             }
+            for (int i = 0; i < 11; i++)   // 이름표는 선수 점 바로 아래
+            {
+                if (ownLabelRects[i] == null) continue;
+                var d = engine.dots[i];
+                PlacePx(ownLabelRects[i], MeterX(d.x), MeterY(d.y) + (i == youSlot ? 28f : 22f), 110f, 18f);   // 내 선수 점은 더 커서 조금 더 아래
+            }
             PlaceMeters(ballRect, engine.ballX, engine.ballY, engine.ballZ, 20f);
             if (youSlot >= 0)
             {
                 var d = engine.dots[youSlot];
                 PlacePx(youLabel, MeterX(d.x), MeterY(d.y) - 29f, 52f, 20f);
+            }
+            if (offLineRect != null)
+            {
+                if (engine.OffsideShown != offShown) { offShown = engine.OffsideShown; offStart = Time.realtimeSinceStartup; }
+                bool showOff = Time.realtimeSinceStartup - offStart < 2.4f;
+                offLineRect.gameObject.SetActive(showOff); offMarkRect.gameObject.SetActive(showOff);
+                if (showOff)
+                {
+                    float x0 = MeterX(0f), x1 = MeterX(68f);
+                    PlacePx(offLineRect, (x0 + x1) / 2f, MeterY(engine.OffsideLineY), Mathf.Abs(x1 - x0), 3f);
+                    PlacePx(offMarkRect, MeterX(engine.OffsideX), MeterY(engine.OffsideY), 14f, 14f);
+                }
             }
             if (callTimer > 0f && !string.IsNullOrEmpty(engine.CallText))
             {
@@ -501,9 +549,9 @@ namespace MyFootballCareer
         void UpdateStatsLine(float progress)
         {
             if (chipValues[0] == null) return;
-            if (TeamMode)   // 나만의 팀: 슈팅 수, 유효 슈팅, 패스 성공률, 태클 성공률, 선방률
+            if (TeamMode)   // 나만의 팀: 슈팅 수, 유효 슈팅, 패스 성공/시도, 태클 성공/시도, 선방 횟수
             {
-                string teamLine = teamShots + "|" + teamOnTarget + "|" + Pct(teamPassComp, teamPassAtt) + "|" + Pct(teamTackleWon, teamTackleAtt) + "|" + Pct(teamSaves, teamSaves + goalsAgainst);
+                string teamLine = teamShots + "|" + teamOnTarget + "|" + teamPassComp + "/" + teamPassAtt + "|" + teamTackleWon + "/" + teamTackleAtt + "|" + teamSaves;
                 if (teamLine == lastStatsLine) return;
                 lastStatsLine = teamLine;
                 var tp = teamLine.Split('|');
@@ -522,7 +570,6 @@ namespace MyFootballCareer
             for (int i = 0; i < chipValues.Length && i < parts.Length; i++) if (chipValues[i] != null) chipValues[i].text = parts[i];
         }
 
-        static string Pct(int ok, int total) { return total > 0 ? Mathf.RoundToInt(100f * ok / total) + "%" : "-"; }
 
         // 경기 끝에 내 선수의 기록을 저장된 결과와 똑같이 맞춥니다.
         void SnapStats()
@@ -811,13 +858,85 @@ namespace MyFootballCareer
         void Skip()
         {
             if (!Active) return;
+            FastForward();   // 남은 경기를 화면 없이 끝까지 돌려 기록을 셈 (경기 결과의 팀 기록·MVP)
             goalsFor = record.goalsFor; goalsAgainst = record.goalsAgainst;
             SnapStats();
             Close();
         }
 
+        // 건너뛴 경기: 남은 시간을 화면·소리 없이 빠르게 진행 (결과는 이미 정해져 있고 장면 순서도 같음)
+        void FastForward()
+        {
+            if (engine == null) return;
+            engine.GoalScored = engine.AssistMade = engine.ShotResolved = engine.TackleWon = engine.ShotTaken = null;
+            engine.SetPieceCalled = null; engine.HalfTime = null; engine.YouPassed = null;
+            engine.TeamPassed = engine.TeamTackled = engine.TeamShot = null; engine.KeeperSaved = null;
+            float c = clock;
+            for (int n = 0; n < 8000 && (c < 90f || engine.Busy); n++)
+            {
+                engine.Step(0.05f, c);
+                c = Mathf.Min(90f, c + 0.05f * MinutesPerSecond / SimSpeed);
+                if (!engine.SecondHalf) c = Mathf.Min(c, 45f);
+            }
+        }
+
+        // 경기 영상에서 센 기록으로 우리 팀 기록과 MVP(두 팀에서 평점이 가장 높은 선수)를 만듭니다.
+        MatchBox BuildBox()
+        {
+            if (engine == null || record == null) return null;
+            var e = engine;
+            int shots = 0, on = 0, pa = 0, pc = 0, ta = 0, tw = 0;
+            for (int i = 0; i < 11; i++) { shots += e.PShotsOn[i] + e.PShotsOff[i]; on += e.PShotsOn[i]; pa += e.PPassAtt[i]; pc += e.PPassComp[i]; ta += e.PTackleAtt[i]; tw += e.PTackleWon[i]; }
+            var box = new MatchBox
+            {
+                statNames = new[] { "슈팅", "유효슈팅", "패스", "태클", "선방" },
+                statValues = new[] { shots.ToString(), on.ToString(), pc + "/" + pa, tw + "/" + ta, e.PSaves[0].ToString() }
+            };
+            int best = -1; float bestR = -1f;
+            for (int i = 0; i < 22; i++)
+            {
+                int team = i < 11 ? 0 : 1, s = i % 11;
+                var names = team == 0 ? OwnNames : OppNames;
+                bool me = team == 0 && s == youSlot && youSlot >= 0;
+                if (!me && (names == null || s >= names.Length || string.IsNullOrEmpty(names[s]))) continue;
+                float r = me && record.rating > 0f ? record.rating : PlayerRating(i);
+                if (r > bestR || (r == bestR && best >= 0 && e.PGoals[i] > e.PGoals[best])) { bestR = r; best = i; }
+            }
+            if (best >= 0)
+            {
+                int team = best < 11 ? 0 : 1, s = best % 11;
+                bool me = team == 0 && s == youSlot && youSlot >= 0;
+                box.mvpName = me ? playerName : (team == 0 ? OwnNames : OppNames)[s];
+                box.mvpOurs = team == 0; box.mvpTeam = team == 0 ? ownName : oppName; box.mvpRating = bestR;
+                var parts = new List<string>();
+                if (e.PGoals[best] > 0) parts.Add(e.PGoals[best] + "골");
+                if (e.PAssists[best] > 0) parts.Add(e.PAssists[best] + "도움");
+                if (e.PSaves[best] > 0) parts.Add("선방 " + e.PSaves[best]);
+                if (e.PTackleWon[best] > 0) parts.Add("태클 " + e.PTackleWon[best]);
+                if (parts.Count == 0 && e.PPassAtt[best] > 0) parts.Add("패스 " + e.PPassComp[best] + "/" + e.PPassAtt[best]);
+                box.mvpLine = string.Join(" · ", parts);
+            }
+            return box;
+        }
+
+        // 경기 영상 속 기록으로 매긴 평점 (6.0 기준, 3~10)
+        float PlayerRating(int i)
+        {
+            var e = engine; var d = e.dots[i];
+            int team = i < 11 ? 0 : 1;
+            int gf = team == 0 ? record.goalsFor : record.goalsAgainst, ga = team == 0 ? record.goalsAgainst : record.goalsFor;
+            float r = 6f + e.PGoals[i] * 1.0f + e.PAssists[i] * 0.7f + e.PShotsOn[i] * 0.2f - e.PShotsOff[i] * 0.05f
+                    + e.PPassComp[i] * 0.04f - (e.PPassAtt[i] - e.PPassComp[i]) * 0.08f
+                    + e.PTackleWon[i] * 0.2f - (e.PTackleAtt[i] - e.PTackleWon[i]) * 0.05f + e.PSaves[i] * 0.4f;
+            r += gf > ga ? 0.4f : gf < ga ? -0.3f : 0f;
+            bool back = d.slot == 0 || d.def.role == SquadRole.DF;
+            if (back) r += ga == 0 ? 0.5f : -(d.slot == 0 ? 0.25f : 0.15f) * Mathf.Max(0, ga - 1);
+            return Mathf.Round(Mathf.Clamp(r, 3f, 10f) * 10f) / 10f;
+        }
+
         void Close()
         {
+            LastBox = BuildBox();
             Active = false;
             if (celebration != null) { celebration.Dispose(); celebration = null; }
             foreach (var obj in kitObjects) if (obj != null) UnityEngine.Object.Destroy(obj);

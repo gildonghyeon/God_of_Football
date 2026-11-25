@@ -21,7 +21,7 @@ namespace MyFootballCareer
             float depth, x;
             if (d.slot == 0)
             {
-                depth = 0.03f + 0.08f * bd;
+                depth = 0.02f + 0.09f * bd;   // 공이 가까우면 골라인 가까이(2m), 멀면 조금 앞으로 나옴(최대 약 12m)
                 x = 34f + (ballX - 34f) * 0.2f;
             }
             else
@@ -41,7 +41,7 @@ namespace MyFootballCareer
                 if (attacking && wideBack && ballSide && bd > 0.45f) depth += 0.12f * st.overlap;   // 공 쪽 풀백·윙백 오버래핑
                 if (d.runT > 0f) { depth += 0.16f; x += d.runDx; }                                  // 공 없이 침투
             }
-            depth = Mathf.Clamp(depth, 0.03f, d.slot == 0 ? 0.14f : 0.95f);
+            depth = d.slot == 0 ? Mathf.Clamp(depth, 0.02f, 0.12f) : Mathf.Clamp(depth, MinOutfield, 0.95f);   // 필드 선수는 골키퍼보다 뒤로 가지 않음
             float fx = Mathf.Clamp(x, 2f, W - 2f), fy = DepthY(d.team, depth);
             if (!d.started) { d.ax = fx; d.ay = fy; d.started = true; }
             // 공격 때 뒤쪽 줄(수비·미드필더)은 빨리 따라 올라와 간격을 좁힙니다.
@@ -169,8 +169,14 @@ namespace MyFootballCareer
             if (carrier >= 0 && script == null)
             {
                 var c = dots[carrier];
-                if (c.slot != 0 && stagedRunner >= 0)   // 오프사이드 장면: 동료가 뛰어드는 동안 공을 지키며 기다림
-                { c.tx = c.x; c.ty = c.y; c.maxSpeed = JogSpeed; }
+                if (c.slot != 0 && stagedRunner >= 0)   // 오프사이드 장면: 동료가 뛰어드는 동안 멈추지 않고 옆으로 천천히 몰며 기다림
+                {
+                    float dir = c.team == 0 ? -1f : 1f;
+                    float weave = (Noise(c.noise + 11f, time * 0.5f) - 0.5f) * 14f;
+                    c.ty = Mathf.Clamp(c.y + dir * 3f, 2f, L - 2f);
+                    c.tx = Mathf.Clamp(c.x + weave, 3f, W - 3f);
+                    c.maxSpeed = JogSpeed * 0.7f;
+                }
                 else if (c.slot != 0)
                 {
                     // 공을 몰고 앞으로: 곧게 달리지 않고 빈 곳을 찾아 천천히 방향을 틉니다. 수비가 가까우면 느려집니다.
@@ -221,12 +227,42 @@ namespace MyFootballCareer
         }
 
         // 패스 순간 받는 선수가 오프사이드 자리인지 기억 (경기 중 일반 패스만. 재개 킥·득점 장면은 제외)
+        // 규칙대로: 스로인·골킥·코너킥에서 바로 받으면 오프사이드가 아님. 프리킥은 오프사이드가 있음
         void MarkOffside(int recv)
         {
             offsidePass = false;
-            if (script != null || restart != Restart.None || executing || recv < 0) return;
+            if (script != null || recv < 0) return;
+            if (executing && (execKind == Restart.ThrowIn || execKind == Restart.GoalKick || execKind == Restart.Corner || execKind == Restart.Kickoff)) return;
+            if (!executing && restart != Restart.None) return;
             var r = dots[recv];
-            if (Dp(r.team, r.y) > SafeDepth(r.team) + 0.005f) { offsidePass = true; offX = r.x; offY = r.y; }
+            float line = SafeDepth(r.team);
+            if (Dp(r.team, r.y) > line + 0.005f) { offsidePass = true; offX = r.x; offY = r.y; offLine = line; offTeam = r.team; }
+        }
+
+        // 득점 장면: 공격 팀에서 가장 깊이 들어간 선수보다 상대 수비 한 명이 늘 조금 더 뒤에 있게 (마지막 수비수가 따라 내려옴)
+        const float MinOutfield = 0.06f;   // 필드 선수가 자기 골라인에서 떨어져 서는 최소 거리 (약 6m, 골키퍼보다 앞)
+
+        void KeepSceneOnside()
+        {
+            int att = scriptTeam, def = 1 - att;
+            float deepest = 0f;
+            for (int s = 1; s <= 10; s++)
+            {
+                int i = Idx(att, s); if (i == carrier) continue;
+                var d = dots[i];
+                deepest = Mathf.Max(deepest, Mathf.Max(Dp(att, d.y), Dp(att, d.ty)));
+            }
+            float need = Mathf.Min(1f - MinOutfield, deepest + 0.015f);   // 수비수도 골키퍼보다 뒤로는 가지 않음
+            if (need <= Mathf.Max(Dp(att, ballY), 0.5f)) return;   // 공보다 뒤나 자기 진영이면 오프사이드가 아님
+            int best = -1; float bd = -1f;
+            for (int s = 1; s <= 10; s++)
+            {
+                float dd = Dp(att, dots[Idx(def, s)].y);
+                if (dd > bd) { bd = dd; best = Idx(def, s); }
+            }
+            if (best < 0 || bd >= need) return;
+            var m = dots[best];
+            m.ty = DepthY(att, need); m.maxSpeed = SprintSpeed * 1.15f;
         }
 
         // 팀 대형 다듬기 (실제 전술 참고)
@@ -253,22 +289,55 @@ namespace MyFootballCareer
                 if (d.def.kind == SlotKind.ST && BallDepth(poss) > 0.4f && td < lim - 0.04f)
                     d.ty = DepthY(poss, Mathf.Lerp(td, lim - 0.015f, 0.6f));
             }
+            // 수비 팀 (실제 축구처럼):
+            //  · 수비 라인은 공과 일정한 간격을 두고 같이 올라서고 내려섬 (전방 압박은 높고 좁게, 내려선 수비는 깊게). 골키퍼보다 뒤로는 내려가지 않음
+            //  · 공이 우리 진영 깊이 오면 센터백은 상자 안의 공격수를 골문 쪽에서 따라 붙음 (마킹)
+            //  · 공 쪽 풀백은 측면의 공을 막으러 나가고, 반대쪽 풀백은 가운데로 좁힘
             int def = 1 - poss;
             var st = sp[def];
-            float sum = 0f; int n = 0;
-            for (int s = 1; s <= 10; s++) { var d = dots[Idx(def, s)]; if (d.def.role == SquadRole.DF) { sum += Dp(def, d.ty); n++; } }
-            if (n == 0) return;
-            float line = sum / n;
-            if (st.pressFrom >= 1f) line = Mathf.Max(line, BallDepth(def) > 0.5f ? 0.3f : line);   // 전방 압박: 높은 라인
-            if (st.pressFrom <= 0.45f) line = Mathf.Min(line, 0.24f);                            // 내려선 수비: 깊은 라인
+            float ballD = Dp(def, ballY);   // 수비 팀 골에서 잰 공의 깊이
+            float gap = st.pressFrom >= 1f ? 0.16f : st.pressFrom <= 0.45f ? 0.27f : 0.21f;
+            float maxLine = st.pressFrom >= 1f ? 0.46f : st.pressFrom <= 0.45f ? 0.27f : 0.38f;
+            float line = Mathf.Clamp(ballD - gap, 0.07f, maxLine);
+            bool danger = ballD < 0.32f;
+            var marked = new List<int>();
             for (int s = 1; s <= 10; s++)
             {
                 var d = dots[Idx(def, s)];
                 float td = Dp(def, d.ty);
-                if (d.def.role == SquadRole.DF) td = line + (d.def.kind == SlotKind.FB || d.def.kind == SlotKind.WB ? 0.01f : 0f);
-                else if (d.def.role == SquadRole.MF) td = Mathf.Clamp(td, line + 0.07f, line + 0.14f);
+                bool wideBack = d.def.kind == SlotKind.FB || d.def.kind == SlotKind.WB;
+                if (d.def.role == SquadRole.DF)
+                {
+                    td = line + (wideBack ? 0.01f : 0f);
+                    if (danger && !wideBack)   // 센터백 마킹: 가장 가까운, 아직 아무도 안 붙은 상자 근처 공격수
+                    {
+                        int mk = -1; float md = 18f;
+                        for (int k = 1; k <= 10; k++)
+                        {
+                            int ai = Idx(poss, k); if (ai == carrier || marked.Contains(ai)) continue;
+                            var a = dots[ai];
+                            if (Dp(def, a.y) > 0.24f || Mathf.Abs(a.x - 34f) > 22f) continue;
+                            float dd = DistTo(d, a.x, a.y);
+                            if (dd < md) { md = dd; mk = ai; }
+                        }
+                        if (mk >= 0)
+                        {
+                            marked.Add(mk); var a = dots[mk];
+                            td = Mathf.Min(td, Dp(def, a.y) - 0.02f);   // 공격수보다 골문 쪽 2m
+                            d.tx = Mathf.Lerp(d.tx, a.x, 0.7f); d.maxSpeed = Mathf.Max(d.maxSpeed, SprintSpeed * 0.85f);
+                        }
+                    }
+                    else if (wideBack)
+                    {
+                        bool ballSide = (d.tx < 34f) == (ballX < 34f);
+                        if (ballD < 0.5f && Mathf.Abs(ballX - 34f) > 16f && ballSide)
+                        { d.tx = Mathf.Lerp(d.tx, ballX, 0.45f); td = Mathf.Max(MinOutfield, Mathf.Min(td + 0.03f, ballD - 0.02f)); }   // 측면 공을 막으러
+                        else if (!ballSide) d.tx = Mathf.Lerp(d.tx, 34f, 0.3f);                                                   // 반대쪽은 가운데로
+                    }
+                }
+                else if (d.def.role == SquadRole.MF) td = Mathf.Clamp(td, line + 0.07f, line + 0.15f);
                 else td = Mathf.Min(td, line + 0.38f);
-                d.ty = DepthY(def, td);
+                d.ty = DepthY(def, Mathf.Max(td, MinOutfield));
             }
         }
 

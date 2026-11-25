@@ -54,12 +54,21 @@ namespace MyFootballCareer
                 trait = Ko.TraitsFor(position)[0];   // 포지션이 바뀌면 그 포지션의 첫 특성으로
                 refreshTrait();
                 previewGloves = position == Position.Goalkeeper; ApplyPreview(createPreview);   // 골키퍼면 장갑
+                if (onPositionNumber != null) onPositionNumber();   // 번호를 직접 고르지 않았으면 포지션의 대표 번호로
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             traitButton = PixelButton("특성: " + Ko.TraitName(trait), () => {
                 var list = Ko.TraitsFor(position);
                 trait = list[(System.Array.IndexOf(list, trait) + 1) % list.Length];
                 refreshTrait();
             }, content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            // 등번호 (1~99): 누르면 번호판이 뜸. 직접 고르기 전에는 포지션의 대표 번호
+            NewNumber = SquadSystem.DefaultNumber(position); numberPicked = false;
+            Button numberButton = null;
+            numberButton = PixelButton("등번호: " + NewNumber, () => ShowNumberPicker(n => {
+                NewNumber = n; numberPicked = true;
+                numberButton.GetComponentInChildren<Text>().text = "등번호: " + n;
+            }), content, 76f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            onPositionNumber = () => { if (!numberPicked) { NewNumber = SquadSystem.DefaultNumber(position); numberButton.GetComponentInChildren<Text>().text = "등번호: " + NewNumber; } };
             AddLookButtons(content, createPreview);
             traitHelp = Label("", 20, 76); traitHelp.color = PixelTheme.TextDim;
             refreshTrait();
@@ -67,6 +76,29 @@ namespace MyFootballCareer
             if (retireMode) PixelButton("◀ 모드 선택으로", () => { if (OnCancelCreation != null) OnCancelCreation(); }, content, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             status = Label("버튼을 눌러 포지션과 특성을 고르세요.", 22, 100);
             status.color = PixelTheme.TextDim;
+        }
+
+        public int NewNumber = 9;          // 선수 만들기에서 고른 등번호
+        bool numberPicked; System.Action onPositionNumber;
+
+        // 등번호 번호판: 1~99 (한 줄에 7개)
+        void ShowNumberPicker(System.Action<int> picked)
+        {
+            var inner = BuildDialog("등번호", "1~99 중에서 고르세요", 40f, 20);
+            for (int start = 1; start <= 99; start += 7)
+            {
+                var row = NewRect("Numbers", inner); Height(row.gameObject, 58);
+                var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                h.spacing = 6; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+                for (int n = start; n < start + 7; n++)
+                {
+                    if (n > 99) { NewRect("Empty", row); continue; }
+                    int pick = n; bool on = n == NewNumber;
+                    PixelButton(n.ToString(), () => { CloseDialog(); picked(pick); }, row, 58f, on ? PixelTheme.AccentFill : PixelTheme.QuietFill, on ? PixelTheme.Accent : PixelTheme.QuietEdge)
+                        .GetComponentInChildren<Text>().fontSize = 22;
+                }
+            }
+            PixelButton("닫기", () => CloseDialog(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         public void ShowPlayer(PlayerData p, string message)
@@ -96,7 +128,7 @@ namespace MyFootballCareer
             trainingText = Label("", 22, 64);
             var rate = PixelButton("노력 증가량", () => { if (OnBuyEffortRate != null) OnBuyEffortRate(); }, Parent, 56f);
             rateButton = rate; rate.GetComponentInChildren<Text>().fontSize = 20;
-            for (int i = 0; i < Ko.AttributeCount(p.position); i++)   // 골키퍼는 GK 능력 칸까지
+            for (int i = 0; i < Ko.AttributeCount(p.position); i++)   // GK 능력 칸까지 (모든 포지션)
                 statBars[i] = MakeStatRow((AttributeKind)i, out statTexts[i], out upgradeButtons[i]);
             UpdateStats(p);
 
@@ -150,11 +182,6 @@ namespace MyFootballCareer
             careerPage.BuildRetire(Parent);
             var retire = PixelButton("은퇴하기", () => { if (OnRetire != null) OnRetire(); }, Parent, 68f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
             retireFill = (Image)retire.targetGraphic;
-            currentParent = Section(pages[3], "내가 키운 선수", true);
-            careerPage.BuildLegends(Parent);
-            // 나만의 팀 창단은 맨 처음 화면에서만 (선수 키우기에는 창단 버튼 없음)
-            clubSquadButton = PixelButton("나만의 팀 모드 ▶", () => { if (OnOpenClub != null) OnOpenClub(); }, Parent, 72f, PixelTheme.RebirthFill, PixelTheme.RebirthEdge).gameObject;
-            clubSquadButton.SetActive(false);
 
             // 미션: 출석 보상, 일일 미션
             currentParent = Section(pages[2], "출석 보상", true);

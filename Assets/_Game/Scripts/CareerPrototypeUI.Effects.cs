@@ -19,6 +19,9 @@ namespace MyFootballCareer
         public int ReplaySeasonGoals = -1;                    // 다음 경기 영상 전까지의 시즌 골 수 (-1이면 친선 경기 등)
         public int ReplaySeasonAssists = -1;                  // 다음 경기 영상 전까지의 시즌 도움 수
         public int ReplayOwnKit, ReplayOppKit;                // 다음 경기 영상의 두 팀 유니폼 (PlayerLook.Kits 번호)
+        public string[] ReplayOwnNames, ReplayOppNames;        // 다음 경기 영상의 두 팀 주전 이름 (MVP)
+        public float[][] ReplayOwnSkills, ReplayOppSkills;      // 다음 경기 영상의 두 팀 선수 능력치 (자리 순서)
+        public string[] ReplayOwnLabels;                      // 다음 경기 영상의 우리 팀 이름표 (나만의 팀)
         public int ReplayYouKit;                              // 내 선수 유니폼 (골키퍼 유니폼일 수 있음)
         public int CreationKit;                               // 새 선수 만들기 미리보기의 유니폼 (시작 팀)
         public void ShowMatchReplay(MatchRecord record, PlayerData player, string ownTeamName, Action onFinished, TeamTactic ownTactic = null, TeamTactic oppTactic = null)
@@ -29,6 +32,9 @@ namespace MyFootballCareer
                 matchView.SeasonGoalsBefore = ReplaySeasonGoals; ReplaySeasonGoals = -1;
                 matchView.SeasonAssistsBefore = ReplaySeasonAssists; ReplaySeasonAssists = -1;
                 matchView.OwnKit = ReplayOwnKit; matchView.OppKit = ReplayOppKit; matchView.YouKit = ReplayYouKit; matchView.TeamMode = ReplayTeamMode;
+                matchView.OwnLabels = ReplayOwnLabels; ReplayOwnLabels = null;
+                matchView.OwnSkills = ReplayOwnSkills; matchView.OppSkills = ReplayOppSkills; ReplayOwnSkills = ReplayOppSkills = null;
+                matchView.OwnNames = ReplayOwnNames; matchView.OppNames = ReplayOppNames; ReplayOwnNames = ReplayOppNames = null;
             }
             if (matchView == null || !matchView.Show(safeRoot, record, player, ownTeamName, settings.attributeCap, onFinished, ownTactic ?? ReplayOwnTactic, oppTactic ?? ReplayOppTactic))
             {

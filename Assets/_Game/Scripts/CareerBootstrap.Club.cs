@@ -104,6 +104,9 @@ namespace MyFootballCareer
             ui.ReplayOwnTactic = TacticSystem.Of(own); ui.ReplayOppTactic = TacticSystem.Of(clubMs.FindTeam(record.opponentId));
             ui.ReplayOwnKit = TeamKits.Home(ClubSystem.ClubId); ui.ReplayOppKit = TeamKits.Opponent(ClubSystem.ClubId, record.opponentId);
             ui.ReplayYouKit = 0; ui.ReplayTeamMode = true;
+            ui.ReplayOwnLabels = TeamLabels(club, clubMs, ClubSystem.ClubId, -1, null);   // 우리 팀 이름표: 지금 뛰는 자리의 포지션 + 이름
+            ui.ReplayOwnSkills = TeamSkills(club, clubMs, ClubSystem.ClubId); ui.ReplayOppSkills = TeamSkills(club, clubMs, record.opponentId);
+            ui.ReplayOwnNames = TeamNames(club, clubMs, ClubSystem.ClubId); ui.ReplayOppNames = TeamNames(club, clubMs, record.opponentId);
             ui.ShowMatchReplay(record, club.player, club.myClub.name, () =>
             {
                 ShowClubScreen();
@@ -182,7 +185,7 @@ namespace MyFootballCareer
 
         ClubPlayerView PlayerView(SquadPlayer p, SlotDef[] layout, int slot)
         {
-            var v = new ClubPlayerView { id = p.id, name = p.name, role = p.role, slotRole = p.role, rating = p.rating, effective = p.rating, legend = ClubSystem.IsLegend(p) };
+            var v = new ClubPlayerView { id = p.id, name = p.name, role = p.role, slotRole = p.role, rating = p.rating, effective = p.rating, legend = ClubSystem.IsLegend(p), number = p.number };
             if (layout != null)
             {
                 var s = layout[slot];
@@ -195,13 +198,15 @@ namespace MyFootballCareer
         void ShowClubTeam()
         {
             ClubSystem.EnsureClubSquad(club);
+            SquadSystem.Ensure(club, clubMs);   // 등번호
             var layout = TacticSystem.Layout(club.myClub.formation);
             var xi = ClubSystem.Lineup(club);
             var team = clubMs.FindTeam(ClubSystem.ClubId);
             var v = new ClubTeamView
             {
                 name = club.myClub.name, formation = club.myClub.formation, style = club.myClub.style, selected = clubSelected, selected2 = clubSelected2,
-                strength = team != null ? team.strength : 0f, level = ClubSystem.TeamLevel(club)
+                strength = team != null ? team.strength : 0f, level = ClubSystem.TeamLevel(club),
+                summary = SquadSystem.View(club, clubMs, settings, ClubSystem.ClubId, SeasonSystem.DivisionOf(club, clubMs, ClubSystem.ClubId), null)
             };
             for (int i = 0; i < xi.Length; i++) if (xi[i] != null) v.starters.Add(PlayerView(xi[i], layout, i));
             var starters = new HashSet<int>(club.myClub.lineup);
@@ -225,7 +230,7 @@ namespace MyFootballCareer
             if (club == null) return null;
             var p = ClubSystem.Squad(club).players.Find(x => x.id == id);
             if (p == null) return null;
-            var row = new SquadRowView { id = p.id, name = p.name, role = p.role, age = p.age, rating = p.rating, attrs = ClubSystem.Attrs(club, p), legend = ClubSystem.IsLegend(p) };
+            var row = new SquadRowView { id = p.id, name = p.name, role = p.role, age = p.age, rating = p.rating, attrs = ClubSystem.Attrs(club, p), legend = ClubSystem.IsLegend(p), number = p.number };
             var stats = ClubSystem.SeasonLines(club, clubMs, settings);   // 경기마다 쌓은 기록 (교체로 빠져도 남음)
             if (stats.TryGetValue(p.name, out var line)) row.line = line;
             return row;

@@ -24,9 +24,10 @@ namespace MyFootballCareer
         public Position position;
         public Trait trait;
         public float shooting, passing, dribbling, defending, stamina;
-        public float goalkeeping;                   // GK 능력 (골키퍼만 강화할 수 있음)
+        public float goalkeeping;                   // GK 능력 (모든 선수가 강화할 수 있음. 골키퍼 평점에만 크게 반영)
         public int hairColor, skinTone, kitColor;   // 외형: PlayerLook의 머리색·피부색·유니폼 번호 (0이 원래 모습)
         public int bootColor;                       // 축구화 색 (PlayerLook.BootNames, 0이 원래 검정)
+        public int number;                          // 등번호 1~99 (0이면 아직 없음: 포지션에 맞는 번호로 정함)
 
         public float Get(AttributeKind kind)
         {

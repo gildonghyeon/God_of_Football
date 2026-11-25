@@ -51,7 +51,9 @@ namespace MyFootballCareer
 
         // shootN: 슈팅 능력(0~1), tackles: 경기 기록의 수비 기여 횟수
         // ours/theirs: 두 팀의 포메이션 (득점자·도움 자리를 고를 때 씀)
-        public static List<ReplayEvent> Build(MatchRecord m, bool youPlayed, int youSlot, System.Random rng, float shootN, int tackles, Formation ours, Formation theirs)
+        // ownAttrs/oppAttrs: 두 팀 주전의 세부 능력치 (자리 순서). 있으면 세트피스 골의 키커를 능력치로 정함
+        public static List<ReplayEvent> Build(MatchRecord m, bool youPlayed, int youSlot, System.Random rng, float shootN, int tackles, Formation ours, Formation theirs,
+                                              float[][] ownAttrs = null, float[][] oppAttrs = null)
         {
             var lo = TacticSystem.Layout(ours); var lt = TacticSystem.Layout(theirs);
             var list = new List<ReplayEvent>();
@@ -120,6 +122,19 @@ namespace MyFootballCareer
                 else if (r < 0.28) e.setPiece = SetPiece.Penalty;
                 else if (r < 0.4) e.setPiece = SetPiece.FreeKick;
             }
+            // 세트피스 키커 (난수를 쓰지 않아 득점 기록과 영상의 순서가 그대로): 페널티킥·프리킥은 슈팅, 코너킥은 패스가 가장 좋은 선수. 내 선수의 골·도움은 그대로
+            foreach (var e in list)
+            {
+                bool oursGoal = e.type == ReplayEventType.GoalOurs;
+                if (!oursGoal && e.type != ReplayEventType.GoalTheirs) continue;
+                var attrs = oursGoal ? ownAttrs : oppAttrs;
+                if (attrs == null || e.youScore || e.youAssist) continue;
+                int skip = oursGoal ? you : -1;
+                if (e.setPiece == SetPiece.Penalty || e.setPiece == SetPiece.FreeKick)
+                { int k = BestAt(attrs, 0, skip, -1); if (k >= 0) e.scorerSlot = k; }
+                else if (e.setPiece == SetPiece.Corner && e.assisterSlot >= 0)
+                { int k = BestAt(attrs, 1, skip, e.scorerSlot); if (k >= 0) e.assisterSlot = k; }
+            }
 
             for (int i = list.Count - 1; i > 0; i--)   // 순서 섞기
             {
@@ -133,6 +148,18 @@ namespace MyFootballCareer
                     list[i].minute = Mathf.Round(8f + step * (i + 0.5f) + ((float)rng.NextDouble() - 0.5f) * step * 0.4f);
             }
             return list;
+        }
+
+        // 필드 선수(1~10번 자리) 중 그 능력치(0 슈팅, 1 패스)가 가장 좋은 자리 (같으면 앞 번호)
+        static int BestAt(float[][] attrs, int kind, int skipA, int skipB)
+        {
+            int best = -1; float bv = float.MinValue;
+            for (int s = 1; s < attrs.Length && s <= 10; s++)
+            {
+                if (s == skipA || s == skipB || attrs[s] == null || attrs[s].Length <= kind) continue;
+                if (attrs[s][kind] > bv) { bv = attrs[s][kind]; best = s; }
+            }
+            return best;
         }
 
         public static string SetPieceName(SetPiece s)
