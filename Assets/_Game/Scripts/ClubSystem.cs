@@ -35,6 +35,14 @@ namespace MyFootballCareer
         public int saves, cleanSheets, conceded;                  // 골키퍼 통산
     }
 
+    // 나만의 팀 선수 한 명의 이번 시즌 기록 (1군으로 뛴 경기만)
+    [Serializable] public class ClubPlayerStat
+    {
+        public int id;
+        public int apps, goals, assists, defense, saves;
+        public float ratingSum;
+    }
+
     // 나만의 팀 (은퇴 선수를 모아 창단)
     [Serializable] public class MyClubData
     {
@@ -43,6 +51,8 @@ namespace MyFootballCareer
         public Formation formation = Formation.F433;
         public TacticStyle style = TacticStyle.Possession;
         public List<int> lineup = new List<int>();          // 주전 11명 (선수 번호, 포메이션 자리 순서). 나머지는 교체
+        public List<ClubPlayerStat> stats = new List<ClubPlayerStat>();   // 이번 시즌 선수별 기록 (경기마다 그때의 1군으로 쌓임)
+        public int statsSeason;                             // stats가 몇 시즌 기록인지
         public bool active;                                 // 리그에 참가 중인지 (창단한 다음 시즌부터)
         public string replacedTeamId = "";                  // 이 팀 대신 리그에서 빠진 팀
     }
@@ -289,7 +299,14 @@ namespace MyFootballCareer
 
         static SquadPlayer LegendPlayer(RetiredPlayer lg)
         {
-            return new SquadPlayer { id = -1000 - lg.careerNumber, name = lg.name, role = RoleOf(lg.position), age = lg.age, rating = Mathf.Clamp(lg.rating, 1f, 99f) };
+            return new SquadPlayer { id = -1000 - lg.careerNumber, name = lg.name, role = RoleOf(lg.position), age = lg.age, rating = LegendRating(lg) };
+        }
+
+        // 내가 키운 선수의 능력: 실제 세부 능력치를 자기 포지션 비중으로 평균 (모두 100이면 100)
+        static float LegendRating(RetiredPlayer lg)
+        {
+            var a = SquadSystem.AtLeastMin(new[] { lg.shooting, lg.passing, lg.dribbling, lg.defending, lg.stamina, lg.goalkeeping });
+            return Mathf.Clamp(Mathf.Round(SlotRating(a, RoleOf(lg.position))), SquadSystem.MinStat, SquadSystem.MaxStat);
         }
 
         public static bool IsLegend(SquadPlayer p) { return p != null && p.id <= -1000 && p.id > -2000; }
@@ -308,7 +325,11 @@ namespace MyFootballCareer
             if (club == null || !club.hasClub) return;
             var squad = Squad(club);
             foreach (var lg in club.legends)
-                if (!squad.players.Exists(x => x.id == -1000 - lg.careerNumber)) squad.players.Add(LegendPlayer(lg));
+            {
+                var have = squad.players.Find(x => x.id == -1000 - lg.careerNumber);
+                if (have == null) squad.players.Add(LegendPlayer(lg));
+                else have.rating = LegendRating(lg);   // 이미 있는 선수도 능력을 지금 비중으로 다시 계산
+            }
             squad.players.RemoveAll(p => IsLegend(p) && !club.legends.Exists(l => -1000 - l.careerNumber == p.id));
             while (squad.players.Count > SquadSize)
             {
@@ -382,12 +403,38 @@ namespace MyFootballCareer
             return xi;
         }
 
-        // 자리에 맞지 않는 선수는 실력을 다 내지 못함: 다른 필드 포지션 80%, 골키퍼 ↔ 필드 40%
-        public static float Effective(SquadPlayer p, SquadRole slot)
+        // 자리별로 요구되는 능력치의 비중 (슈팅, 패스, 드리블, 수비, 체력, GK 능력)
+        static readonly float[][] SlotWeights =
+        {
+            new[] { 0f, 0f, 0f, 0f, 0f, 1f },             // GK: GK 능력 100%
+            new[] { 0f, .20f, .10f, .55f, .15f, 0f },       // DF: 패스 20, 드리블 10, 수비 55, 체력 15
+            new[] { .20f, .30f, .15f, .15f, .20f, 0f },     // MF: 슈팅 20, 패스 30, 드리블 15, 수비 15, 체력 20
+            new[] { .50f, .15f, .20f, 0f, .15f, 0f },       // FW: 슈팅 50, 패스 15, 드리블 20, 체력 15
+        };
+
+        // 선수의 세부 능력치 6개: 내가 키운 선수는 실제 값, 나머지는 능력과 포지션으로 정한 값
+        public static float[] Attrs(SaveData club, SquadPlayer p)
+        {
+            var lg = club != null && club.legends != null ? club.legends.Find(l => -1000 - l.careerNumber == p.id) : null;
+            if (lg != null) return SquadSystem.AtLeastMin(new[] { lg.shooting, lg.passing, lg.dribbling, lg.defending, lg.stamina, lg.goalkeeping });
+            return SquadSystem.DeriveAttrs(p);
+        }
+
+        // 그 자리에서 요구되는 능력치의 가중 평균
+        public static float SlotRating(float[] a, SquadRole slot)
+        {
+            var w = SlotWeights[(int)slot];
+            float sum = 0f, total = 0f;
+            for (int k = 0; k < 6 && k < a.Length; k++) { sum += w[k] * a[k]; total += w[k]; }
+            return total > 0f ? sum / total : 0f;
+        }
+
+        // 그 자리에서의 능력: 자기 포지션이면 능력 그대로, 아니면 그 자리가 요구하는 능력치의 평균 (따로 깎지 않음)
+        public static float Effective(SaveData club, SquadPlayer p, SquadRole slot)
         {
             if (p == null) return 0f;
             if (p.role == slot) return p.rating;
-            return (p.role == SquadRole.GK || slot == SquadRole.GK) ? p.rating * 0.4f : p.rating * 0.8f;
+            return Mathf.Round(SlotRating(Attrs(club, p), slot));
         }
 
         // 주전 11명의 (자리 적합도를 반영한) 평균 평점
@@ -396,7 +443,7 @@ namespace MyFootballCareer
             var xi = Lineup(club);
             var layout = TacticSystem.Layout(club.myClub.formation);
             float sum = 0f; int n = 0;
-            for (int i = 0; i < xi.Length && i < layout.Length; i++) if (xi[i] != null) { sum += Effective(xi[i], layout[i].role); n++; }
+            for (int i = 0; i < xi.Length && i < layout.Length; i++) if (xi[i] != null) { sum += Effective(club, xi[i], layout[i].role); n++; }
             return n > 0 ? sum / n : 20f;
         }
 
@@ -418,6 +465,72 @@ namespace MyFootballCareer
             var keep = new HashSet<int>(club.myClub.lineup);
             club.myClub.formation = f;
             AutoLineup(club, keep);   // 지금 주전을 그대로 쓰되 새 포메이션 자리에 맞춰 다시 배치
+        }
+
+        // ---------- 선수별 시즌 기록 ----------
+        // 경기가 끝날 때마다 그 경기의 1군 11명 기록을 쌓습니다 (교체로 빠져도 1군으로 뛴 기록은 남음).
+        // 골·도움은 경기 기록의 득점자, 출전·평점·수비·선방은 다른 팀 선수와 같은 경기 계산으로 만듭니다.
+        public static void RecordMatch(SaveData club, MatchSettings ms, CareerSettings career, MatchRecord m)
+        {
+            if (club == null || !club.hasClub || m == null) return;
+            var mc = club.myClub;
+            if (mc.stats == null) mc.stats = new List<ClubPlayerStat>();
+            if (mc.statsSeason != club.season.seasonNumber)   // 새 시즌(또는 기록을 쌓기 전 저장): 이번 시즌 치른 경기 전부로 다시
+            {
+                mc.stats.Clear(); mc.statsSeason = club.season.seasonNumber;
+                foreach (var pm in club.season.matches) if (pm.played) AddMatch(club, ms, career, pm);
+                return;
+            }
+            AddMatch(club, ms, career, m);
+        }
+
+        static void AddMatch(SaveData club, MatchSettings ms, CareerSettings career, MatchRecord m)
+        {
+            var team = ms.FindTeam(ClubId); var opp = ms.FindTeam(m.opponentId);
+            if (team == null || opp == null) return;
+            var simTeam = new TeamDefinition { id = team.id, displayName = team.displayName, division = team.division, strength = team.strength, requiredRating = 0f, focus = team.focus };
+            var layout = TacticSystem.Layout(club.myClub.formation);
+            var xi = Lineup(club);
+            for (int i = 0; i < xi.Length && i < layout.Length; i++)
+            {
+                var p = xi[i];
+                if (p == null) continue;
+                // 세부 능력치 그대로 그 자리(포메이션의 포지션)에서 경기 (자기 포지션이 아니어도 따로 깎지 않음)
+                var a = Attrs(club, p);
+                float cap = career.attributeCap;
+                var pd = new PlayerData { playerName = p.name, position = SquadSystem.ToPosition(layout[i].role),
+                    shooting = Mathf.Clamp(a[0], SquadSystem.MinStat, cap), passing = Mathf.Clamp(a[1], SquadSystem.MinStat, cap), dribbling = Mathf.Clamp(a[2], SquadSystem.MinStat, cap),
+                    defending = Mathf.Clamp(a[3], SquadSystem.MinStat, cap), stamina = Mathf.Clamp(a[4], SquadSystem.MinStat, cap), goalkeeping = Mathf.Clamp(a[5], SquadSystem.MinStat, cap) };
+                var mr = new MatchRecord { home = m.home, seed = unchecked(m.seed ^ (p.id * 7919) ^ 0x3c6ef35f) };
+                MatchSimulation.Play(mr, pd, simTeam, opp, ms, career.attributeCap, layout[i].kind);
+                var s = club.myClub.stats.Find(x => x.id == p.id);
+                if (s == null) { s = new ClubPlayerStat { id = p.id }; club.myClub.stats.Add(s); }
+                s.apps++; s.ratingSum += mr.rating;
+                if (layout[i].role == SquadRole.GK) s.saves += mr.defensiveActions; else s.defense += mr.defensiveActions;   // 골문을 지킨 경기는 선방
+                if (m.goalNotes != null)
+                    foreach (var g in m.goalNotes) if (g.ours) { if (g.scorer == p.name) s.goals++; if (g.assist == p.name) s.assists++; }
+            }
+        }
+
+        // 이번 시즌 선수별 기록 (이름 → 기록). 기록을 쌓기 전에 치른 경기가 있으면(예전 저장) 지금 1군으로 한 번 채웁니다.
+        public static Dictionary<string, SeasonLine> SeasonLines(SaveData club, MatchSettings ms, CareerSettings career)
+        {
+            var mc = club.myClub;
+            if (mc.stats == null) mc.stats = new List<ClubPlayerStat>();
+            if (mc.statsSeason != club.season.seasonNumber)
+            {
+                mc.stats.Clear(); mc.statsSeason = club.season.seasonNumber;
+                foreach (var m in club.season.matches) if (m.played) AddMatch(club, ms, career, m);
+            }
+            var lines = new Dictionary<string, SeasonLine>();
+            var squad = Squad(club);
+            foreach (var s in mc.stats)
+            {
+                var p = squad.players.Find(x => x.id == s.id);
+                if (p == null) continue;   // 방출한 선수
+                lines[p.name] = new SeasonLine { apps = s.apps, goals = s.goals, assists = s.assists, defense = s.defense, saves = s.saves, avg = s.apps > 0 ? s.ratingSum / s.apps : 0f };
+            }
+            return lines;
         }
 
         // 무료 영입: 선수단이 꽉 찼으면 releaseId 선수를 내보내고 그 자리(주전이면 주전 자리)에 들어갑니다.

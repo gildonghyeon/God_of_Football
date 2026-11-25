@@ -19,13 +19,13 @@ namespace MyFootballCareer
 
 
         // 경쟁자 한 경기의 기록 (시즌 도중 순위표용)
-        struct MatchLine { public bool played; public int goals, assists, defense; public float rating; }
+        struct MatchLine { public bool played; public int goals, assists, defense, saves; public float rating; }
 
         class Rival
         {
             public string name, teamId;
             public Position position;
-            public int division, played, apps, goals, assists, defense;
+            public int division, played, apps, goals, assists, defense, saves;   // saves: 골키퍼 선방
             public float ratingSum;
             public float Avg => apps > 0 ? ratingSum / apps : 0f;
             public readonly List<MatchLine> log = new List<MatchLine>();
@@ -38,7 +38,7 @@ namespace MyFootballCareer
                 {
                     var l = log[i]; r.played++;
                     if (!l.played) continue;
-                    r.apps++; r.ratingSum += l.rating; r.goals += l.goals; r.assists += l.assists; r.defense += l.defense;
+                    r.apps++; r.ratingSum += l.rating; r.goals += l.goals; r.assists += l.assists; r.defense += l.defense; r.saves += l.saves;
                 }
                 return r;
             }
@@ -73,6 +73,9 @@ namespace MyFootballCareer
             var list = new List<Rival>();
             foreach (var team in teams)
             {
+                // 나만의 팀은 내가 정한 1군이 늘 뛰므로 요구 평점을 0으로 (선발에서 빠지는 일 없이)
+                var simTeam = save.teamMode && team.id == ClubSystem.ClubId
+                    ? new TeamDefinition { id = team.id, displayName = team.displayName, division = team.division, strength = team.strength, requiredRating = 0f, focus = team.focus } : team;
                 var xi = SquadSystem.Starters(save, ms, team.id);
                 for (int slot = 0; slot < xi.Length; slot++)   // 0번은 골키퍼 (베스트 11 골키퍼 자리)
                 {
@@ -91,12 +94,12 @@ namespace MyFootballCareer
                         for (int leg = 0; leg < 2; leg++)
                         {
                             var m = new MatchRecord { home = leg == 0, seed = mr.Next() };
-                            MatchSimulation.Play(m, p, team, opp, ms, career.attributeCap, kind);
+                            MatchSimulation.Play(m, p, simTeam, opp, ms, career.attributeCap, kind);
                             r.played++;
-                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = pos == Position.Goalkeeper ? 0 : m.defensiveActions, rating = m.rating });   // 골키퍼의 선방은 수비 순위에서 뺌
+                            r.log.Add(new MatchLine { played = m.playerPlayed, goals = m.playerGoals, assists = m.playerAssists, defense = pos == Position.Goalkeeper ? 0 : m.defensiveActions, saves = pos == Position.Goalkeeper ? m.defensiveActions : 0, rating = m.rating });   // 골키퍼의 선방은 수비 순위에서 뺌
                             if (!m.playerPlayed) continue;
                             r.apps++; r.ratingSum += m.rating;
-                            r.goals += m.playerGoals; r.assists += m.playerAssists; if (pos != Position.Goalkeeper) r.defense += m.defensiveActions;
+                            r.goals += m.playerGoals; r.assists += m.playerAssists; if (pos != Position.Goalkeeper) r.defense += m.defensiveActions; else r.saves += m.defensiveActions;
                         }
                     }
                     list.Add(r);
@@ -157,14 +160,14 @@ namespace MyFootballCareer
             {
                 teams = new List<TeamDefinition>();
                 foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) teams.Add(t); }
-                div = season.division; skipTeam = save.teamId; division = season.division;
+                div = season.division; skipTeam = save.teamMode ? null : save.teamId; division = season.division;   // 나만의 팀 모드에는 내 선수 자리가 없음
             }
             else { div = division; teams = SeasonSystem.TeamsInDivision(save, ms, div); }
             if (games <= 0 || teams.Count < 2) return result;
             var rivals = Snapshot(SimulateRivals(save, ms, career, teams, div, skipTeam, SquadSystem.MySlot(save, ms)), games, save);
             foreach (var r in rivals)
                 if (r.teamId == teamId)
-                    result[r.name] = new SeasonLine { goals = r.goals, assists = r.assists, apps = r.apps, avg = r.Avg };
+                    result[r.name] = new SeasonLine { goals = r.goals, assists = r.assists, apps = r.apps, avg = r.Avg, defense = r.defense, saves = r.saves };
             return result;
         }
 

@@ -80,6 +80,8 @@ namespace MyFootballCareer
         int goalsFor, goalsAgainst, youSlot;
         int ourNote, theirNote;   // 다음에 보여 줄 골 기록 (GoalNote) 순서
         int yourGoals, yourAssists, yourShots, yourTackles;
+        int livePassAtt, livePassComp;       // 영상 속 내 패스 (시도, 성공)
+        int teamShots, teamOnTarget, teamPassAtt, teamPassComp, teamTackleAtt, teamTackleWon, teamSaves;   // 나만의 팀 경기: 우리 팀 기록
         float waitT;
         string lastStatsLine = "";
         bool finishing;
@@ -129,9 +131,15 @@ namespace MyFootballCareer
             engine = new MatchReplayEngine(plan, youSlot, rng, ownTactic, oppTactic);
             engine.stats = stats;
             engine.GoalScored = OnGoal; engine.AssistMade = OnAssist; engine.ShotResolved = OnShot;
+            engine.YouPassed = ok => { livePassAtt++; if (ok) livePassComp++; };   // 영상 속 내 패스를 그대로 셈
+            teamShots = teamOnTarget = teamPassAtt = teamPassComp = teamTackleAtt = teamTackleWon = teamSaves = 0;
+            engine.TeamShot = (team, onTarget) => { if (team == 0) { teamShots++; if (onTarget) teamOnTarget++; } };
+            engine.TeamPassed = (team, ok) => { if (team == 0) { teamPassAtt++; if (ok) teamPassComp++; } };
+            engine.TeamTackled = (team, ok) => { if (team == 0) { teamTackleAtt++; if (ok) teamTackleWon++; } };
+            engine.KeeperSaved = team => { if (team == 0) teamSaves++; };
             engine.TackleWon = OnTackle; engine.ShotTaken = OnShotTaken; engine.SetPieceCalled = OnSetPiece; engine.HalfTime = OnHalfTime;
             clock = 0f; goalsFor = 0; goalsAgainst = 0; bannerT = 0f; finishing = false; countedAssist = null; ourNote = 0; theirNote = 0;
-            yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; waitT = 0f; lastStatsLine = "";
+            yourGoals = 0; yourAssists = 0; yourShots = 0; yourTackles = 0; livePassAtt = 0; livePassComp = 0; waitT = 0f; lastStatsLine = "";
             feedItems.Clear(); scorePulse = 0f; lastCallId = 0; callTimer = 0f;
             try { speed = Mathf.Clamp(PlayerPrefs.GetInt(SpeedPref, 2), 1, 2); } catch { speed = 2; }
             BuildUi(parent);
@@ -309,22 +317,24 @@ namespace MyFootballCareer
             var chipLayout = chipRow.gameObject.AddComponent<HorizontalLayoutGroup>();
             chipLayout.spacing = 6; chipLayout.childControlWidth = true; chipLayout.childControlHeight = true;
             chipLayout.childForceExpandWidth = true; chipLayout.childForceExpandHeight = true;
-            string[] chipNames = youPosition == Position.Goalkeeper
-                ? new[] { "선방", "실점", "선방률", "패스", "클린시트" }   // 골키퍼: 골·도움 대신
+            System.Array.Clear(chipValues, 0, chipValues.Length);   // 지난 경기 칸 지우기 (골키퍼는 4칸)
+            string[] chipNames = TeamMode ? new[] { "슈팅", "유효슈팅", "패스", "태클", "선방" }   // 나만의 팀: 우리 팀 기록 (패스·태클·선방은 성공률)
+                : youPosition == Position.Goalkeeper
+                ? new[] { "선방", "실점", "선방률", "패스" }   // 골키퍼: 골·도움 대신 (4칸)
                 : new[] { "골", "도움", "슈팅", "패스", "태클" };
             for (int i = 0; i < chipNames.Length; i++)
             {
                 var chip = NewRect("Chip", chipRow);
                 chip.gameObject.AddComponent<Image>().color = new Color(.12f, .16f, .25f, .95f);
-                var label = TextNode(chipNames[i], chip, 16, TextAnchor.MiddleLeft, PixelTheme.TextDim);
-                Anchored(label.rectTransform, .07f, 0, .45f, 1);
+                var label = Fit(TextNode(chipNames[i], chip, 16, TextAnchor.MiddleLeft, PixelTheme.TextDim), 10);
+                Anchored(label.rectTransform, .07f, 0, TeamMode ? .52f : .45f, 1);
                 chipValues[i] = Fit(TextNode("0", chip, 22, TextAnchor.MiddleRight, PixelTheme.Accent), 14);
                 Anchored(chipValues[i].rectTransform, .45f, .05f, .94f, .95f);
             }
             benchText = TextNode("벤치 대기 중", rootRect, 20, TextAnchor.MiddleCenter, PixelTheme.TextDim);
             benchText.rectTransform.anchorMin = new Vector2(0, 0); benchText.rectTransform.anchorMax = new Vector2(1, 0); benchText.rectTransform.pivot = new Vector2(0, 0);
             benchText.rectTransform.offsetMin = new Vector2(16, 102); benchText.rectTransform.offsetMax = new Vector2(-16, 140);
-            chipRow.gameObject.SetActive(youSlot >= 0); benchText.gameObject.SetActive(youSlot < 0 && !TeamMode);
+            chipRow.gameObject.SetActive(youSlot >= 0 || TeamMode); benchText.gameObject.SetActive(youSlot < 0 && !TeamMode);
             // 진행 기록: 분 배지 + 내용, 3줄
             for (int i = 0; i < FeedRows; i++)
             {
@@ -403,6 +413,7 @@ namespace MyFootballCareer
                 float step = Mathf.Min(sim, 0.05f);
                 engine.Step(step, clock);
                 sim -= step;
+                if (celebration != null && celebration.Active) break;   // 골·도움·선방 장면이 시작되면 경기를 바로 멈춤
             }
             if (engine.CallId != lastCallId)
             {
@@ -412,9 +423,12 @@ namespace MyFootballCareer
             callTimer = Mathf.Max(0f, callTimer - dt);
             Render();
 
+            if (celebration != null && celebration.Active) return;   // 장면을 다 본 뒤에 경기 종료 (종료 휘슬 뒤에 선방 장면이 뜨지 않게)
             if (clock >= 90f && !engine.Busy)
             {
                 finishing = true; finishT = 1.3f;
+                // 끝까지 본 경기: 내 패스 기록은 영상에서 실제로 보낸 패스로 (결과 창·지난 경기와 같은 숫자)
+                if (record.playerPlayed) { record.passesAttempted = livePassAtt; record.passesCompleted = livePassComp; }
                 SnapStats();
                 ShowEvent("경기 종료", ownName + "  " + goalsFor + " - " + goalsAgainst + "  " + oppName, NeutralColor, 1.3f);
                 SoundFx.Play(Sfx.FullTime);
@@ -486,17 +500,29 @@ namespace MyFootballCareer
         // 내 선수의 기록. 패스는 최종 기록을 향해 경기 진행에 맞춰 늘어납니다.
         void UpdateStatsLine(float progress)
         {
-            if (youSlot < 0 || chipValues[0] == null) return;
-            int attempted = Mathf.RoundToInt(record.passesAttempted * progress);
-            int completed = Mathf.Min(attempted, Mathf.RoundToInt(record.passesCompleted * progress));
+            if (chipValues[0] == null) return;
+            if (TeamMode)   // 나만의 팀: 슈팅 수, 유효 슈팅, 패스 성공률, 태클 성공률, 선방률
+            {
+                string teamLine = teamShots + "|" + teamOnTarget + "|" + Pct(teamPassComp, teamPassAtt) + "|" + Pct(teamTackleWon, teamTackleAtt) + "|" + Pct(teamSaves, teamSaves + goalsAgainst);
+                if (teamLine == lastStatsLine) return;
+                lastStatsLine = teamLine;
+                var tp = teamLine.Split('|');
+                for (int i = 0; i < chipValues.Length && i < tp.Length; i++) if (chipValues[i] != null) chipValues[i].text = tp[i];
+                return;
+            }
+            if (youSlot < 0) return;
+            // 패스: 경기 영상에서 내 선수가 실제로 보낸 패스 (성공/시도). 시간에 따라 늘어나는 숫자가 아님
+            int attempted = livePassAtt, completed = livePassComp;
             string line = youPosition == Position.Goalkeeper
-                ? yourTackles + "|" + goalsAgainst + "|" + SeasonSystem.SaveRateText(yourTackles, goalsAgainst) + "|" + completed + "/" + attempted + "|" + (goalsAgainst == 0 ? "O" : "-")
+                ? yourTackles + "|" + goalsAgainst + "|" + SeasonSystem.SaveRateText(yourTackles, goalsAgainst) + "|" + completed + "/" + attempted
                 : yourGoals + "|" + yourAssists + "|" + yourShots + "|" + completed + "/" + attempted + "|" + yourTackles;
             if (line == lastStatsLine) return;
             lastStatsLine = line;
             var parts = line.Split('|');
-            for (int i = 0; i < chipValues.Length; i++) chipValues[i].text = parts[i];
+            for (int i = 0; i < chipValues.Length && i < parts.Length; i++) if (chipValues[i] != null) chipValues[i].text = parts[i];
         }
+
+        static string Pct(int ok, int total) { return total > 0 ? Mathf.RoundToInt(100f * ok / total) + "%" : "-"; }
 
         // 경기 끝에 내 선수의 기록을 저장된 결과와 똑같이 맞춥니다.
         void SnapStats()

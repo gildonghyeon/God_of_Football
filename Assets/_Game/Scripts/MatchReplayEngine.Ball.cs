@@ -9,6 +9,8 @@ namespace MyFootballCareer
         // ---------- 공 ----------
         void StartFlight(float tx, float ty, float dur, int kind, int recv, float zPeak)
         {
+            youPassFlight = pendingYouPass; pendingYouPass = false;
+            passFlightTeam = pendingPassTeam; pendingPassTeam = -1;
             flying = true;
             fFx = ballX; fFy = ballY; fTx = tx; fTy = ty; fT = 0f; fDur = dur; fKind = kind; fRecv = recv; fZ = zPeak; fLong = false;
             if (carrier >= 0) lastPoss = dots[carrier].team;
@@ -18,6 +20,8 @@ namespace MyFootballCareer
         // speed: 공이 나는 속도(거리 ÷ 시간, m/s). 주지 않으면 보통 패스 17, 높이 뜬 크로스 14
         void StartPass(int from, int to, float z = -1f, float speed = -1f)
         {
+            pendingYouPass = from == YouIdx && YouIdx >= 0;   // 내 선수의 패스 (경기 화면의 개인 패스 기록)
+            pendingPassTeam = dots[from].team;                // 팀 패스 기록
             var r = dots[to];
             float tx = Mathf.Clamp(r.x + r.vx * 0.5f, 1f, W - 1f);
             float ty = Mathf.Clamp(r.y + r.vy * 0.5f, 1f, L - 1f);
@@ -80,6 +84,8 @@ namespace MyFootballCareer
         // outcome: KindGoal / KindSaved / KindWide
         void StartShot(ReplayDot shooter, int outcome, float z = 1.6f)
         {
+            if (TeamShot != null) TeamShot(shooter.team, outcome != KindWide);
+            if (outcome == KindSaved && KeeperSaved != null) KeeperSaved(1 - shooter.team);
             float goalY = shooter.team == 0 ? 0f : L;
             shotSide = rng.NextDouble() < 0.5 ? 1f : -1f;
             if (outcome == KindGoal) shotGx = 34f + shotSide * 3f;
@@ -185,13 +191,15 @@ namespace MyFootballCareer
                         if (stagedRunner >= 0) break;   // 오프사이드 장면: 침투 패스를 기다리는 잠깐 동안은 태클하지 않음
                         if (dd < 1.5f && rng.NextDouble() < 0.5 * dt * (carrier == YouIdx ? 1.4f - stats.dribbleN : 1f))
                         {
-                            if (rng.NextDouble() < FoulChance) { Foul(d); break; }   // 거친 태클은 파울 → 프리킥
+                            if (rng.NextDouble() < FoulChance) { if (TeamTackled != null) TeamTackled(o.team, false); Foul(d); break; }   // 거친 태클은 파울 → 프리킥
                             if (Mathf.Abs(d.x - 34f) > 22f && rng.NextDouble() < 0.5)   // 터치라인 근처: 태클한 공이 밖으로 → 스로인
                             {
+                                if (TeamTackled != null) TeamTackled(o.team, false);   // 공은 밖으로 → 상대 스로인 (성공 아님)
                                 lastPoss = o.team; carrier = -1;
                                 StartOut(d.x < 34f ? -1.5f : W + 1.5f, d.y + Rand(-3f, 3f), Restart.ThrowIn, d.team, 0.4f, 0.5f);
                                 break;
                             }
+                            if (TeamTackled != null) TeamTackled(o.team, true);
                             carrier = Idx(1 - d.team, s); decideT = Rand(0.7f, 1.4f); break;
                         }
                     }
@@ -272,7 +280,18 @@ namespace MyFootballCareer
             decideT = counterT[c.team] > 0f ? Rand(0.25f, 0.5f) : Rand(st.decideMin, st.decideMax);
         }
 
+        // 공이 도착했을 때: 내 선수가 보낸 패스였으면 동료가 받았는지 알려 줌
         void EndFlight()
+        {
+            bool mine = youPassFlight && (fKind == KindPass || fKind == KindOut);
+            int passTeam = (fKind == KindPass || fKind == KindOut) ? passFlightTeam : -1;
+            youPassFlight = false; passFlightTeam = -1;
+            EndFlightCore();
+            if (mine && YouPassed != null) YouPassed(!flying && carrier >= 0 && carrier != YouIdx && dots[carrier].team == 0);
+            if (passTeam >= 0 && TeamPassed != null) TeamPassed(passTeam, !flying && carrier >= 0 && dots[carrier].team == passTeam);
+        }
+
+        void EndFlightCore()
         {
             flying = false; focusFlight = false;
             if (fKind == KindOut)
@@ -324,6 +343,7 @@ namespace MyFootballCareer
                 if (script == null && fLong && nearDist < reach && rng.NextDouble() < 0.2)   // 공중볼 경합 중 파울
                 { carrier = -1; ballX = fTx; ballY = fTy; Foul(dots[fRecv]); return; }
                 bool lost = script == null && (badPass || (nearDist < reach && rng.NextDouble() < steal));   // 가로채기
+                if (script == null && nearDist < reach && TeamTackled != null) TeamTackled(1 - team, lost);   // 패스를 끊으러 붙음: 가로채면 성공
                 if (lost && nearDist > 2.5f)
                 {
                     // 가로챌 상대가 떨어져 있으면: 빗나간 공이 그 선수 쪽으로 굴러가고, 그 선수가 달려와 잡음

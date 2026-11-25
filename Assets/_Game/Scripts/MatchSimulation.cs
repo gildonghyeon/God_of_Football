@@ -5,6 +5,8 @@ namespace MyFootballCareer
     // 통계 기반 경기 계산. 같은 seed와 같은 능력치라면 같은 결과가 나옵니다.
     public static class MatchSimulation
     {
+        // 개인 패스 수를 경기 영상 속 내 선수의 패스 수(경기당 몇 번)에 맞추는 배율. 설정의 '경기당 패스'는 실제 축구 기준이라 줄여서 씀
+        const float PassScale = 0.06f;
         // 포지션 가중치로 계산한 선수 평점 (0~100)
         public static float PositionRating(PositionProfile profile, PlayerData p, float cap)
         {
@@ -82,7 +84,7 @@ namespace MyFootballCareer
             m.goalsAgainst = Poisson(rng, Mathf.Clamp(againstL, 0.15f, 4.5f));
 
             // 4) 패스·도움·수비
-            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * activity * (0.8f + 0.4f * (float)rng.NextDouble()) * passMul);
+            m.passesAttempted = Mathf.Max(1, Mathf.RoundToInt(profile.passesPerMatch * PassScale * activity * (0.8f + 0.4f * (float)rng.NextDouble()) * passMul));
             float passRate = 0.60f + 0.35f * passingN;
             int completed = 0;
             for (int i = 0; i < m.passesAttempted; i++)
@@ -101,8 +103,7 @@ namespace MyFootballCareer
             float rating = 6.0f;
             rating += m.goalsFor > m.goalsAgainst ? 0.5f : (m.goalsFor < m.goalsAgainst ? -0.4f : 0f);
             rating += m.playerGoals * 0.9f + m.playerAssists * 0.6f;
-            float actualPassRate = m.passesAttempted > 0 ? m.passesCompleted / (float)m.passesAttempted : passRate;
-            rating += (actualPassRate - 0.78f) * 2f;
+            rating += (passRate - 0.78f) * 2f;   // 패스 수가 적어 실제 성공률은 들쭉날쭉하므로 패스 능력으로 반영
             rating += m.defensiveActions * 0.08f;
             if (p.position == Position.Defender && m.goalsAgainst == 0) rating += 0.5f;   // 무실점
             else if (p.position == Position.Defender) rating -= 0.15f * Mathf.Max(0, m.goalsAgainst - 1);
@@ -121,7 +122,7 @@ namespace MyFootballCareer
             float faced = againstL;                                                                       // 막아야 할 위기의 양
             m.goalsAgainst = Poisson(rng, Mathf.Clamp(againstL * (1f - 0.5f * (keepN - 0.5f)), 0.15f, 4.5f));
             m.defensiveActions = Poisson(rng, (1.2f + faced * 1.3f) * (0.55f + 0.9f * keepN));          // 선방 수
-            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * (0.8f + 0.4f * (float)rng.NextDouble()));
+            m.passesAttempted = Mathf.RoundToInt(profile.passesPerMatch * PassScale * (0.8f + 0.4f * (float)rng.NextDouble()));
             float passRate = 0.55f + 0.4f * passingN;
             int completed = 0;
             for (int i = 0; i < m.passesAttempted; i++) if (rng.NextDouble() < passRate) completed++;
@@ -135,7 +136,7 @@ namespace MyFootballCareer
             rating += m.defensiveActions * 0.22f + m.playerAssists * 0.6f;
             if (m.goalsAgainst == 0) rating += 0.8f;                          // 무실점
             else rating -= 0.3f * Mathf.Max(0, m.goalsAgainst - 1);
-            rating += (completed / Mathf.Max(1f, m.passesAttempted) - 0.75f) * 1.2f;
+            rating += (passRate - 0.75f) * 1.2f;
             m.rating = Mathf.Round(Mathf.Clamp(rating, 3f, 10f) * 10f) / 10f;
             m.played = true;
         }

@@ -73,7 +73,7 @@ namespace MyFootballCareer
             ui.OnShowLegend = ShowLegend;
             ui.OnRetire = Retire; ui.OnCancelCreation = CancelRetire; ui.OnFoundClub = FoundClub;
             ui.OnPickCareer = PickCareer; ui.OnPickClub = PickClub; ui.OnExitToMenu = ExitToMenu;
-            ui.OnClubTeam = OpenClubTeam; ui.OnClubTeamBack = ShowClubScreen; ui.OnClubTap = ClubTap; ui.OnClubFormation = ClubFormation; ui.OnClubStyle = ClubStyle;
+            ui.OnClubTeam = OpenClubTeam; ui.OnClubTeamBack = ShowClubScreen; ui.OnClubTap = ClubTap; ui.OnClubPlayerInfo = ClubPlayerInfo; ui.OnClubCompare = ClubCompare; ui.OnClubSwap = ClubSwap; ui.OnClubClearSelection = ClubClearSelection; ui.OnClubFormation = ClubFormation; ui.OnClubStyle = ClubStyle;
             ui.OnOpenClub = OpenClubMode; ui.OnClubPlay = ClubPlay; ui.OnClubSquad = ClubSquad; ui.OnClubSign = ClubSign; ui.OnClubBack = ClubBack;
             baseTeams = matchSettings.teams != null ? (TeamDefinition[])matchSettings.teams.Clone() : new TeamDefinition[0];
             clubMs = Instantiate(matchSettings);

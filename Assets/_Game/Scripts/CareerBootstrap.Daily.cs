@@ -45,7 +45,8 @@ namespace MyFootballCareer
             var team = ms.FindTeam(teamId);
             if (team == null) return;
             int division = SeasonSystem.DivisionOf(save, ms, teamId);
-            var stats = save.teamMode ? null : AwardSystem.TeamSeasonStats(save, ms, settings, teamId, out division);
+            var stats = save.teamMode && teamId == ClubSystem.ClubId ? ClubSystem.SeasonLines(save, ms, settings)   // 나만의 팀: 경기마다 쌓은 기록
+                      : AwardSystem.TeamSeasonStats(save, ms, settings, teamId, out division);
             int back = leagueShown; leagueShown = 0;
             ui.ShowSquad(team.displayName + (teamId == save.teamId ? "  (내 팀)" : ""),
                          SquadSystem.View(save, ms, settings, teamId, division, stats), back > 0 ? (System.Action)(() => OpenLeague(back)) : null);

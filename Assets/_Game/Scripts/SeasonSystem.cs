@@ -147,6 +147,7 @@ namespace MyFootballCareer
             MatchSimulation.Play(match, save.player, own, opp, ms, career.attributeCap, null, save.teamMode);   // 나만의 팀 모드: 팀 전력으로만
             SquadSystem.FillGoalNotes(match, save, ms, career, own.id, opp.id);
             GenerateOthers(match, save, ms);
+            if (save.teamMode) ClubSystem.RecordMatch(save, ms, career, match);   // 나만의 팀: 선수별 기록 쌓기
             if (!save.teamMode)
             {
                 EnsureContract(save, ms, career);

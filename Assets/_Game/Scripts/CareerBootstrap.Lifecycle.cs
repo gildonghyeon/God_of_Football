@@ -20,14 +20,14 @@ namespace MyFootballCareer
 
         void Save()
         {
-            if (blocked || current == null) return;
+            if (blocked || current == null || saves == null) return;
             saves.TrySave(current, out string message);
             if (ui != null) ui.SetStatus(message);
         }
 
         void QuietSave()
         {
-            if (blocked || current == null) return;
+            if (blocked || current == null || saves == null) return;
             if (inMenu || inClub) return;   // 선수 키우기 밖에서는 저장하지 않음 (저장하면 오프라인 보상 기준 시각이 바뀜. 나갈 때 이미 저장함)
             saves.TrySave(current, out _);
         }

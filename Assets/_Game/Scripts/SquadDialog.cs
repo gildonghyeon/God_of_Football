@@ -63,7 +63,10 @@ namespace MyFootballCareer
         // 실제 경기장 비율에 가깝게, 가운데에 세로로 긴 판으로 그립니다. (우리 골대부터 상대 진영 일부까지)
         const float PitchW = 420f, PitchH = 440f;
         static float PitchY(float depth) { return .035f + depth * 1.25f; }   // 깊이(0=우리 골라인) -> 판 높이 비율
-        static void Pitch(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap)
+        // mark: 0 없음, 1 처음 고른 선수(금색), 2 두 번째 고른 선수(하늘색). home: 선수 본래 포지션 (자리와 다르면 빨간 테두리 + 이름 왼쪽에 본래 포지션)
+        static readonly Color PickGold = new Color(.98f, .80f, .28f, 1f), PickBlue = new Color(.56f, .82f, 1f, 1f), OffRed = new Color(.95f, .38f, .38f, 1f);
+        public static void Pitch(Transform parent, Font font, SquadView v, System.Action<SquadRowView> onTap,
+                                 System.Func<SquadRowView, int> mark = null, System.Func<SquadRowView, SquadRole> home = null)
         {
             var block = Block(parent, PitchH + 8f);
             var box = NewRect("Pitch", block);
@@ -82,23 +85,41 @@ namespace MyFootballCareer
             {
                 var s = v.layout[i]; var r = v.starters[i];
                 float x = s.x / 68f, y = Mathf.Clamp(PitchY(s.depth), .08f, .93f);
-                var dot = Point(box, r.me ? PixelTheme.Accent : RoleColor(s.role), x, y, 34f, 34f);
+                int m = mark != null ? mark(r) : 0;
+                SquadRole own = home != null ? home(r) : s.role;
+                bool wrong = own != s.role;
+                Color pick = m == 1 ? PickGold : PickBlue;
+                if (m > 0)   // 고른 선수: 점 둘레에 테두리
+                {
+                    Point(box, pick, x, y, 44f, 44f);
+                }
+                else if (wrong) Point(box, OffRed, x, y, 40f, 40f);   // 맞지 않는 자리: 빨간 테두리
+                float size = m > 0 ? 38f : 34f;
+                var dotColor = r.me ? PixelTheme.Accent : RoleColor(s.role);
+                var dot = Point(box, dotColor, x, y, size, size);
                 Label(dot.rectTransform, font, s.role.ToString(), 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);
                 string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
-                var name = Point(box, new Color(0f, 0f, 0f, .35f), x, y - 34f / PitchH, 92f, 22f);
-                Fit(Label(name.rectTransform, font, r.me ? "나" : surname, 15, r.me ? PixelTheme.Accent : Color.white, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
+                var name = Point(box, m > 0 ? pick : new Color(0f, 0f, 0f, .45f), x, y - 36f / PitchH, 136f, 22f);   // 본래 포지션 + 이름 + 능력 (고르면 이름표도 같은 색)
+                // 이름 왼쪽: 선수 본래 포지션 (포지션 색 글자). 고른 이름표(밝은 바탕) 위에서는 어두운 글자
+                string homeText = "<color=#" + (m > 0 ? "10141E" : ColorUtility.ToHtmlStringRGB(RoleColor(own))) + ">" + own + "</color> ";
+                string ability = m > 0 ? "<color=#10141E>" + Mathf.RoundToInt(r.rating) + "</color>"
+                               : wrong ? "<color=#F26060>" + Mathf.RoundToInt(r.rating) + "</color>"
+                               : "<color=#FBCC47>" + Mathf.RoundToInt(r.rating) + "</color>";
+                var nameColor = m > 0 ? new Color(.06f, .08f, .12f, 1f) : r.me ? PixelTheme.Accent : Color.white;
+                Fit(Label(name.rectTransform, font, homeText + (r.me ? "나" : surname) + " " + ability, 15, nameColor, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 10);
+                if (m > 0)   // 고른 순서 (1, 2) 표시
+                {
+                    var tag = Point(box, new Color(.06f, .08f, .12f, 1f), x + 22f / PitchW, y + 20f / PitchH, 20f, 20f);
+                    Label(tag.rectTransform, font, m.ToString(), 13, pick, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                }
                 if (onTap != null)   // 점과 이름을 누르면 그 선수의 세부 능력치
                 {
-                    // 평소에는 보이지 않다가, 손을 대면 밝은 칸이 떠서 눌리는 느낌을 줌 (ColorTint: 흰색 × 상태 색)
-                    var hit = Point(box, Color.white, x, y - 14f / PitchH, 100f, 66f);
+                    // 완전히 투명한 터치 칸 (색 전환 없음: 화면이 다시 그려지거나 잠시 비활성이 돼도 흰 칸이 비치지 않음)
+                    var hit = Point(box, new Color(0f, 0f, 0f, 0f), x, y - 14f / PitchH, 112f, 74f);   // 손가락으로 누르기 쉽게 넉넉한 칸
                     hit.raycastTarget = true;
                     var button = hit.gameObject.AddComponent<Button>();
                     button.targetGraphic = hit;
-                    var colors = button.colors;
-                    colors.normalColor = new Color(1f, 1f, 1f, 0f); colors.selectedColor = new Color(1f, 1f, 1f, 0f);
-                    colors.highlightedColor = new Color(1f, 1f, 1f, .12f); colors.pressedColor = new Color(1f, 1f, 1f, .35f);
-                    colors.fadeDuration = .06f;
-                    button.colors = colors;
+                    button.transition = Selectable.Transition.None;
                     var row = r; button.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); onTap(row); });
                 }
             }

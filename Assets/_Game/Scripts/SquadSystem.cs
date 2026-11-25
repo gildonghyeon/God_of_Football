@@ -17,7 +17,7 @@ namespace MyFootballCareer
     }
 
     // 한 선수의 이번 시즌 기록 (화면용)
-    public class SeasonLine { public int goals, assists, apps; public float avg; }
+    public class SeasonLine { public int goals, assists, apps, defense, saves; public float avg; }   // defense: 수비(태클·가로채기 등), saves: 골키퍼 선방
 
     // 선수단 화면용 한 줄
     public class SquadRowView
@@ -87,9 +87,14 @@ namespace MyFootballCareer
 
         // ---------- 만들기 ----------
         // 선수단이 없는 팀이 있으면 만듭니다. 새로 만든 팀이 있으면 true.
+        public const float MinStat = 10f;   // 모든 능력치·능력의 최소값
+        public const float MaxStat = 100f;  // 최대값
+        public static float[] AtLeastMin(float[] a) { for (int k = 0; k < a.Length; k++) a[k] = Mathf.Max(a[k], MinStat); return a; }
+
         public static bool Ensure(SaveData save, MatchSettings ms)
         {
             if (save.squads == null) save.squads = new List<TeamSquad>();
+            foreach (var s in save.squads) if (s.players != null) foreach (var p in s.players) if (p.rating < MinStat) p.rating = MinStat;   // 예전 저장: 최소 능력 10
             if (ms.teams == null) return false;
             bool made = false;
             HashSet<string> used = null;
@@ -129,7 +134,7 @@ namespace MyFootballCareer
             int guard = 0;
             do name = Initials[rng.Next(Initials.Length)] + ". " + Surnames[rng.Next(Surnames.Length)];
             while (!used.Add(name) && ++guard < 50);
-            return new SquadPlayer { id = ++save.nextSquadPlayerId, name = name, role = role, age = age, rating = Mathf.Clamp(rating, 1f, 99f) };
+            return new SquadPlayer { id = ++save.nextSquadPlayerId, name = name, role = role, age = age, rating = Mathf.Clamp(rating, MinStat, MaxStat) };
         }
 
         static HashSet<string> UsedNames(SaveData save)
@@ -253,7 +258,7 @@ namespace MyFootballCareer
                         continue;
                     }
                     float grow = p.age <= 21 ? rng.Next(2, 6) : p.age <= 24 ? rng.Next(0, 4) : p.age <= 29 ? rng.Next(-1, 2) : p.age <= 32 ? rng.Next(-3, 1) : rng.Next(-5, -1);
-                    p.rating = Mathf.Clamp(p.rating + grow + (target - p.rating) * 0.15f, 1f, 99f);
+                    p.rating = Mathf.Clamp(p.rating + grow + (target - p.rating) * 0.15f, MinStat, MaxStat);
                 }
             }
         }
@@ -283,7 +288,7 @@ namespace MyFootballCareer
                     float myRating = SeasonSystem.PlayerRating(save, ms, career);
                     var mp = save.player;
                     v.starters.Add(new SquadRowView { role = layout[slot].role, kind = layout[slot].kind, name = mp.playerName, tag = "나", rating = myRating, line = MyLine(save), me = true,
-                        age = 18 + save.seasonHistory.Count, attrs = new[] { mp.shooting, mp.passing, mp.dribbling, mp.defending, mp.stamina, mp.goalkeeping } });
+                        age = 18 + save.seasonHistory.Count, attrs = AtLeastMin(new[] { mp.shooting, mp.passing, mp.dribbling, mp.defending, mp.stamina, mp.goalkeeping }) });
                     ratingSum += myRating; count++;
                     continue;
                 }
@@ -305,7 +310,7 @@ namespace MyFootballCareer
                     foreach (var r in list)
                     {
                         var lg = save.legends.Find(l => -1000 - l.careerNumber == r.id && r.id != 0);
-                        if (lg != null) { r.legend = true; r.attrs = new[] { lg.shooting, lg.passing, lg.dribbling, lg.defending, lg.stamina, lg.goalkeeping }; }
+                        if (lg != null) { r.legend = true; r.attrs = AtLeastMin(new[] { lg.shooting, lg.passing, lg.dribbling, lg.defending, lg.stamina, lg.goalkeeping }); }
                     }
             return v;
         }
@@ -314,7 +319,7 @@ namespace MyFootballCareer
         // 다른 선수의 세부 능력치: 능력(평점)을 기준으로 포지션마다 강한 것·약한 것을 두고, 선수마다 조금씩 다르게 (같은 선수는 늘 같은 값)
         static readonly float[][] RoleBias =
         {
-            new[] { -25f, 0f, -18f, -6f, -4f, 8f },    // GK: GK 능력이 가장 높음
+            new[] { -25f, 0f, -18f, -6f, -4f, 0f },    // GK: GK 능력은 능력 그대로 (아래에서 따로 정함)
             new[] { -14f, -2f, -8f, 8f, 3f, -40f },    // DF
             new[] { -3f, 8f, 2f, -4f, 4f, -40f },      // MF
             new[] { 8f, -4f, 5f, -18f, 0f, -40f },     // FW
@@ -327,8 +332,9 @@ namespace MyFootballCareer
             {
                 int h; unchecked { h = p.id * 73856093 ^ (k + 1) * 19349663; }
                 float jitter = (Mathf.Abs(h) % 9) - 4f;
-                a[k] = Mathf.Clamp(Mathf.Round(p.rating + RoleBias[(int)p.role][k] + jitter), 1f, 99f);
+                a[k] = Mathf.Clamp(Mathf.Round(p.rating + RoleBias[(int)p.role][k] + jitter), MinStat, MaxStat);
             }
+            if (p.role == SquadRole.GK) a[(int)AttributeKind.Goalkeeping] = Mathf.Clamp(Mathf.Round(p.rating), MinStat, MaxStat);   // 골키퍼의 GK 능력 = 그 선수의 능력 그대로 (경기 계산과 같은 값)
             return a;
         }
 
@@ -352,6 +358,7 @@ namespace MyFootballCareer
                 var m = matches[i];
                 if (!m.played || !m.playerPlayed) continue;
                 l.apps++; sum += m.rating; l.goals += m.playerGoals; l.assists += m.playerAssists;
+                if (save.player.position == Position.Goalkeeper) l.saves += m.defensiveActions; else l.defense += m.defensiveActions;
             }
             l.avg = l.apps > 0 ? sum / l.apps : 0f;
             return l;

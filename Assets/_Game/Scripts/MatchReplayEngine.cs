@@ -77,6 +77,13 @@ namespace MyFootballCareer
         public float ballX = W / 2f, ballY = L / 2f, ballZ;
         public int youSlot = -1;
         public Action<ReplayEvent> GoalScored, AssistMade, ShotResolved, TackleWon, ShotTaken;
+        public Action<bool> YouPassed;   // 내 선수가 패스함 (true면 동료가 받음)
+        bool pendingYouPass, youPassFlight;
+        // 팀 기록 (나만의 팀 경기 화면): 슈팅(팀, 결과 KindGoal/KindSaved/KindWide), 패스(팀, 성공), 태클(팀, 성공)
+        public Action<int, bool> TeamPassed, TeamTackled;
+        public Action<int, bool> TeamShot;   // (팀, 골문으로 간 슛인지)
+        public Action<int> KeeperSaved;      // 이 팀 골키퍼가 막음
+        int pendingPassTeam = -1, passFlightTeam = -1;
         public ReplayStats stats = new ReplayStats();
 
         readonly System.Random rng;

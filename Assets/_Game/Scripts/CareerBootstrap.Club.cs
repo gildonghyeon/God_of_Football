@@ -171,23 +171,23 @@ namespace MyFootballCareer
         }
 
         // ---------- 팀 관리 (포메이션·전술·주전/교체) ----------
-        int clubSelected = int.MinValue;
+        int clubSelected = int.MinValue, clubSelected2 = int.MinValue;   // 고른 선수 (두 명까지: 두 명이면 비교·교체)
 
         void OpenClubTeam()
         {
             if (club == null) return;
-            clubSelected = int.MinValue;
+            clubSelected = clubSelected2 = int.MinValue;
             ShowClubTeam();
         }
 
-        static ClubPlayerView PlayerView(SquadPlayer p, SlotDef[] layout, int slot)
+        ClubPlayerView PlayerView(SquadPlayer p, SlotDef[] layout, int slot)
         {
             var v = new ClubPlayerView { id = p.id, name = p.name, role = p.role, slotRole = p.role, rating = p.rating, effective = p.rating, legend = ClubSystem.IsLegend(p) };
             if (layout != null)
             {
                 var s = layout[slot];
                 v.slotRole = s.role; v.kind = s.kind; v.x = s.x; v.depth = s.depth;
-                v.effective = ClubSystem.Effective(p, s.role);
+                v.effective = ClubSystem.Effective(club, p, s.role);
             }
             return v;
         }
@@ -200,28 +200,70 @@ namespace MyFootballCareer
             var team = clubMs.FindTeam(ClubSystem.ClubId);
             var v = new ClubTeamView
             {
-                name = club.myClub.name, formation = club.myClub.formation, style = club.myClub.style, selected = clubSelected,
+                name = club.myClub.name, formation = club.myClub.formation, style = club.myClub.style, selected = clubSelected, selected2 = clubSelected2,
                 strength = team != null ? team.strength : 0f, level = ClubSystem.TeamLevel(club)
             };
             for (int i = 0; i < xi.Length; i++) if (xi[i] != null) v.starters.Add(PlayerView(xi[i], layout, i));
             var starters = new HashSet<int>(club.myClub.lineup);
             foreach (var p in ClubSystem.Squad(club).players) if (!starters.Contains(p.id)) v.bench.Add(PlayerView(p, null, 0));
-            v.bench.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
+            v.bench.Sort((a, b) => a.role != b.role ? b.role.CompareTo(a.role) : b.rating.CompareTo(a.rating));   // 공격수 → 미드필더 → 수비수 → 골키퍼, 같은 포지션은 능력 순
             ui.ShowClubTeam(v);
         }
 
-        // 선수 누르기: 처음 누르면 고르고, 다른 선수를 누르면 둘의 자리를 바꿈 (주전↔주전, 주전↔교체)
+        // 카드의 'i': 선수 세부 능력치 (내가 키운 선수는 실제 능력치, 새 선수는 능력과 포지션으로 추정)
+        void ClubPlayerInfo(int id)
+        {
+            var row = ClubRow(id);
+            if (row == null) return;
+            string division = clubMs.DivisionName(club.season.division);
+            ui.ShowCards(row.name, (b, f) => PopupCards.PlayerDetail(b, f, row, division), null, "닫기");
+        }
+
+        // 나만의 팀 선수 한 명의 정보 (세부 창·비교용): 능력치(내가 키운 선수는 실제 값)와 이번 시즌 기록
+        SquadRowView ClubRow(int id)
+        {
+            if (club == null) return null;
+            var p = ClubSystem.Squad(club).players.Find(x => x.id == id);
+            if (p == null) return null;
+            var row = new SquadRowView { id = p.id, name = p.name, role = p.role, age = p.age, rating = p.rating, attrs = ClubSystem.Attrs(club, p), legend = ClubSystem.IsLegend(p) };
+            var stats = ClubSystem.SeasonLines(club, clubMs, settings);   // 경기마다 쌓은 기록 (교체로 빠져도 남음)
+            if (stats.TryGetValue(p.name, out var line)) row.line = line;
+            return row;
+        }
+
+        // 두 명을 고른 뒤 '비교': 두 선수 비교 창
+        void ClubCompare()
+        {
+            var a = ClubRow(clubSelected); var b = ClubRow(clubSelected2);
+            if (a == null || b == null) return;
+            ui.ShowCards("선수 비교", (body, f) => PopupCards.ComparePlayers(body, f, a, b), null, "닫기");
+        }
+
+        // 두 명을 고른 뒤 '교체': 두 선수의 자리를 바꿈 (1군↔1군은 자리 맞바꾸기, 1군↔교체는 교체 선수가 그 자리에)
+        void ClubSwap()
+        {
+            if (club == null || clubSelected == int.MinValue || clubSelected2 == int.MinValue) return;
+            if (!ClubSystem.Swap(club, clubSelected, clubSelected2)) { ui.SetStatus("교체 선수끼리는 바꿀 자리가 없습니다."); return; }
+            clubSelected = clubSelected2 = int.MinValue;
+            ApplyClubChange();
+            ShowClubTeam();
+        }
+
+        // 선수 누르기: 한 명 고르기 → 두 번째 선수 고르기 (두 명이면 비교·교체). 고른 선수를 다시 누르면 선택을 풂
         void ClubTap(int id)
         {
             if (club == null) return;
-            if (clubSelected == int.MinValue) clubSelected = id;
-            else if (clubSelected == id) clubSelected = int.MinValue;
-            else
-            {
-                if (!ClubSystem.Swap(club, clubSelected, id)) { clubSelected = id; ShowClubTeam(); return; }   // 교체끼리는 바꿀 게 없음: 새로 고름
-                clubSelected = int.MinValue;
-                ApplyClubChange();
-            }
+            if (id == clubSelected) { clubSelected = clubSelected2; clubSelected2 = int.MinValue; }
+            else if (id == clubSelected2) clubSelected2 = int.MinValue;
+            else if (clubSelected == int.MinValue) clubSelected = id;
+            else clubSelected2 = id;   // 이미 두 명이면 두 번째 선수를 바꿈
+            ShowClubTeam();
+        }
+
+        // 선택 막대의 '취소': 고른 선수 모두 풀기
+        void ClubClearSelection()
+        {
+            clubSelected = clubSelected2 = int.MinValue;
             ShowClubTeam();
         }
 
@@ -229,7 +271,7 @@ namespace MyFootballCareer
         {
             if (club == null) return;
             ClubSystem.SetFormation(club, f);
-            clubSelected = int.MinValue;
+            clubSelected = clubSelected2 = int.MinValue;
             ApplyClubChange();
             ShowClubTeam();
         }

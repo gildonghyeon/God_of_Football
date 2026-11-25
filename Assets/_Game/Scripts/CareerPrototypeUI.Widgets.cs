@@ -136,6 +136,7 @@ namespace MyFootballCareer
         {
             tabBar.gameObject.SetActive(visible);
             if (clubBar != null) clubBar.gameObject.SetActive(false);   // 나만의 팀 탭은 ShowClubMode에서만 켬
+            HideSelectionBar();                                          // 팀관리/전술의 선택 막대는 그 화면에서만
             statusStrip.gameObject.SetActive(visible);
             viewport.offsetMin = new Vector2(0, visible ? TabHeight + StatusHeight : 0);
             viewport.offsetMax = Vector2.zero;

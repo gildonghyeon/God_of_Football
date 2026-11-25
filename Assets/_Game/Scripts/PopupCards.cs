@@ -298,14 +298,57 @@ namespace MyFootballCareer
             if (r.attrs != null)
             {
                 Caption(p, f, "능력치");
-                int count = r.role == SquadRole.GK ? 6 : 5;   // GK 능력은 골키퍼만
-                for (int k = 0; k < count; k++) Bar(p, f, Ko.Attr((AttributeKind)k), r.attrs[k]);
+                for (int k = 0; k < 6; k++) Bar(p, f, Ko.Attr((AttributeKind)k), r.attrs[k]);   // GK 능력까지 모든 선수에게 보여 줌
                 if (!r.me && !r.legend) Note(p, f, "능력과 포지션으로 추정한 값입니다", PixelTheme.TextDim, 14);
             }
             Caption(p, f, "이번 시즌" + (string.IsNullOrEmpty(division) ? "" : " · " + division));
             if (r.line == null) Note(p, f, "1군으로 뛴 기록이 없습니다", PixelTheme.TextDim);
-            else Tiles(p, f, new[] { ("출전", r.line.apps.ToString(), 0), ("골", r.line.goals.ToString(), r.line.goals > 0 ? 1 : 0),
-                                     ("도움", r.line.assists.ToString(), r.line.assists > 0 ? 1 : 0), ("평점", r.line.apps > 0 ? r.line.avg.ToString("0.0") : "-", 0) });
+            else
+            {
+                Tiles(p, f, new[] { ("출전", r.line.apps.ToString(), 0), ("평점", r.line.apps > 0 ? r.line.avg.ToString("0.0") : "-", r.line.avg >= 7f ? 1 : 0) });
+                if (r.role == SquadRole.GK)   // 골키퍼: 선방이 중심
+                    Tiles(p, f, new[] { ("선방", r.line.saves.ToString(), r.line.saves > 0 ? 1 : 0), ("골", r.line.goals.ToString(), 0), ("도움", r.line.assists.ToString(), r.line.assists > 0 ? 1 : 0) });
+                else
+                    Tiles(p, f, new[] { ("골", r.line.goals.ToString(), r.line.goals > 0 ? 1 : 0), ("도움", r.line.assists.ToString(), r.line.assists > 0 ? 1 : 0), ("수비", r.line.defense.ToString(), r.line.defense > 0 ? 1 : 0) });
+            }
+        }
+
+        // 두 선수 비교: 능력치마다 두 막대를 나란히, 더 높은 쪽을 강조
+        public static void ComparePlayers(Transform p, Font f, SquadRowView a, SquadRowView b)
+        {
+            var head = Box(p, Tile, 70);
+            MatchResultDialog.Fit(MatchResultDialog.Label(head, f, a.name + (a.legend ? " ★" : ""), 22, PixelTheme.Accent, .02f, .45f, .46f, .98f, TextAnchor.MiddleLeft), 12);
+            MatchResultDialog.Fit(MatchResultDialog.Label(head, f, Ko.RoleTag(a.role) + "  능력 " + Mathf.RoundToInt(a.rating), 16, PixelTheme.Text, .02f, .04f, .46f, .45f, TextAnchor.MiddleLeft), 11);
+            MatchResultDialog.Label(head, f, "VS", 20, PixelTheme.TextDim, .44f, 0f, .56f, 1f, TextAnchor.MiddleCenter);
+            MatchResultDialog.Fit(MatchResultDialog.Label(head, f, b.name + (b.legend ? " ★" : ""), 22, new Color(.55f, .8f, 1f, 1f), .54f, .45f, .98f, .98f, TextAnchor.MiddleRight), 12);
+            MatchResultDialog.Fit(MatchResultDialog.Label(head, f, "능력 " + Mathf.RoundToInt(b.rating) + "  " + Ko.RoleTag(b.role), 16, PixelTheme.Text, .54f, .04f, .98f, .45f, TextAnchor.MiddleRight), 11);
+            Caption(p, f, "능력치");
+            bool keeper = a.role == SquadRole.GK || b.role == SquadRole.GK;
+            for (int k = 0; k < 6; k++)   // GK 능력까지
+                CompareRow(p, f, Ko.Attr((AttributeKind)k), a.attrs != null ? a.attrs[k] : 0f, b.attrs != null ? b.attrs[k] : 0f);
+            Caption(p, f, "이번 시즌");
+            var la = a.line ?? new SeasonLine(); var lb = b.line ?? new SeasonLine();
+            CompareRow(p, f, "출전", la.apps, lb.apps, false);
+            CompareRow(p, f, "골", la.goals, lb.goals, false);
+            CompareRow(p, f, "도움", la.assists, lb.assists, false);
+            CompareRow(p, f, keeper ? "선방" : "수비", keeper ? la.saves : la.defense, keeper ? lb.saves : lb.defense, false);
+            if (!(a.legend && b.legend)) Note(p, f, "★가 없는 선수의 능력치는 능력과 포지션으로 추정한 값입니다", PixelTheme.TextDim, 14);
+        }
+
+        // 비교 한 줄: 왼쪽 값·막대(오른쪽으로 자람) | 이름 | 막대·값. bars가 false면 숫자만
+        static void CompareRow(Transform p, Font f, string label, float va, float vb, bool bars = true)
+        {
+            var r = Box(p, RowColor, 34);
+            Color win = new Color(.95f, .78f, .25f, 1f), lose = PixelTheme.TextDim;
+            Color ca = va > vb ? win : va < vb ? lose : PixelTheme.Text, cb = vb > va ? win : vb < va ? lose : PixelTheme.Text;
+            MatchResultDialog.Label(r, f, Mathf.RoundToInt(va).ToString(), 19, ca, .01f, 0f, .12f, 1f, TextAnchor.MiddleLeft);
+            MatchResultDialog.Fit(MatchResultDialog.Label(r, f, label, 16, PixelTheme.Text, .38f, 0f, .62f, 1f, TextAnchor.MiddleCenter), 10);
+            MatchResultDialog.Label(r, f, Mathf.RoundToInt(vb).ToString(), 19, cb, .88f, 0f, .99f, 1f, TextAnchor.MiddleRight);
+            if (!bars) return;
+            MatchResultDialog.Img(r, new Color(.04f, .06f, .10f, 1f), .13f, .34f, .37f, .66f);
+            MatchResultDialog.Img(r, ca, .37f - .24f * Mathf.Clamp01(va / 100f), .34f, .37f, .66f);
+            MatchResultDialog.Img(r, new Color(.04f, .06f, .10f, 1f), .63f, .34f, .87f, .66f);
+            MatchResultDialog.Img(r, cb, .63f, .34f, .63f + .24f * Mathf.Clamp01(vb / 100f), .66f);
         }
 
         // 능력치 한 줄: 이름, 막대, 숫자

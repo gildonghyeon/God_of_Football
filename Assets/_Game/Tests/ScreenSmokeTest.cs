@@ -176,7 +176,9 @@ namespace MyFootballCareer.Tests
             foreach (TacticStyle st in Enum.GetValues(typeof(TacticStyle))) { Call(boot, "ClubStyle", st); yield return Frames(1); }
             int benchId = squad.players.Find(p => !clubSave.myClub.lineup.Contains(p.id)).id;
             Call(boot, "ClubTap", clubSave.myClub.lineup[5]); yield return Frames(1);
-            Call(boot, "ClubTap", benchId); yield return Frames(2);
+            Call(boot, "ClubTap", benchId); yield return Frames(2);             // 두 명 고름 → 비교 → 교체
+            Call(boot, "ClubCompare"); yield return Frames(2); Call(ui, "CloseDialog");
+            Call(boot, "ClubSwap"); yield return Frames(2);
             Assert.IsTrue(clubSave.myClub.lineup.Contains(benchId), "교체 선수가 주전으로 들어가지 않음");
             Call(boot, "ShowClubScreen"); yield return Frames(2);
             Call(boot, "ShowLegend", legends[0].careerNumber); yield return Frames(2); Call(ui, "CloseDialog");
