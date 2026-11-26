@@ -331,6 +331,27 @@ namespace MyFootballCareer
         }
 
         // ---------- 나만의 팀 시상 ----------
+        // 트로피 룸이 생기기 전에 끝난 시즌: 시즌 기록(최종 순위·부)으로 팀 트로피(리그 우승·승격)를 채움. 이미 있으면 그대로. 채웠으면 true
+        // (선수 시상은 그 시즌 선수 기록이 남아 있지 않아 채울 수 없음)
+        public static bool BackfillClubTrophies(SaveData club)
+        {
+            if (club == null || !club.teamMode || club.seasonHistory == null) return false;
+            if (club.trophies == null) club.trophies = new List<TrophyRecord>();
+            string team = club.myClub != null ? club.myClub.name : "My Club";
+            bool changed = false;
+            for (int i = 0; i < club.seasonHistory.Count; i++)
+            {
+                var s = club.seasonHistory[i];
+                int no = s.seasonNumber;
+                bool Has(TrophyKind k) { return club.trophies.Exists(t => t.kind == k && t.season == no); }
+                if (s.finalPosition == 1 && !Has(TrophyKind.LeagueTitle))
+                { club.trophies.Add(new TrophyRecord { kind = TrophyKind.LeagueTitle, season = no, division = s.division, teamName = team, detail = "승점 " + s.points }); changed = true; }
+                int nextDiv = i + 1 < club.seasonHistory.Count ? club.seasonHistory[i + 1].division : club.season != null ? club.season.division : 0;
+                if (s.division > 0 && nextDiv > 0 && nextDiv < s.division && !Has(TrophyKind.Promotion))
+                { club.trophies.Add(new TrophyRecord { kind = TrophyKind.Promotion, season = no, division = s.division, teamName = team, detail = nextDiv + "부로 승격" }); changed = true; }
+            }
+            return changed;
+        }
         // 우리 팀 선수들의 이번 시즌 기록 (경기마다 쌓은 실제 기록)을 순위 비교용으로
         static List<Rival> OurRivals(SaveData club, MatchSettings ms, CareerSettings career, int games)
         {
@@ -385,7 +406,7 @@ namespace MyFootballCareer
             if (picked.Count > 0)
             {
                 var names = picked.ConvertAll(p => p.name);
-                Give(TrophyKind.BestEleven, picked.Count + "명 · " + string.Join(", ", names.GetRange(0, System.Math.Min(2, names.Count))) + (names.Count > 2 ? " 외" : ""));
+                Give(TrophyKind.BestEleven, picked.Count + "명 · " + string.Join(", ", names));   // 뽑힌 선수 모두
                 lines.Add("* 베스트 11: 우리 팀 " + picked.Count + "명 (" + string.Join(", ", names) + ")");
             }
         }

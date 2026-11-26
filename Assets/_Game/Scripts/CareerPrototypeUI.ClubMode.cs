@@ -76,6 +76,9 @@ namespace MyFootballCareer
             }
             currentParent = Section(content, "트로피 룸", true);
             ClubModeScreen.Trophies(Parent, font, v.trophies);
+            var trophyList = v.trophies;
+            if (ClubModeScreen.TrophySeasons(trophyList).Count > 1)   // 지난 시즌 트로피는 창에서 시즌을 넘겨 가며
+                PixelButton("시즌별 트로피 보기", () => ShowTrophySeasons(trophyList, 0), Parent, 56f, PixelTheme.QuietFill, PixelTheme.QuietEdge).GetComponentInChildren<Text>().fontSize = 22;
             currentParent = Section(content, "무료 영입 · 내가 키운 선수", true);
             Label("선수단 " + v.squadCount + " / " + ClubSystem.SquadSize + "명 (1군 11 + 교체 8)" + (v.squadCount >= ClubSystem.SquadSize ? " · 영입하려면 한 명을 방출해야 합니다" : ""), 17, 32).color = PixelTheme.TextDim;
             if (v.free.Count == 0)
@@ -126,6 +129,24 @@ namespace MyFootballCareer
             viewport.offsetMin = new Vector2(0, TabHeight);   // 내용은 탭 막대 위까지
             viewport.offsetMax = Vector2.zero;
             content.anchoredPosition = Vector2.zero;
+        }
+
+        // 시즌별 트로피 창: 한 번에 한 시즌, ◀ ▶로 앞뒤 시즌 (index 0이 가장 최근 시즌)
+        void ShowTrophySeasons(List<TrophyRecord> list, int index)
+        {
+            var seasons = ClubModeScreen.TrophySeasons(list);
+            if (seasons.Count == 0) return;
+            index = Mathf.Clamp(index, 0, seasons.Count - 1);
+            var inner = BuildDialog("시즌별 트로피", (index + 1) + " / " + seasons.Count + "  (최근 시즌부터)", 30f, 18);
+            var nav = NewRect("Nav", inner); Height(nav.gameObject, 60);
+            var h = nav.gameObject.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 8; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+            var newer = PixelButton("◀ 최근", () => ShowTrophySeasons(list, index - 1), nav, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            newer.GetComponentInChildren<Text>().fontSize = 20; newer.interactable = index > 0;
+            var older = PixelButton("이전 ▶", () => ShowTrophySeasons(list, index + 1), nav, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
+            older.GetComponentInChildren<Text>().fontSize = 20; older.interactable = index < seasons.Count - 1;
+            ClubModeScreen.TrophySeason(inner, font, list, seasons[index]);
+            PixelButton("닫기", () => CloseDialog(), inner, 60f, PixelTheme.QuietFill, PixelTheme.QuietEdge);
         }
 
         // 설정 칸 (선수 키우기 설정 탭과 나만의 팀 설정 탭이 함께 씀): 모드 선택으로 나가기, 효과음, 저장 안내, 저장 초기화

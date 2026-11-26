@@ -84,7 +84,9 @@ namespace MyFootballCareer
             ClubSystem.EnsureClubSquad(club);
             v.squadCount = ClubSystem.Squad(club).players.Count;
             v.leaders = ClubLeaders(out v.leadersHeader, out v.best);
-            if (AwardSystem.EnsureAwards(club, clubMs, settings)) clubSaves.TrySave(club, out _);   // 시즌이 끝나면 트로피 (한 번만)
+            bool newTrophies = AwardSystem.BackfillClubTrophies(club);                // 트로피 룸 전에 끝난 시즌의 우승·승격
+            if (AwardSystem.EnsureAwards(club, clubMs, settings)) newTrophies = true;   // 시즌이 끝나면 트로피 (한 번만)
+            if (newTrophies) clubSaves.TrySave(club, out _);
             v.trophies = club.trophies;
             ui.ShowClubMode(v);
         }

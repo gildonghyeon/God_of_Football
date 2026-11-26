@@ -124,16 +124,42 @@ namespace MyFootballCareer
                 L(none, f, "아직 트로피가 없습니다. 우승·승격과 시즌 시상으로 채워 보세요.", 16, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
                 return;
             }
+            // 화면에는 가장 최근 시즌만 (시즌이 쌓여도 길어지지 않게). 지난 시즌은 '시즌별 트로피 보기' 창에서
+            var seasons = TrophySeasons(list);
             var cap = MatchResultDialog.Block(p, 26);
-            L(cap, f, "최근 트로피", 16, PixelTheme.TextDim, 0f, 0f, .6f, 1f, TextAnchor.MiddleLeft);
-            L(cap, f, "총 " + list.Count + "개", 16, PixelTheme.Accent, .6f, 0f, 1f, 1f, TextAnchor.MiddleRight);
-            for (int i = list.Count - 1, shown = 0; i >= 0 && shown < 6; i--, shown++)   // 최근 6개
+            L(cap, f, "최근 시즌 트로피", 16, PixelTheme.TextDim, 0f, 0f, .6f, 1f, TextAnchor.MiddleLeft);
+            L(cap, f, "총 " + list.Count + "개 · " + seasons.Count + "시즌", 16, PixelTheme.Accent, .5f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+            TrophySeason(p, f, list, seasons[0]);
+        }
+
+        // 트로피를 받은 시즌 번호 (최근 시즌부터)
+        public static List<int> TrophySeasons(List<TrophyRecord> list)
+        {
+            var seasons = new List<int>();
+            if (list != null) foreach (var t in list) if (!seasons.Contains(t.season)) seasons.Add(t.season);
+            seasons.Sort((a, b) => b.CompareTo(a));
+            return seasons;
+        }
+
+        // 한 시즌의 트로피: 시즌 · 리그 머리줄, 그 아래 모든 부문을 늘 같은 자리에 (받은 부문은 받은 사람, 못 받은 부문은 흐리게 비움).
+        // 시즌을 넘겨도 칸 수와 높이가 같아 창 크기가 변하지 않음. 베스트 11은 이름이 많을 수 있어 두 줄 높이
+        public static void TrophySeason(Transform p, Font f, List<TrophyRecord> list, int no)
+        {
+            var items = list.FindAll(t => t.season == no);
+            var head = Box(p, Tile, 30);
+            int div = items.Count > 0 ? items[0].division : 0;
+            L(head, f, "시즌 " + no + (div > 0 ? "  ·  " + div + "부 리그" : ""), 17, PixelTheme.Accent, .02f, 0f, .98f, 1f, TextAnchor.MiddleLeft);
+            for (int i = 0; i < ClubTrophyKinds.Length; i++)
             {
-                var t = list[i];
-                var r = Box(p, shown % 2 == 0 ? RowA : RowB, 32);
-                L(r, f, "시즌" + t.season + (t.division > 0 ? " · " + t.division + "부" : ""), 15, PixelTheme.TextDim, .02f, 0f, .26f, 1f, TextAnchor.MiddleLeft);
-                L(r, f, "★ " + AwardSystem.KindName(t.kind), 17, PixelTheme.Accent, .26f, 0f, .52f, 1f, TextAnchor.MiddleLeft);
-                L(r, f, t.detail, 15, PixelTheme.Text, .52f, 0f, .98f, 1f, TextAnchor.MiddleRight);
+                var kind = ClubTrophyKinds[i];
+                var got = items.FindAll(t => t.kind == kind);
+                bool won = got.Count > 0;
+                bool tall = kind == TrophyKind.BestEleven;   // 최대 11명 이름 → 두 줄
+                var r = Box(p, won ? Gold : (i % 2 == 0 ? RowA : RowB), tall ? 68 : 34);
+                L(r, f, "★ " + AwardSystem.KindName(kind), 17, won ? PixelTheme.Accent : new Color(.45f, .48f, .55f, 1f), .03f, 0f, .30f, 1f, TextAnchor.MiddleLeft);
+                string detail = won ? string.Join(" / ", got.ConvertAll(t => t.detail)) : "·  ·  ·";   // 못 받은 부문은 점선처럼 비움
+                var d = L(r, f, detail, 15, won ? PixelTheme.Text : new Color(.38f, .41f, .48f, 1f), .30f, tall ? .06f : 0f, .98f, tall ? .94f : 1f, TextAnchor.MiddleRight);   // 받은 사람·빈 표시 모두 오른쪽에 붙임
+                d.horizontalOverflow = HorizontalWrapMode.Wrap;
             }
         }
 
