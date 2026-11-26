@@ -60,10 +60,11 @@ namespace MyFootballCareer
     {
         internal static readonly SquadRole[] SquadShape = {
             SquadRole.GK, SquadRole.GK,
-            SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF,
-            SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF,
-            SquadRole.FW, SquadRole.FW, SquadRole.FW, SquadRole.FW,
-        };   // 16명: 주전 11 + 교체 5
+            SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF, SquadRole.DF,
+            SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF, SquadRole.MF,
+            SquadRole.FW, SquadRole.FW, SquadRole.FW, SquadRole.FW, SquadRole.FW,
+        };   // 19명: 1군 11 + 교체 8 (나만의 팀과 같은 인원). 선수 키우기의 내 팀은 내 포지션에서 한 명 적은 18명 + 나
+        static readonly int[] ShapeCount = { 2, 6, 6, 5 };   // GK, DF, MF, FW
         static SquadRole[] Shape { get { return SquadShape; } }
         static readonly int[] StarterCount = { 1, 4, 4, 2 };   // GK, DF, MF, FW (4-4-2)
 
@@ -117,9 +118,41 @@ namespace MyFootballCareer
                 save.squads.Add(squad);
                 made = true;
             }
+            foreach (var s in save.squads) FitSquadSize(save, s, ms);   // 예전 저장(16명)이나 이적한 뒤에도 1군 11 + 교체 8명이 되게
             foreach (var s in save.squads)   // 등번호: 없거나 겹치면 정함 (선수 키우기의 내 팀은 내 번호를 비워 둠)
                 AssignNumbers(s, s.teamId == save.teamId && !save.teamMode && save.player != null ? save.player.number : 0);
             return made;
+        }
+
+        // 선수단 인원 맞추기: 포지션별 GK 2 · DF 6 · MF 6 · FW 5 (19명). 선수 키우기의 내 팀은 내 포지션 자리 하나를 내가 채우므로 그 포지션이 한 명 적음.
+        // 모자라면 교체 수준의 새 선수를 만들고, 넘치면(내가 이적해 온 팀) 그 포지션에서 능력이 가장 낮은 선수가 팀을 떠남
+        static void FitSquadSize(SaveData save, TeamSquad squad, MatchSettings ms)
+        {
+            if (squad == null || squad.players == null || squad.teamId == ClubSystem.ClubId) return;   // 나만의 팀은 ClubSystem이 19명으로 관리
+            var team = ms.FindTeam(squad.teamId);
+            if (team == null) return;
+            var want = (int[])ShapeCount.Clone();
+            if (squad.teamId == save.teamId && !save.teamMode && save.player != null) want[(int)ClubSystem.RoleOf(save.player.position)]--;
+            HashSet<string> used = null;
+            System.Random rng = null;
+            for (int r = 0; r < 4; r++)
+            {
+                var role = (SquadRole)r;
+                var list = squad.players.FindAll(p => p.role == role);
+                while (list.Count > want[r])
+                {
+                    SquadPlayer weakest = null;
+                    foreach (var p in list) if (weakest == null || p.rating < weakest.rating) weakest = p;
+                    squad.players.Remove(weakest); list.Remove(weakest);
+                }
+                while (list.Count < want[r])
+                {
+                    if (used == null) used = UsedNames(save);
+                    if (rng == null) rng = new System.Random(StableHash(squad.teamId) ^ (save.squadSeason * 104729) ^ 0x2b7e15);
+                    var p = NewPlayer(save, rng, used, role, rng.Next(18, 30), team.requiredRating + rng.Next(-10, 3));   // 교체 수준
+                    squad.players.Add(p); list.Add(p);
+                }
+            }
         }
 
         // ---------- 등번호 ----------
@@ -351,9 +384,9 @@ namespace MyFootballCareer
             }
             v.starterAvg = count > 0 ? ratingSum / count : 0f;
             var starters = new HashSet<SquadPlayer>(xi);
+            if (mine && youSlot >= 0 && xi[youSlot] != null) starters.Remove(xi[youSlot]);   // 내 자리의 선수는 교체 명단으로 (따로 표시하지 않음)
             var subs = squad.players.FindAll(p => !starters.Contains(p));
             subs.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
-            if (mine && youSlot >= 0 && xi[youSlot] != null) v.subs.Add(Row(xi[youSlot], null, "경쟁")   /* 내 자리를 두고 경쟁하는 선수 */);
             foreach (var p in subs) v.subs.Add(Row(p, null, null));
             // 내가 키운 선수(나만의 팀)는 실제 능력치
             if (save.legends != null)
@@ -437,8 +470,9 @@ namespace MyFootballCareer
             sb.Append("\n\n[교체]");
             var subs = squad.players.FindAll(p => !starters.Contains(p));
             subs.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
+            if (mine && youSlot >= 0 && xi[youSlot] != null && !subs.Contains(xi[youSlot])) subs.Add(xi[youSlot]);   // 내 자리의 선수도 교체 명단에
+            subs.Sort((a, b) => a.role != b.role ? a.role.CompareTo(b.role) : b.rating.CompareTo(a.rating));
             foreach (var p in subs) Line(sb, p, null);
-            if (mine && youSlot >= 0 && xi[youSlot] != null) Line(sb, xi[youSlot], null, " (내 자리 경쟁)");
             return sb.ToString();
         }
 
