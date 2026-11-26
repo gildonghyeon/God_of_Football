@@ -94,17 +94,20 @@ namespace MyFootballCareer
                 SquadRole own = home != null ? home(r) : s.role;
                 bool wrong = own != s.role;
                 Color pick = m == 1 ? PickGold : PickBlue;
+                var parts = new System.Collections.Generic.List<RectTransform>();   // 누를 때 함께 작아지는 것들 (테두리·점·이름표)
                 if (m > 0)   // 고른 선수: 점 둘레에 테두리
                 {
-                    Point(box, pick, x, y, 44f, 44f);
+                    parts.Add(Point(box, pick, x, y, 44f, 44f).rectTransform);
                 }
-                else if (wrong) Point(box, OffRed, x, y, 40f, 40f);   // 맞지 않는 자리: 빨간 테두리
+                else if (wrong) parts.Add(Point(box, OffRed, x, y, 40f, 40f).rectTransform);   // 맞지 않는 자리: 빨간 테두리
                 float size = m > 0 ? 38f : 34f;
                 var dotColor = RoleColor(s.role);   // 내 선수도 다른 선수처럼 포지션 색
                 var dot = Point(box, dotColor, x, y, size, size);
+                parts.Add(dot.rectTransform);
                 Label(dot.rectTransform, font, r.number > 0 ? r.number.ToString() : s.role.ToString(), r.number > 0 ? 16 : 13, Color.white, -.5f, 0f, 1.5f, 1f, TextAnchor.MiddleCenter);   // 등번호 (모르면 포지션)
                 string surname = r.name; int dotIdx = surname.IndexOf(". "); if (dotIdx >= 0) surname = surname.Substring(dotIdx + 2);
-                var name = Point(box, m > 0 ? pick : new Color(0f, 0f, 0f, .45f), x, y - 36f / PitchH, 136f, 22f);   // 본래 포지션 + 이름 + 능력 (고르면 이름표도 같은 색)
+                var name = Point(box, m > 0 ? pick : new Color(0f, 0f, 0f, .45f), x, y - 36f / PitchH, 136f, 22f);
+                parts.Add(name.rectTransform);   // 본래 포지션 + 이름 + 능력 (고르면 이름표도 같은 색)
                 // 이름 왼쪽: 선수 본래 포지션 (포지션 색 글자). 고른 이름표(밝은 바탕) 위에서는 어두운 글자
                 string homeText = "<color=#" + (m > 0 ? "10141E" : ColorUtility.ToHtmlStringRGB(RoleColor(own))) + ">" + own + "</color> ";
                 string rv = decimals ? r.rating.ToString("0.0") : Mathf.RoundToInt(r.rating).ToString();   // 베스트 11은 평균 평점 (소수 한 자리)
@@ -116,6 +119,7 @@ namespace MyFootballCareer
                 if (m > 0)   // 고른 순서 (1, 2) 표시
                 {
                     var tag = Point(box, new Color(.06f, .08f, .12f, 1f), x + 22f / PitchW, y + 20f / PitchH, 20f, 20f);
+                    parts.Add(tag.rectTransform);
                     Label(tag.rectTransform, font, m.ToString(), 13, pick, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
                 }
                 if (onTap != null)   // 점과 이름을 누르면 그 선수의 세부 능력치
@@ -126,6 +130,7 @@ namespace MyFootballCareer
                     var button = hit.gameObject.AddComponent<Button>();
                     button.targetGraphic = hit;
                     button.transition = Selectable.Transition.None;
+                    hit.gameObject.AddComponent<PressScale>().targets.AddRange(parts);   // 누르는 동안 그 선수의 점·이름표가 살짝 작아졌다 돌아옴 (번쩍임 없이)
                     var row = r; button.onClick.AddListener(() => { SoundFx.Play(Sfx.Click); onTap(row); });
                 }
             }

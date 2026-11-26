@@ -103,23 +103,23 @@ namespace MyFootballCareer
             Clear(nextRoot);
             if (v.done)
             {
-                Height(nextRoot, 150);
-                Text(nextRoot, v.header, 18, PixelTheme.TextDim, 0f, .78f, 1f, .97f, TextAnchor.MiddleCenter);
-                Text(nextRoot, v.doneTitle, 34, PixelTheme.Accent, 0f, .5f, 1f, .78f, TextAnchor.MiddleCenter);
-                Text(nextRoot, v.doneBody, 19, PixelTheme.Text, .03f, .04f, .97f, .5f, TextAnchor.MiddleCenter);
+                Height(nextRoot, 128);
+                Text(nextRoot, v.header, 16, PixelTheme.TextDim, 0f, .78f, 1f, .97f, TextAnchor.MiddleCenter);
+                Text(nextRoot, v.doneTitle, 28, PixelTheme.Accent, 0f, .5f, 1f, .78f, TextAnchor.MiddleCenter);
+                Fit(Text(nextRoot, v.doneBody, 17, PixelTheme.Text, .03f, .04f, .97f, .5f, TextAnchor.MiddleCenter), 11);
                 return;
             }
-            Height(nextRoot, 156);
-            Text(nextRoot, "다음 경기", 18, PixelTheme.Accent, .03f, .8f, .5f, .97f, TextAnchor.MiddleLeft);
-            Text(nextRoot, v.header, 18, PixelTheme.TextDim, .3f, .8f, .97f, .97f, TextAnchor.MiddleRight);
-            Fit(Text(nextRoot, v.own, 26, PixelTheme.Text, .02f, .4f, .43f, .78f, TextAnchor.MiddleRight), 14);
-            Text(nextRoot, "VS", 30, PixelTheme.Accent, .43f, .4f, .57f, .78f, TextAnchor.MiddleCenter);
-            Fit(Text(nextRoot, v.opp, 26, PixelTheme.Text, .57f, .4f, .98f, .78f, TextAnchor.MiddleLeft), 14);
+            Height(nextRoot, 132);
+            Text(nextRoot, "다음 경기", 16, PixelTheme.Accent, .03f, .8f, .5f, .97f, TextAnchor.MiddleLeft);
+            Text(nextRoot, v.header, 16, PixelTheme.TextDim, .3f, .8f, .97f, .97f, TextAnchor.MiddleRight);
+            Fit(Text(nextRoot, v.own, 22, PixelTheme.Text, .02f, .4f, .43f, .78f, TextAnchor.MiddleRight), 13);
+            Text(nextRoot, "VS", 24, PixelTheme.Accent, .43f, .4f, .57f, .78f, TextAnchor.MiddleCenter);
+            Fit(Text(nextRoot, v.opp, 22, PixelTheme.Text, .57f, .4f, .98f, .78f, TextAnchor.MiddleLeft), 13);
             // 두 팀 전술 (팀 이름 아래)
-            Text(nextRoot, v.ownTactic, 16, new Color(.65f, .80f, 1f), .02f, .25f, .34f, .41f, TextAnchor.MiddleRight);
-            Text(nextRoot, v.oppTactic, 16, new Color(1f, .70f, .70f), .66f, .25f, .98f, .41f, TextAnchor.MiddleLeft);
+            Fit(Text(nextRoot, v.ownTactic, 14, new Color(.65f, .80f, 1f), .02f, .25f, .34f, .41f, TextAnchor.MiddleRight), 10);
+            Fit(Text(nextRoot, v.oppTactic, 14, new Color(1f, .70f, .70f), .66f, .25f, .98f, .41f, TextAnchor.MiddleLeft), 10);
             Pill(nextRoot, v.home ? "홈 경기" : "원정 경기", v.home ? PixelTheme.ButtonFill : PixelTheme.QuietFill, .35f, .2f, .65f, .38f);
-            Text(nextRoot, v.note, 18, PixelTheme.TextDim, 0f, .02f, 1f, .2f, TextAnchor.MiddleCenter);
+            Fit(Text(nextRoot, v.note, 15, PixelTheme.TextDim, 0f, .02f, 1f, .2f, TextAnchor.MiddleCenter), 10);
         }
 
         // ---------- 지난 경기 ----------
@@ -140,24 +140,24 @@ namespace MyFootballCareer
             float F(float px) => Mathf.Clamp01(px / H);
             Color oc = v.outcome == "승리" ? WinColor : v.outcome == "패배" ? LossColor : DrawColor;
             // 라벨 + 결과 표시
-            Text(resultRoot, v.label, 18, PixelTheme.TextDim, .03f, F(H - 30f), .6f, F(H - 4f), TextAnchor.MiddleLeft);
+            Text(resultRoot, v.label, 16, PixelTheme.TextDim, .03f, F(H - 30f), .6f, F(H - 4f), TextAnchor.MiddleLeft);
             Pill(resultRoot, v.outcome, oc, .76f, F(H - 30f), .97f, F(H - 6f));
             // 팀 이름과 큰 점수
-            Fit(Text(resultRoot, v.own, 22, PixelTheme.Text, .02f, F(scoreBottom), .33f, F(scoreBottom + 56f), TextAnchor.MiddleRight), 13);
-            Text(resultRoot, v.gf + " - " + v.ga, 46, oc == DrawColor ? PixelTheme.Text : oc, .34f, F(scoreBottom), .66f, F(scoreBottom + 58f), TextAnchor.MiddleCenter);
-            Fit(Text(resultRoot, v.opp, 22, PixelTheme.Text, .67f, F(scoreBottom), .98f, F(scoreBottom + 56f), TextAnchor.MiddleLeft), 13);
+            Fit(Text(resultRoot, v.own, 20, PixelTheme.Text, .02f, F(scoreBottom), .33f, F(scoreBottom + 56f), TextAnchor.MiddleRight), 13);
+            Text(resultRoot, v.gf + " - " + v.ga, 40, oc == DrawColor ? PixelTheme.Text : oc, .34f, F(scoreBottom), .66f, F(scoreBottom + 58f), TextAnchor.MiddleCenter);
+            Fit(Text(resultRoot, v.opp, 20, PixelTheme.Text, .67f, F(scoreBottom), .98f, F(scoreBottom + 56f), TextAnchor.MiddleLeft), 13);
             // 득점자 (우리 왼쪽, 상대 오른쪽)
             if (goals)
             {
-                var a = Text(resultRoot, v.ownGoals, 16, PixelTheme.Text, .03f, F(56f), .49f, F(124f), TextAnchor.UpperLeft);
+                var a = Text(resultRoot, v.ownGoals, 15, PixelTheme.Text, .03f, F(56f), .49f, F(124f), TextAnchor.UpperLeft);
                 a.horizontalOverflow = HorizontalWrapMode.Wrap;
-                var b = Text(resultRoot, v.oppGoals, 16, PixelTheme.TextDim, .51f, F(56f), .97f, F(124f), TextAnchor.UpperRight);
+                var b = Text(resultRoot, v.oppGoals, 15, PixelTheme.TextDim, .51f, F(56f), .97f, F(124f), TextAnchor.UpperRight);
                 b.horizontalOverflow = HorizontalWrapMode.Wrap;
             }
             // 내 기록 띠
             var band = Image(resultRoot, RowB, 0f, 0f, 1f, F(52f));
             band.rectTransform.offsetMin = new Vector2(6, 6); band.rectTransform.offsetMax = new Vector2(-6, 0);
-            Text(band.rectTransform, v.myLine, 19, PixelTheme.Accent, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+            Fit(Text(band.rectTransform, v.myLine, 17, PixelTheme.Accent, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter), 11);
         }
 
         // ---------- 순위표 ----------
@@ -167,19 +167,19 @@ namespace MyFootballCareer
             Clear(tableRoot);
             Row(tableRoot, null, RowB, true);
             for (int i = 0; i < rows.Count; i++) Row(tableRoot, rows[i], rows[i].me ? MeRow : (i % 2 == 0 ? RowA : RowB), false);
-            var legend = Text(NewRect("Legend", tableRoot), "", 16, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
-            Height(legend.rectTransform.parent as RectTransform, 26);
+            var legend = Text(NewRect("Legend", tableRoot), "", 14, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleLeft);
+            Height(legend.rectTransform.parent as RectTransform, 24);
             legend.supportRichText = true;
             legend.text = "<color=#59D973>■</color> 승격권    <color=#EB6666>■</color> 강등권    <color=#FAD047>■</color> 내 팀";
         }
 
-        static readonly float[] Cols = { 44f, -1f, 40f, 40f, 40f, 56f, 62f };   // 순위, 팀(남은 폭), 승, 무, 패, 득실, 승점
+        static readonly float[] Cols = { 44f, -1f, 104f, 50f, 54f };   // 순위, 팀(남은 폭), 승·무·패, 득실, 승점 (나만의 팀 순위표와 같은 칸)
 
         void Row(Transform parent, TableRowView r, Color fill, bool header)
         {
             var row = NewRect(header ? "Header" : "Row", parent);
             row.gameObject.AddComponent<Image>().color = fill;
-            Height(row, header ? 30 : 36);
+            Height(row, header ? 24 : 32);
             var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(10, 8, 0, 0); h.spacing = 2;
             h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = true;
@@ -192,16 +192,18 @@ namespace MyFootballCareer
                 stripe.sizeDelta = new Vector2(6, 0); stripe.anchoredPosition = Vector2.zero;
             }
             string[] cells = header
-                ? new[] { "#", "팀", "승", "무", "패", "득실", "승점" }
-                : new[] { r.pos.ToString(), r.name + (r.me ? "  ★" : ""), r.w.ToString(), r.d.ToString(), r.l.ToString(), (r.gd > 0 ? "+" : "") + r.gd, r.pts.ToString() };
+                ? new[] { "순위", "팀", "승 · 무 · 패", "득실", "승점" }
+                : new[] { r.pos.ToString(), r.name + (r.me ? "  ★" : ""), r.w + " · " + r.d + " · " + r.l, (r.gd > 0 ? "+" : "") + r.gd, r.pts.ToString() };
             for (int c = 0; c < cells.Length; c++)
             {
                 var cell = NewRect("Cell", row);
                 var le = cell.gameObject.AddComponent<LayoutElement>();
                 if (Cols[c] < 0) le.flexibleWidth = 1; else { le.preferredWidth = Cols[c]; le.minWidth = Cols[c]; }
-                var t = Text(cell, cells[c], header ? 16 : 19, header ? PixelTheme.TextDim : (r.me ? Color.white : PixelTheme.Text),
+                var t = Text(cell, cells[c], header ? 14 : (c == 0 || c == 4 ? 17 : 16), header ? PixelTheme.TextDim : (r.me && c == 1 ? PixelTheme.Accent : PixelTheme.Text),
                     0f, 0f, 1f, 1f, c == 1 ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter);
-                if (c == 6 && !header) t.color = r.me ? PixelTheme.Accent : PixelTheme.Text;
+                if (!header && c == 3) t.color = PixelTheme.TextDim;   // 득실은 흐리게
+                if (!header && c == 4) t.color = PixelTheme.Accent;    // 승점은 강조색
+                if (c == 1) Fit(t, 11);
                 t.horizontalOverflow = HorizontalWrapMode.Wrap;
             }
         }

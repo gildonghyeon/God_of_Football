@@ -205,7 +205,7 @@ namespace MyFootballCareer
             matchPage.OnBestEleven = ShowBestEleven;
             currentParent = Section(pages[1], "시즌", true);
             matchPage.BuildNext(Parent);
-            var play = PixelButton("다음 경기", () => onPlayMatch(), Parent, 80f);
+            var play = PixelButton("다음 경기", () => onPlayMatch(), Parent, 84f);   // 나만의 팀의 경기 시작 버튼과 같은 높이
             playLabel = play.GetComponentInChildren<Text>();
             // 시즌이 끝나고 이적 제안이 들어왔으면: 알림과 '이적 제안 확인하기' (커리어 탭의 이적 제안으로)
             offerNotice = Label("", 21, 40); offerNotice.color = PixelTheme.Accent; offerNotice.alignment = TextAnchor.MiddleCenter;
