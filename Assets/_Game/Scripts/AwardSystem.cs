@@ -330,6 +330,66 @@ namespace MyFootballCareer
             return block;
         }
 
+        // ---------- 나만의 팀 시상 ----------
+        // 우리 팀 선수들의 이번 시즌 기록 (경기마다 쌓은 실제 기록)을 순위 비교용으로
+        static List<Rival> OurRivals(SaveData club, MatchSettings ms, CareerSettings career, int games)
+        {
+            var lines = ClubSystem.SeasonLines(club, ms, career);
+            var ours = new List<Rival>();
+            foreach (var p in ClubSystem.Squad(club).players)
+            {
+                if (!lines.TryGetValue(p.name, out var l) || l.apps <= 0) continue;
+                ours.Add(new Rival { name = p.name, teamId = ClubSystem.ClubId, position = SquadSystem.ToPosition(p.role), played = games, apps = l.apps,
+                                     ratingSum = l.avg * l.apps, goals = l.goals, assists = l.assists, defense = l.defense, saves = l.saves });
+            }
+            return ours;
+        }
+
+        // 시즌이 끝나면 나만의 팀 트로피: 리그 우승 · 승격 (팀), 득점왕 · 도움왕 · 수비왕 (우리 팀 선수가 받으면 그 선수 이름으로), 베스트 11 (우리 팀 선수가 뽑힌 시즌마다 하나)
+        static void ClubAwards(SaveData club, MatchSettings ms, CareerSettings career)
+        {
+            var season = club.season;
+            club.awardsSeason = season.seasonNumber;
+            club.awardLines = new List<string>();
+            if (club.trophies == null) club.trophies = new List<TrophyRecord>();
+            var lines = club.awardLines;
+            int div = season.division;
+            string team = club.myClub != null ? club.myClub.name : "My Club";
+            void Give(TrophyKind kind, string detail)
+            {
+                club.trophies.Add(new TrophyRecord { kind = kind, career = 0, season = season.seasonNumber, division = div, teamName = team, detail = detail });
+            }
+            var mine = SeasonSystem.Summarize(club, ms);
+            if (mine.finalPosition == 1) { Give(TrophyKind.LeagueTitle, "승점 " + mine.points); lines.Add("* 리그 우승! " + ms.DivisionName(div) + " 챔피언!"); }
+            if (div > 0 && season.nextDivision > 0 && season.nextDivision < div) { Give(TrophyKind.Promotion, season.nextDivision + "부로 승격"); lines.Add("* 승격! " + ms.DivisionName(season.nextDivision) + "로 올라갑니다."); }
+
+            int games = season.matches.Count;
+            var leagueTeams = new List<TeamDefinition>();
+            foreach (var id in season.teamIds) { var t = ms.FindTeam(id); if (t != null) leagueTeams.Add(t); }
+            var others = Snapshot(SimulateRivals(club, ms, career, leagueTeams, div, null, -1), int.MaxValue, club).FindAll(r => r.teamId != ClubSystem.ClubId);
+            var ours = OurRivals(club, ms, career, games);
+            var all = new List<Rival>(others); all.AddRange(ours);
+            void StatAward(TrophyKind kind, string label, string unit, System.Func<Rival, int> value)
+            {
+                Rival best = null;
+                foreach (var r in all) if (value(r) > 0 && (best == null || value(r) > value(best) || (value(r) == value(best) && ours.Contains(r) && !ours.Contains(best)))) best = r;   // 같으면 우리 팀 선수
+                if (best == null) return;
+                if (ours.Contains(best)) { Give(kind, best.name + " · " + value(best) + unit); lines.Add("* " + label + ": " + best.name + ", " + value(best) + unit); }
+                else lines.Add(label + ": " + best.name + " " + value(best) + unit);
+            }
+            StatAward(TrophyKind.TopScorer, "득점왕", "골", r => r.goals);
+            StatAward(TrophyKind.TopAssists, "도움왕", "도움", r => r.assists);
+            StatAward(TrophyKind.TopDefender, "수비왕", "회 수비", r => r.defense);
+            var best11 = PickBestEleven(ms, all, new HashSet<Rival>(ours), "");
+            var picked = best11.picks.FindAll(p => p.mine);   // 우리 팀 선수가 뽑히면 시즌마다 트로피 하나 (뽑힌 인원과 이름)
+            if (picked.Count > 0)
+            {
+                var names = picked.ConvertAll(p => p.name);
+                Give(TrophyKind.BestEleven, picked.Count + "명 · " + string.Join(", ", names.GetRange(0, System.Math.Min(2, names.Count))) + (names.Count > 2 ? " 외" : ""));
+                lines.Add("* 베스트 11: 우리 팀 " + picked.Count + "명 (" + string.Join(", ", names) + ")");
+            }
+        }
+
         // 베스트 11: 포지션마다 평균 평점이 높은 순 (출전이 경기 수의 절반 이상). 공격수 3 · 미드필더 3 · 수비수 4 · 골키퍼 1 (4-3-3)
         static BestElevenSquadView PickBestEleven(MatchSettings ms, List<Rival> pool, HashSet<Rival> mine, string title)
         {
@@ -423,7 +483,7 @@ namespace MyFootballCareer
         {
             if (!SeasonSystem.IsComplete(save) || save.awardsSeason == save.season.seasonNumber) return false;
             SeasonSystem.EnsureSeasonEnd(save, ms);
-            if (save.teamMode) { save.awardsSeason = save.season.seasonNumber; save.awardLines = new List<string>(); return true; }   // 나만의 팀 모드: 개인 시상 없음
+            if (save.teamMode) { ClubAwards(save, ms, career); return true; }   // 나만의 팀 모드: 팀 트로피와 우리 팀 선수의 시상
             var season = save.season;
             save.awardsSeason = season.seasonNumber;
             save.awardLines = new List<string>();

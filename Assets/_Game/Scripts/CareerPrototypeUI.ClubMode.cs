@@ -74,6 +74,8 @@ namespace MyFootballCareer
                 leaders.BuildLeaders(Parent);
                 leaders.SetLeaders(v.leadersHeader, v.leaders, v.best);
             }
+            currentParent = Section(content, "트로피 룸", true);
+            ClubModeScreen.Trophies(Parent, font, v.trophies);
             currentParent = Section(content, "무료 영입 · 내가 키운 선수", true);
             Label("선수단 " + v.squadCount + " / " + ClubSystem.SquadSize + "명 (1군 11 + 교체 8)" + (v.squadCount >= ClubSystem.SquadSize ? " · 영입하려면 한 명을 방출해야 합니다" : ""), 17, 32).color = PixelTheme.TextDim;
             if (v.free.Count == 0)

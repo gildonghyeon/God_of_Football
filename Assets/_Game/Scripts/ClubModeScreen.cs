@@ -22,7 +22,8 @@ namespace MyFootballCareer
         public List<SeasonSummary> history = new List<SeasonSummary>();
         public string leadersHeader;                                // 개인 순위 (우리 팀 선수끼리)
         public List<LeaderBlockView> leaders;
-        public BestElevenSquadView best;                            // 시즌이 끝나면 베스트 11 스쿼드
+        public BestElevenSquadView best;
+        public List<TrophyRecord> trophies = new List<TrophyRecord>();   // 나만의 팀 트로피 룸                            // 시즌이 끝나면 베스트 11 스쿼드
     }
 
     // 게임을 켰을 때의 모드 선택 화면에 보여 줄 내용
@@ -92,6 +93,47 @@ namespace MyFootballCareer
             {
                 var r = MatchResultDialog.Block(p, 28);
                 L(r, f, "최근: " + string.Join("   ", v.recent), 15, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter, 10);
+            }
+        }
+
+        // 트로피 룸: 종류별 개수(받은 것은 금색)와 최근 트로피 (시즌 · 리그 · 종류 · 내용)
+        static readonly TrophyKind[] ClubTrophyKinds = { TrophyKind.LeagueTitle, TrophyKind.Promotion, TrophyKind.TopScorer, TrophyKind.TopAssists, TrophyKind.TopDefender, TrophyKind.BestEleven };
+        static readonly Color Gold = new Color(.36f, .29f, .10f, 1f);
+
+        public static void Trophies(Transform p, Font f, List<TrophyRecord> list)
+        {
+            list = list ?? new List<TrophyRecord>();
+            for (int i = 0; i < ClubTrophyKinds.Length; i += 3)
+            {
+                var row = MatchResultDialog.Block(p, 70);
+                var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+                h.spacing = 6; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+                for (int k = i; k < i + 3 && k < ClubTrophyKinds.Length; k++)
+                {
+                    var kind = ClubTrophyKinds[k];
+                    int n = list.FindAll(t => t.kind == kind).Count;
+                    var cell = MatchResultDialog.NewRect("Trophy", row);
+                    cell.gameObject.AddComponent<Image>().color = n > 0 ? Gold : Tile;
+                    L(cell, f, n > 0 ? "★ " + n : "-", 24, n > 0 ? PixelTheme.Accent : PixelTheme.TextDim, .04f, .40f, .96f, .98f, TextAnchor.MiddleCenter);
+                    L(cell, f, AwardSystem.KindName(kind), 14, n > 0 ? PixelTheme.Text : PixelTheme.TextDim, .04f, .02f, .96f, .42f, TextAnchor.MiddleCenter);
+                }
+            }
+            if (list.Count == 0)
+            {
+                var none = MatchResultDialog.Block(p, 44);
+                L(none, f, "아직 트로피가 없습니다. 우승·승격과 시즌 시상으로 채워 보세요.", 16, PixelTheme.TextDim, 0f, 0f, 1f, 1f, TextAnchor.MiddleCenter);
+                return;
+            }
+            var cap = MatchResultDialog.Block(p, 26);
+            L(cap, f, "최근 트로피", 16, PixelTheme.TextDim, 0f, 0f, .6f, 1f, TextAnchor.MiddleLeft);
+            L(cap, f, "총 " + list.Count + "개", 16, PixelTheme.Accent, .6f, 0f, 1f, 1f, TextAnchor.MiddleRight);
+            for (int i = list.Count - 1, shown = 0; i >= 0 && shown < 6; i--, shown++)   // 최근 6개
+            {
+                var t = list[i];
+                var r = Box(p, shown % 2 == 0 ? RowA : RowB, 32);
+                L(r, f, "시즌" + t.season + (t.division > 0 ? " · " + t.division + "부" : ""), 15, PixelTheme.TextDim, .02f, 0f, .26f, 1f, TextAnchor.MiddleLeft);
+                L(r, f, "★ " + AwardSystem.KindName(t.kind), 17, PixelTheme.Accent, .26f, 0f, .52f, 1f, TextAnchor.MiddleLeft);
+                L(r, f, t.detail, 15, PixelTheme.Text, .52f, 0f, .98f, 1f, TextAnchor.MiddleRight);
             }
         }
 
